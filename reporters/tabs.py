@@ -261,6 +261,7 @@ def build_content_optimization_hub_rows(
         cluster_counts[cluster_id] = cluster_counts.get(cluster_id, 0) + 1
         draft_rows.append(
             {
+                "Action Required": "Needs Copy",
                 "Status": "To Do",
                 "Assigned Owner": "Unassigned",
                 "URL": url,
@@ -286,6 +287,6 @@ def build_content_optimization_hub_rows(
         )
     for row in draft_rows:
         row["Assigned Owner"] = "Unassigned"
-        row["Batch Ready"] = "Yes" if cluster_counts.get(cluster_id, 0) >= 5 else "No"
+        row["Batch Ready"] = "Yes" if cluster_counts.get(str(row.get("Content Cluster ID") or ""), 0) >= 5 else "No"
         rows.append(row)
     return rows

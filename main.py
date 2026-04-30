@@ -79,8 +79,10 @@ def _sanitize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     clean_df = df.copy()
     clean_df = clean_df.replace([np.inf, -np.inf], np.nan)
     clean_df = clean_df.fillna("")
+    date_like_tokens = ("date", "time", "timestamp", "lastmod", "updated", "modified", "published")
     for col in clean_df.columns:
-        if pd.api.types.is_datetime64tz_dtype(clean_df[col].dtype):
+        col_name = str(col).strip().lower()
+        if isinstance(clean_df[col].dtype, pd.DatetimeTZDtype):
             clean_df[col] = clean_df[col].dt.tz_localize(None).astype(str)
             clean_df[col] = clean_df[col].replace("NaT", "")
             continue
@@ -88,10 +90,11 @@ def _sanitize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
             clean_df[col] = clean_df[col].astype(str).replace("NaT", "")
             continue
         if pd.api.types.is_object_dtype(clean_df[col].dtype) or pd.api.types.is_string_dtype(clean_df[col].dtype):
-            parsed_dt = pd.to_datetime(clean_df[col], errors="coerce", utc=True)
-            if parsed_dt.notna().any():
-                clean_df[col] = parsed_dt.dt.tz_localize(None).astype(str).replace("NaT", "")
-                continue
+            if any(token in col_name for token in date_like_tokens):
+                parsed_dt = pd.to_datetime(clean_df[col], errors="coerce", utc=True, format="mixed")
+                if parsed_dt.notna().any():
+                    clean_df[col] = parsed_dt.dt.tz_localize(None).astype(str).replace("NaT", "")
+                    continue
             clean_df[col] = clean_df[col].map(_sanitize_excel_value)
     return clean_df
 
@@ -110,9 +113,16 @@ def _to_excel_safe(df: pd.DataFrame, writer: pd.ExcelWriter, sheet_name: str, **
 
 async def main() -> None:
     print("=== Python Technical SEO Auditor ===")
-    print("1. Read URLs from a Sitemap (XML)")
-    print("2. Read URLs from a local text file")
-    choice = input("Select input method (1 or 2): ").strip()
+    target_input = input("Enter the target URL or Sitemap (e.g., https://example.com/sitemap.xml): ").strip()
+    max_urls_raw = input("Enter Max URLs to crawl (leave blank for no limit): ").strip()
+    max_urls: int | None = None
+    if max_urls_raw:
+        try:
+            parsed_limit = int(max_urls_raw)
+            if parsed_limit > 0:
+                max_urls = parsed_limit
+        except ValueError:
+            print(f"Invalid max URL limit '{max_urls_raw}'. Proceeding with no limit.")
     urls: list[str] = []
     sitemap_meta: dict[str, dict[str, str | None]] = {}
     workers = MAX_WORKERS
@@ -120,24 +130,18 @@ async def main() -> None:
     source_label = "manual_input"
 
     async with create_session() as session:
-        if choice == "1":
-            sitemap_url = input("Enter the full Sitemap URL (e.g., https://example.com/sitemap.xml): ").strip()
-            urls, sitemap_meta = await parse_sitemap(sitemap_url, session)
-            parsed_source = urlparse(sitemap_url)
+        if target_input.lower().endswith(".xml"):
+            urls, sitemap_meta = await parse_sitemap(target_input, session)
+            parsed_source = urlparse(target_input)
             source_label = parsed_source.netloc or "sitemap"
-        elif choice == "2":
-            file_path = input("Enter the file path (e.g., urls.txt): ").strip()
-            if os.path.exists(file_path):
-                with open(file_path, "r", encoding="utf-8") as f:
-                    urls = [line.strip() for line in f if line.strip()]
-                print(f"Loaded {len(urls)} URLs from {file_path}.")
-                source_label = os.path.splitext(os.path.basename(file_path))[0]
-            else:
-                print("File not found.")
-                return
         else:
-            print("Invalid choice. Exiting.")
-            return
+            parsed_target = urlparse(target_input)
+            if parsed_target.scheme and parsed_target.netloc:
+                urls = [target_input]
+                source_label = parsed_target.netloc
+            else:
+                print("Invalid target input. Provide a full URL or a sitemap XML URL.")
+                return
 
         if not urls:
             print("No URLs to crawl. Exiting.")
@@ -147,6 +151,9 @@ async def main() -> None:
         urls = list(dict.fromkeys(urls))
         if len(urls) != original_count:
             print(f"Removed {original_count - len(urls)} duplicate URLs.")
+        if max_urls is not None and len(urls) > max_urls:
+            urls = urls[:max_urls]
+            print(f"Applied crawl cap: limiting run to first {len(urls)} URLs.")
 
         print("\nCrawl safety profile:")
         print("1. Gentle (fewer workers, longer delay)")
@@ -618,6 +625,7 @@ async def main() -> None:
                 _to_excel_safe(fixplan_df, writer, "FixPlan", index=False)
                 content_hub_rows = build_content_optimization_hub_rows(main_rows, extra_rows, fixplan_rows)
                 content_hub_cols = [
+                    "Action Required",
                     "Status",
                     "Assigned Owner",
                     "Content Cluster ID",
@@ -640,6 +648,28 @@ async def main() -> None:
                     "Social Share Note",
                 ]
                 write_dict_rows_sheet(writer, "Content Optimization Hub", content_hub_cols, content_hub_rows)
+                quick_reference_rows = [
+                    {"Section": "[Meta Data Standards]", "Item": "", "Guideline": "", "Why It Matters": ""},
+                    {"Section": "", "Item": "Meta Title", "Guideline": "50-60 characters. Place primary keyword at the front. Avoid brand repetition unless there is space.", "Why It Matters": "Improves clarity and reduces SERP truncation risk."},
+                    {"Section": "", "Item": "Meta Description", "Guideline": "120-160 characters. Must contain a clear Call-To-Action (CTA) and active verbs.", "Why It Matters": "Supports stronger click-through and intent alignment."},
+                    {"Section": "", "Item": "Target Keywords", "Guideline": "1 Primary, 2 Secondary per page. Do not keyword stuff; focus on user intent.", "Why It Matters": "Keeps copy focused on topical relevance over keyword density."},
+                    {"Section": "", "Item": "", "Guideline": "", "Why It Matters": ""},
+                    {"Section": "[On-Page Structure (H-Tags)]", "Item": "", "Guideline": "", "Why It Matters": ""},
+                    {"Section": "", "Item": "H1 Tag", "Guideline": "Exactly ONE per page. Must contain the primary topic/keyword. Think of it as the 'Book Title'.", "Why It Matters": "Provides the clearest top-level topical signal."},
+                    {"Section": "", "Item": "H2 Tags", "Guideline": "Main sections. Use question formats (Who, What, How) to trigger Answer Engine extraction.", "Why It Matters": "Improves structured scannability for users and LLMs."},
+                    {"Section": "", "Item": "H3 Tags", "Guideline": "Sub-sections under H2s. Use for lists, steps, or detailed breakdowns.", "Why It Matters": "Strengthens hierarchy and supports extraction-ready formatting."},
+                    {"Section": "", "Item": "H4-H6 Tags", "Guideline": "Use sparingly. Only for granular formatting within complex H3 topics.", "Why It Matters": "Avoids over-nesting while preserving semantic structure."},
+                    {"Section": "", "Item": "", "Guideline": "", "Why It Matters": ""},
+                    {"Section": "[AEO (Answer Engine Optimization) & Content]", "Item": "", "Guideline": "", "Why It Matters": ""},
+                    {"Section": "", "Item": "AEO Answer Blocks", "Guideline": "40-60 words. Placed directly beneath an H2 question. Must be factual, objective, and devoid of marketing fluff (e.g., 'The best way to...').", "Why It Matters": "Optimizes direct extraction for answer engines and voice search."},
+                    {"Section": "", "Item": "FAQ Schema", "Guideline": "Minimum 2-3 questions per informational page. Answers must be direct and stand alone without needing the rest of the page for context.", "Why It Matters": "Improves machine readability and rich-answer eligibility."},
+                    {"Section": "", "Item": "Content Readability", "Guideline": "Keep sentences under 20 words. Use bullet points for any list of 3 or more items.", "Why It Matters": "Increases comprehension and snippet usability."},
+                    {"Section": "", "Item": "", "Guideline": "", "Why It Matters": ""},
+                    {"Section": "[Visual & Social Branding]", "Item": "", "Guideline": "", "Why It Matters": ""},
+                    {"Section": "", "Item": "OG Image", "Guideline": "1200 x 630 pixels. Keep text centered (safe zone) so it isn't cropped by mobile devices on LinkedIn/X.", "Why It Matters": "Ensures consistent social card presentation."},
+                    {"Section": "", "Item": "Social Share Note", "Guideline": "Customize the message for the platform. LinkedIn = Professional insight. X (Twitter) = Quick hook. Facebook = Conversational.", "Why It Matters": "Improves engagement by matching platform context."},
+                ]
+                _to_excel_safe(pd.DataFrame(quick_reference_rows), writer, "Quick Reference Guide", index=False)
                 priority_rows = []
                 for row in extra_rows:
                     risk_score = (row.get("Critical Issues Count") or 0) * 30 + (row.get("Warning Issues Count") or 0) * 10 + (100 - (row.get("SEO Health Score") or 100))
@@ -759,12 +789,17 @@ async def main() -> None:
                     {"Section": "Links", "Term": "Broken Internal Links Count", "Meaning": "Internal links returning 4xx/5xx or equivalent failures.", "Values/Threshold": ">0 flagged", "Related Tabs": "Links, LinksDetail, Priority URLs"},
                     {"Section": "Content", "Term": "Word Count Band", "Meaning": "Body content depth class.", "Values/Threshold": "Thin / OK / Strong", "Related Tabs": "Content"},
                     {"Section": "AEO", "Term": "Question Heading Count", "Meaning": "Headings phrased as questions to match answer intent.", "Values/Threshold": "Higher is generally better", "Related Tabs": "AEO"},
+                    {"Section": "AEO & Generative Search Terms", "Term": "Answer Engine Optimization", "Meaning": "The practice of structuring content so AI answer engines can reliably extract and cite direct answers.", "Values/Threshold": "Answer-first formatting", "Related Tabs": "AEO, Content Optimization Hub"},
+                    {"Section": "AEO & Generative Search Terms", "Term": "Featured Snippet", "Meaning": "A concise answer block surfaced prominently in search results, often extracted from clear headings + short answer text.", "Values/Threshold": "Direct question-answer format", "Related Tabs": "AEO, Content"},
+                    {"Section": "AEO & Generative Search Terms", "Term": "FAQ Schema", "Meaning": "Structured data that marks up common questions and answers to improve machine readability and eligibility for rich results.", "Values/Threshold": "Valid JSON-LD", "Related Tabs": "AEO, Schema & Metadata"},
+                    {"Section": "AEO & Generative Search Terms", "Term": "llms.txt", "Meaning": "A guidance file for AI crawlers that can indicate allowed access and preferred content handling behavior.", "Values/Threshold": "Present and reachable", "Related Tabs": "Technical, Security"},
+                    {"Section": "AEO & Generative Search Terms", "Term": "Entity-Based Search", "Meaning": "Search interpretation based on known entities (people, places, brands, topics) and their relationships, not only keywords.", "Values/Threshold": "Clear entity context", "Related Tabs": "AEO, Content"},
                     {"Section": "Color Key", "Term": "Green", "Meaning": "Pass / aligned with best practice or completed workflow item.", "Values/Threshold": "Good", "Related Tabs": "All"},
                     {"Section": "Color Key", "Term": "Orange", "Meaning": "Warning / in progress / medium-priority attention needed.", "Values/Threshold": "Medium risk", "Related Tabs": "All"},
                     {"Section": "Color Key", "Term": "Red", "Meaning": "Failure / high-priority issue or to-do critical task.", "Values/Threshold": "High risk", "Related Tabs": "All"},
                     {"Section": "Color Key", "Term": "Purple", "Meaning": "Informational edge-case or AEO category signal.", "Values/Threshold": "Context", "Related Tabs": "All"},
                 ]
-                _to_excel_safe(pd.DataFrame(legend_rows), writer, "Legend", index=False)
+                _to_excel_safe(pd.DataFrame(legend_rows), writer, "Glossary & Legend", index=False)
                 crawl_inlinks_map: defaultdict[str, set[str]] = defaultdict(set)
                 crawled_set_main = set(main_df["URL"].dropna().tolist())
                 for row in extra_rows:
@@ -785,6 +820,7 @@ async def main() -> None:
                 preferred_first_tabs = [
                     "Dashboard",
                     "Content Optimization Hub",
+                    "Quick Reference Guide",
                     "FixPlan",
                     "Main",
                     "Technical",
@@ -798,7 +834,6 @@ async def main() -> None:
                     "AIOSEO",
                     "Security",
                     "Summary",
-                    "Legend",
                     "LinksDetail",
                     "Media",
                 ]
@@ -807,7 +842,9 @@ async def main() -> None:
                     if tab_name in wb.sheetnames:
                         wb.move_sheet(wb[tab_name], offset=-wb.index(wb[tab_name]) + idx)
                 apply_tab_hyperlinks(writer)
-                for sname in ["Dashboard", "Content Optimization Hub", "FixPlan", "Legend", "Technical", "Content", "Links", "LinksDetail", "Media", "Schema & Metadata", "AEO", "AIOSEO", "Security", "Indexability", "Redirects", "Duplicates", "TemplateClusters", "Priority URLs", "IssueInventory", "ResolvedIssues", "RunMetadata", "DeltaFromPreviousRun", "CrawlGraph", "SitemapQA", "Summary"]:
+                if "Glossary & Legend" in wb.sheetnames:
+                    wb.move_sheet(wb["Glossary & Legend"], offset=len(wb.sheetnames) - 1 - wb.index(wb["Glossary & Legend"]))
+                for sname in ["Dashboard", "Content Optimization Hub", "Quick Reference Guide", "FixPlan", "Glossary & Legend", "Technical", "Content", "Links", "LinksDetail", "Media", "Schema & Metadata", "AEO", "AIOSEO", "Security", "Indexability", "Redirects", "Duplicates", "TemplateClusters", "Priority URLs", "IssueInventory", "ResolvedIssues", "RunMetadata", "DeltaFromPreviousRun", "CrawlGraph", "SitemapQA", "Summary"]:
                     adjust_sheet_format(writer, sname)
             print(f"\nAudit complete! Report saved to {output_filename}")
         finally:
