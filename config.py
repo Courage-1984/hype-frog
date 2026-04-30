@@ -12,5 +12,5 @@ RETRY_BACKOFF_FACTOR = 2.0
 RETRY_MAX_DELAY_SECONDS = 20.0
 RETRYABLE_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 OUTPUT_FILENAME = "seo_audit_report.xlsx"
-DEFAULT_OWNER_BY_SEVERITY = {"Critical": "Dev", "Warning": "Copy Writer", "Info": "Copy Writer"}
-DEFAULT_EFFORT_BY_SEVERITY = {"Critical": "M", "Warning": "S", "Info": "S"}
+DEFAULT_OWNER_BY_SEVERITY = {"Critical": "Dev", "Warning": "Copy Writer", "Observation": "Copy Writer"}
+DEFAULT_EFFORT_BY_SEVERITY = {"Critical": "M", "Warning": "S", "Observation": "S"}

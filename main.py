@@ -6,8 +6,10 @@ import re
 import shutil
 from collections import defaultdict
 from datetime import datetime
+import math
 from urllib.parse import urlparse
 
+import numpy as np
 import pandas as pd
 
 from checkpoint import AuditCache, load_checkpoint, save_checkpoint
@@ -22,17 +24,17 @@ from config import (
 from crawler import (
     check_url_status_light_limited,
     create_session,
+    fetch_psi_metrics_batch,
     fetch_and_parse,
     parse_sitemap,
 )
 from models import CrawlResult
 from reporters import adjust_sheet_format, apply_tab_hyperlinks
 from reporters.tabs import (
+    build_content_optimization_hub_rows,
     build_fixplan_rows,
     load_cached_rows,
-    write_cached_sheet_chunked,
     write_dict_rows_sheet,
-    write_snippet_candidates_chunked,
 )
 from rules import (
     get_summary_rules,
@@ -43,6 +45,67 @@ from rules import (
     workflow_metrics_for_issue,
 )
 from utils import build_output_filename, normalize_text_hash, sanitize_filename_part
+
+
+_ILLEGAL_XLSX_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
+_INVALID_SHEET_CHARS_RE = re.compile(r"[:\\/*?\[\]]")
+
+
+def _sanitize_excel_string(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+    return _ILLEGAL_XLSX_CHARS_RE.sub("", value)
+
+
+def _sanitize_excel_value(value: object) -> object:
+    if value is None:
+        return ""
+    if isinstance(value, (float, np.floating)):
+        if math.isnan(float(value)) or math.isinf(float(value)):
+            return ""
+    if isinstance(value, str):
+        return _sanitize_excel_string(value)
+    return value
+
+
+def _sanitize_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    sanitized: list[dict[str, object]] = []
+    for row in rows:
+        sanitized.append({k: _sanitize_excel_value(v) for k, v in row.items()})
+    return sanitized
+
+
+def _sanitize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    clean_df = df.copy()
+    clean_df = clean_df.replace([np.inf, -np.inf], np.nan)
+    clean_df = clean_df.fillna("")
+    for col in clean_df.columns:
+        if pd.api.types.is_datetime64tz_dtype(clean_df[col].dtype):
+            clean_df[col] = clean_df[col].dt.tz_localize(None).astype(str)
+            clean_df[col] = clean_df[col].replace("NaT", "")
+            continue
+        if pd.api.types.is_datetime64_any_dtype(clean_df[col].dtype):
+            clean_df[col] = clean_df[col].astype(str).replace("NaT", "")
+            continue
+        if pd.api.types.is_object_dtype(clean_df[col].dtype) or pd.api.types.is_string_dtype(clean_df[col].dtype):
+            parsed_dt = pd.to_datetime(clean_df[col], errors="coerce", utc=True)
+            if parsed_dt.notna().any():
+                clean_df[col] = parsed_dt.dt.tz_localize(None).astype(str).replace("NaT", "")
+                continue
+            clean_df[col] = clean_df[col].map(_sanitize_excel_value)
+    return clean_df
+
+
+def _safe_sheet_name(name: str) -> str:
+    sanitized = _INVALID_SHEET_CHARS_RE.sub("_", str(name or "Sheet"))
+    sanitized = sanitized[:31]
+    return sanitized or "Sheet"
+
+
+def _to_excel_safe(df: pd.DataFrame, writer: pd.ExcelWriter, sheet_name: str, **kwargs) -> None:
+    safe_df = _sanitize_dataframe(df)
+    safe_df.columns = [str(col).replace("\n", " ").replace("\r", " ").strip()[:255] or f"Column_{idx + 1}" for idx, col in enumerate(safe_df.columns)]
+    safe_df.to_excel(writer, sheet_name=_safe_sheet_name(sheet_name), **kwargs)
 
 
 async def main() -> None:
@@ -61,7 +124,7 @@ async def main() -> None:
             sitemap_url = input("Enter the full Sitemap URL (e.g., https://example.com/sitemap.xml): ").strip()
             urls, sitemap_meta = await parse_sitemap(sitemap_url, session)
             parsed_source = urlparse(sitemap_url)
-            source_label = f"{parsed_source.netloc or 'sitemap'}_{sanitize_filename_part(parsed_source.path or 'sitemap.xml')}"
+            source_label = parsed_source.netloc or "sitemap"
         elif choice == "2":
             file_path = input("Enter the file path (e.g., urls.txt): ").strip()
             if os.path.exists(file_path):
@@ -99,7 +162,8 @@ async def main() -> None:
 
         suite_choice = input("Run mode - 1) Main tab only  2) Full SEO suite (all tabs): ").strip()
         full_suite = suite_choice == "2"
-        output_filename = build_output_filename(source_label, full_suite)
+        previous_audit_path = input("Optional previous audit .xlsx path for comparison (leave blank to skip): ").strip()
+        output_filename = os.getenv("HF_OUTPUT_FILENAME") or build_output_filename(source_label, full_suite)
         checkpoint_file = output_filename.replace(".xlsx", "_checkpoint.json")
         cache_file = output_filename.replace(".xlsx", "_temp_cache.db")
         cache = AuditCache(cache_file)
@@ -176,6 +240,19 @@ async def main() -> None:
 
         print("\nGenerating Excel report...")
         main_rows, extra_rows = load_cached_rows(cache)
+        psi_map = await fetch_psi_metrics_batch(
+            session,
+            [str(r.get("URL") or "") for r in extra_rows if r.get("URL")],
+        )
+        for row in extra_rows:
+            url_key = str(row.get("URL") or "")
+            psi = psi_map.get(url_key)
+            if psi:
+                row["CWV LCP (s)"] = psi.get("CWV LCP (s)")
+                row["CWV INP (ms)"] = psi.get("CWV INP (ms)")
+                row["CWV CLS"] = psi.get("CWV CLS")
+                row["CWV Data Source"] = psi.get("CWV Data Source")
+                row["Field vs Lab"] = psi.get("Field vs Lab")
 
         status_by_url: dict[str, object] = {}
         for row in extra_rows:
@@ -252,14 +329,14 @@ async def main() -> None:
             row["Health Icon"] = icon
             row["Critical Issues Count"] = len(matched["Critical"])
             row["Warning Issues Count"] = len(matched["Warning"])
-            row["Info Issues Count"] = len(matched["Info"])
-            row["Matched Issues"] = " | ".join(matched["Critical"] + matched["Warning"] + matched["Info"])
+            row["Observation Issues Count"] = len(matched["Observation"])
+            row["Matched Issues"] = " | ".join(matched["Critical"] + matched["Warning"] + matched["Observation"])
             row["Action Needed"] = "Yes" if badge in {"Critical", "Warning"} else "No"
-            top_issue = (matched["Critical"] + matched["Warning"] + matched["Info"])[0] if (matched["Critical"] + matched["Warning"] + matched["Info"]) else ""
+            top_issue = (matched["Critical"] + matched["Warning"] + matched["Observation"])[0] if (matched["Critical"] + matched["Warning"] + matched["Observation"]) else ""
             row["Owner"] = owner_for_issue(top_issue, badge)
             row["Sprint"] = ""
             row["Status"] = "Open"
-            all_issue_ids = [stable_issue_id(row.get("URL"), issue) for issue in matched["Critical"] + matched["Warning"] + matched["Info"]]
+            all_issue_ids = [stable_issue_id(row.get("URL"), issue) for issue in matched["Critical"] + matched["Warning"] + matched["Observation"]]
             row["Stable Issue IDs"] = " | ".join(all_issue_ids) if all_issue_ids else None
             final_norm = str((row.get("Final URL") or row.get("URL") or "")).rstrip("/")
             inlinks_count = len(inlinks_map.get(final_norm, set()))
@@ -286,38 +363,71 @@ async def main() -> None:
             mrow["SEO Health Score"] = score_data.get("score")
             mrow["Severity Badge"] = score_data.get("badge")
             mrow["Health Icon"] = score_data.get("icon")
+            extra_match = next((e for e in extra_rows if e.get("URL") == mrow.get("URL")), {})
+            mrow["CWV LCP (s)"] = extra_match.get("CWV LCP (s)")
+            mrow["CWV INP (ms)"] = extra_match.get("CWV INP (ms)")
+            mrow["CWV CLS"] = extra_match.get("CWV CLS")
+            mrow["Field vs Lab"] = extra_match.get("Field vs Lab")
+            mrow["Regional Authority Score"] = extra_match.get("Regional Authority Score")
 
         main_df = pd.DataFrame(main_rows)
         main_by_url = {str(r.get("URL") or "").strip(): r for r in main_rows if r.get("URL")}
 
         prev_issue_ids: set[str] = set()
         prev_counts: dict[str, int] = {}
-        if os.path.exists(output_filename):
+        prev_fixed_issue_ids: set[str] = set()
+        previous_issue_inventory_df = pd.DataFrame()
+        previous_audit_exists = bool(previous_audit_path) and os.path.exists(previous_audit_path)
+        if previous_audit_exists:
             try:
-                prev_xls = pd.ExcelFile(output_filename)
+                prev_xls = pd.ExcelFile(previous_audit_path)
                 if "IssueInventory" in prev_xls.sheet_names:
-                    prev_inv = pd.read_excel(output_filename, sheet_name="IssueInventory")
-                    if "Stable Issue ID" in prev_inv.columns:
-                        prev_issue_ids = {str(v).strip() for v in prev_inv["Stable Issue ID"].dropna().tolist() if str(v).strip()}
+                    previous_issue_inventory_df = pd.read_excel(previous_audit_path, sheet_name="IssueInventory")
+                    if "Stable Issue ID" in previous_issue_inventory_df.columns:
+                        prev_issue_ids = {
+                            str(v).strip()
+                            for v in previous_issue_inventory_df["Stable Issue ID"].dropna().tolist()
+                            if str(v).strip()
+                        }
+                        if "Status" in previous_issue_inventory_df.columns:
+                            prev_fixed_issue_ids = {
+                                str(row.get("Stable Issue ID")).strip()
+                                for _, row in previous_issue_inventory_df.iterrows()
+                                if str(row.get("Stable Issue ID", "")).strip()
+                                and str(row.get("Status", "")).strip().lower() in {"fixed", "done", "closed"}
+                            }
+                    else:
+                        print("Previous audit IssueInventory is missing 'Stable Issue ID'. Delta compare will mark all current issues as New.")
+                else:
+                    print("Previous audit is missing 'IssueInventory'. Delta compare will mark all current issues as New.")
                 if "Summary" in prev_xls.sheet_names:
-                    prev_summary = pd.read_excel(output_filename, sheet_name="Summary")
+                    prev_summary = pd.read_excel(previous_audit_path, sheet_name="Summary")
                     for _, srow in prev_summary.iterrows():
                         if str(srow.get("Section", "")) == "Issue Counts":
                             prev_counts[str(srow.get("Issue", ""))] = int(srow.get("Affected URL Count", 0) or 0)
-            except Exception:
+            except Exception as exc:
+                print(f"Could not parse previous audit for compare: {exc}")
                 prev_issue_ids = set()
                 prev_counts = {}
+                prev_fixed_issue_ids = set()
+                previous_issue_inventory_df = pd.DataFrame()
+        elif previous_audit_path:
+            print(f"Previous audit file not found: {previous_audit_path}. Delta compare will mark all current issues as New.")
 
-        with pd.ExcelWriter(output_filename, engine="openpyxl") as writer:
+        main_rows = _sanitize_rows(main_rows)
+        extra_rows = _sanitize_rows(extra_rows)
+        writer = None
+        try:
+            writer = pd.ExcelWriter(output_filename, engine="openpyxl")
             main_cols = list(main_rows[0].keys()) if main_rows else []
             write_dict_rows_sheet(writer, "Main", main_cols, main_rows)
             adjust_sheet_format(writer, "Main")
             if full_suite:
-                technical_cols = ["URL", "Health Icon", "Severity Badge", "SEO Health Score", "Action Needed", "Owner", "Sprint", "Status", "Status Code", "Final URL", "Protocol", "Redirect Chain Length", "Redirect Target", "Redirect Hops", "HTTP->HTTPS Redirect", "Status Class", "TTFB (ms)", "Total Request Time (ms)", "Content-Type", "HTTP Version", "HTML Size (KB)", "Compression Enabled", "Cache-Control", "ETag", "X-Robots-Tag", "Meta Robots Raw", "Canonical URL", "Canonical Matches Final URL", "Canonical Type", "Canonical Absolute URL", "Canonical in Sitemap Match", "Hreflang Present", "Hreflang Count", "Hreflang Self Reference", "Hreflang Reciprocal Check", "Hreflang Canonical Consistency", "x-default Present", "Pagination rel=next", "Pagination rel=prev", "Last-Modified", "Published Date", "Modified Date", "Last Updated", "Change Frequency", "Priority", "Indexability Reason", "Critical Issues Count", "Warning Issues Count", "Info Issues Count", "Inlinks Bucket", "Important But Underlinked", "SERP Title Truncation Risk", "SERP Meta Truncation Risk", "SERP Title Pixel Approx", "SERP Meta Pixel Approx", "Cannibalization Hint", "Stable Issue IDs", "URL Depth", "Param URL Flag"]
+                technical_cols = ["URL", "Health Icon", "Severity Badge", "SEO Health Score", "Action Needed", "Owner", "Sprint", "Status", "Status Code", "Final URL", "Protocol", "Redirect Chain Length", "Redirect Target", "Redirect Hops", "HTTP->HTTPS Redirect", "Status Class", "TTFB (ms)", "Total Request Time (ms)", "Content-Type", "HTTP Version", "HTML Size (KB)", "Compression Enabled", "Cache-Control", "ETag", "X-Robots-Tag", "Meta Robots Raw", "Canonical URL", "Canonical Matches Final URL", "Canonical Type", "Canonical Absolute URL", "Canonical in Sitemap Match", "Hreflang Present", "Hreflang Count", "Hreflang Self Reference", "Hreflang Reciprocal Check", "Hreflang Canonical Consistency", "x-default Present", "Pagination rel=next", "Pagination rel=prev", "Last-Modified", "Published Date", "Modified Date", "Last Updated", "Change Frequency", "Priority", "Indexability Reason", "AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)", "llms.txt Present", "CWV LCP (s)", "CWV INP (ms)", "CWV CLS", "CWV Data Source", "Field vs Lab", "Regional Authority Score", "Regional Entity Hits", "Answer Block Detected (First 60 Words)", "AEO Extractability Score", "Critical Issues Count", "Warning Issues Count", "Observation Issues Count", "Inlinks Bucket", "Important But Underlinked", "SERP Title Truncation Risk", "SERP Meta Truncation Risk", "SERP Title Pixel Approx", "SERP Meta Pixel Approx", "Cannibalization Hint", "Stable Issue IDs", "URL Depth", "Param URL Flag"]
                 content_cols = ["URL", "H1 Count", "Missing H1 Flag", "Multiple H1 Flag", "Title Missing", "Meta Description Missing", "Word Count", "Word Count Band", "Sentence Count", "Body Text-to-HTML Ratio", "Readability (Rough Flesch)", "Thin Content Flag"]
                 links_cols = ["URL", "Internal Links Count", "Unique Internal Links Count", "External Links Count", "Nofollow Internal Links Count", "Nofollow External Links Count", "Generic Anchor Text Count", "Broken Internal Links Count", "Unresolved Internal Links Count", "Internal Link Statuses"]
                 media_cols = ["URL", "Image Count", "Images", "Images Missing Alt", "Image Alt Coverage (%)", "Image Extension Distribution", "Likely Large Image Count", "Image Filename Quality Issues", "Image On Canonical Domain (%)", "Mixed Content Detected"]
-                schema_cols = ["URL", "Schema Types Found", "Schema Types Count", "Schema Parse Errors"]
+                schema_cols = ["URL", "Schema Types Found", "Schema Types Count", "Schema Parse Errors", "OG Title", "OG Description", "OG Image", "Open Graph Complete", "Twitter Card Type"]
                 aeo_cols = [
                     "URL",
                     "AEO Badge",
@@ -331,22 +441,25 @@ async def main() -> None:
                     "Definition Signal",
                     "List/Table Answer Signal",
                     "Paragraphs 40-60 Words Count",
+                    "Answer Block Detected (First 60 Words)",
+                    "AEO Extractability Score",
+                    "Snippet Preview Mockup",
                     "Title Missing",
                     "Meta Description Missing",
                 ]
-                social_cols = ["URL", "OG Title", "OG Description", "OG Image", "Open Graph Complete", "Twitter Card Type"]
                 security_cols = ["URL", "Strict-Transport-Security", "Content-Security-Policy", "X-Content-Type-Options", "X-Frame-Options", "Referrer-Policy", "Permissions-Policy", "Robots.txt Accessible", "Sitemap in Robots.txt", "Robots.txt Crawl-Delay", "Robots.txt Disallow /"]
                 write_dict_rows_sheet(writer, "Technical", technical_cols, extra_rows)
                 write_dict_rows_sheet(writer, "Content", content_cols, extra_rows)
                 write_dict_rows_sheet(writer, "Links", links_cols, extra_rows)
                 write_dict_rows_sheet(writer, "Media", media_cols, extra_rows)
-                write_dict_rows_sheet(writer, "StructuredData", schema_cols, extra_rows)
+                write_dict_rows_sheet(writer, "Schema & Metadata", schema_cols, extra_rows)
                 aeo_rows = _build_aeo_rows(extra_rows)
                 write_dict_rows_sheet(writer, "AEO", aeo_cols, aeo_rows)
-                write_snippet_candidates_chunked(writer, cache, "SnippetCandidates")
                 aioseo_rows = _build_aioseo_rows(extra_rows, main_by_url, DEFAULT_OWNER_BY_SEVERITY)
                 aioseo_cols = [
                     "URL",
+                    "WordPress Post ID",
+                    "Direct Edit Link",
                     "AIOSEO Panel",
                     "Severity",
                     "Issue",
@@ -364,7 +477,6 @@ async def main() -> None:
                     "Stable Issue ID",
                 ]
                 write_dict_rows_sheet(writer, "AIOSEO", aioseo_cols, aioseo_rows)
-                write_dict_rows_sheet(writer, "Social", social_cols, extra_rows)
                 write_dict_rows_sheet(writer, "Security", security_cols, extra_rows)
                 indexability_cols = ["URL", "Status Code", "Status Class", "Final URL", "Indexability Reason", "Meta Robots Raw", "X-Robots-Tag", "Canonical URL", "Canonical Type", "Canonical Matches Final URL", "Canonical in Sitemap Match"]
                 write_dict_rows_sheet(writer, "Indexability", indexability_cols, extra_rows)
@@ -399,7 +511,7 @@ async def main() -> None:
                         item["Target Status (if crawled)"] = target_status
                         item["Crawlable"] = target_status is None or (isinstance(target_status, int) and target_status < 400)
                         link_rows.append(item)
-                pd.DataFrame(link_rows).to_excel(writer, index=False, sheet_name="LinksDetail")
+                _to_excel_safe(pd.DataFrame(link_rows), writer, "LinksDetail", index=False)
                 title_groups: defaultdict[str, list[str]] = defaultdict(list)
                 desc_groups: defaultdict[str, list[str]] = defaultdict(list)
                 for row in main_rows:
@@ -414,7 +526,7 @@ async def main() -> None:
                     t_key = normalize_text_hash(row.get("Title"))
                     d_key = normalize_text_hash(row.get("Meta Description"))
                     duplicate_rows.append({"URL": row.get("URL"), "Title Duplicate Count": len(title_groups.get(t_key, [])) if t_key else 0, "Meta Description Duplicate Count": len(desc_groups.get(d_key, [])) if d_key else 0, "Title Duplicate URLs": " | ".join(title_groups.get(t_key, [])) if t_key and len(title_groups.get(t_key, [])) > 1 else None, "Meta Duplicate URLs": " | ".join(desc_groups.get(d_key, [])) if d_key and len(desc_groups.get(d_key, [])) > 1 else None})
-                pd.DataFrame(duplicate_rows).to_excel(writer, index=False, sheet_name="Duplicates")
+                _to_excel_safe(pd.DataFrame(duplicate_rows), writer, "Duplicates", index=False)
                 cluster_groups: defaultdict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
                 for row in extra_rows:
                     final_url = row.get("Final URL") or row.get("URL")
@@ -440,9 +552,9 @@ async def main() -> None:
                     suggested_fix = root_cause_and_fix(dominant_issue)[1] if dominant_issue else None
                     avg_score = round(sum([(u.get("SEO Health Score") or 0) for u in urls_in_group]) / max(1, len(urls_in_group)), 2)
                     cluster_rows.append({"Path Segment": seg, "Title Pattern": pattern, "URL Count": len(url_list), "Cluster Health Score Avg": avg_score, "% with Critical": round((critical_count / max(1, len(url_list))) * 100, 2), "% with Warnings": round((warning_count / max(1, len(url_list))) * 100, 2), "Dominant Issue Type": dominant_issue, "Suggested Template Fix": suggested_fix, "URLs": " | ".join(url_list[:30])})
-                pd.DataFrame(cluster_rows).to_excel(writer, index=False, sheet_name="TemplateClusters")
+                _to_excel_safe(pd.DataFrame(cluster_rows), writer, "TemplateClusters", index=False)
                 summary_rows = []
-                aeo_issue_names = {"Low AEO Readiness Score", "No FAQ/QA Schema", "No Question Headings", "No Answer-Friendly Structure", "No 40-60 Word Answer Paragraphs"}
+                aeo_issue_names = {"Low AEO Readiness Score", "Missing FAQ/QA Schema", "No Question Headings", "No Answer-Friendly Structure", "No 40-60 Word Answer Paragraphs"}
                 summary_rows.append({"Section": "Issue Counts", "Severity": None, "Issue": None, "Affected URL Count": None, "Affected URLs (sample)": None})
                 for severity, issue_name, rule_fn in summary_rules:
                     affected_urls = [row.get("URL") for row in extra_rows if _safe_rule(rule_fn, row)]
@@ -453,7 +565,7 @@ async def main() -> None:
                         continue
                     affected_urls = [row.get("URL") for row in extra_rows if _safe_rule(rule_fn, row)]
                     summary_rows.append({"Section": "AEO Opportunities", "Severity": severity, "Issue": issue_name, "Affected URL Count": len(affected_urls), "Reference Tab": "AEO", "Affected URLs (sample)": " | ".join([u for u in affected_urls[:25] if u]) + " || Full list: see AEO tab"})
-                severity_order = {"Critical": 0, "Warning": 1, "Info": 2}
+                severity_order = {"Critical": 0, "Warning": 1, "Observation": 2}
                 summary_rows = sorted(summary_rows, key=lambda x: (x.get("Section", ""), severity_order.get(x.get("Severity", ""), 99), -(x.get("Affected URL Count") or 0), x.get("Issue", "")))
                 summary_rows.append({"Section": "Top 10 Critical URLs", "Severity": None, "Issue": None, "Affected URL Count": None, "Affected URLs (sample)": None})
                 critical_urls = sorted([r for r in extra_rows if (r.get("Critical Issues Count") or 0) > 0], key=lambda r: (-(r.get("Critical Issues Count") or 0), r.get("SEO Health Score") or 100))[:10]
@@ -462,15 +574,15 @@ async def main() -> None:
                 summary_rows.append({"Section": "Top Issues by Template", "Severity": None, "Issue": None, "Affected URL Count": None, "Affected URLs (sample)": None})
                 top_template_issues = sorted([(seg, issue_name, issue_count) for seg, issues in template_issue_counts.items() for issue_name, issue_count in issues.items()], key=lambda x: x[2], reverse=True)[:20]
                 for seg, issue_name, issue_count in top_template_issues:
-                    summary_rows.append({"Section": "Top Issues by Template", "Severity": "Info", "Issue": f"{seg} -> {issue_name}", "Affected URL Count": issue_count, "Reference Tab": "TemplateClusters", "Affected URLs (sample)": None})
-                pd.DataFrame(summary_rows).to_excel(writer, index=False, sheet_name="Summary")
+                    summary_rows.append({"Section": "Top Issues by Template", "Severity": "Observation", "Issue": f"{seg} -> {issue_name}", "Affected URL Count": issue_count, "Reference Tab": "TemplateClusters", "Affected URLs (sample)": None})
+                _to_excel_safe(pd.DataFrame(summary_rows), writer, "Summary", index=False)
                 issue_inventory_rows = []
                 for row in extra_rows:
                     url = row.get("URL")
                     for issue in str(row.get("Matched Issues") or "").split(" | "):
                         if not issue:
                             continue
-                        issue_severity = "Critical" if issue in [i[1] for i in summary_rules if i[0] == "Critical"] else "Warning" if issue in [i[1] for i in summary_rules if i[0] == "Warning"] else "Info"
+                        issue_severity = "Critical" if issue in [i[1] for i in summary_rules if i[0] == "Critical"] else "Warning" if issue in [i[1] for i in summary_rules if i[0] == "Warning"] else "Observation"
                         reference_tab = (
                             "Indexability"
                             if ("Canonical" in issue or "Noindex" in issue)
@@ -493,7 +605,7 @@ async def main() -> None:
                             }
                         )
                 issue_inventory_df = pd.DataFrame(issue_inventory_rows)
-                issue_inventory_df.to_excel(writer, index=False, sheet_name="IssueInventory")
+                _to_excel_safe(issue_inventory_df, writer, "IssueInventory", index=False)
                 fixplan_rows = build_fixplan_rows(
                     summary_rules,
                     extra_rows,
@@ -503,7 +615,31 @@ async def main() -> None:
                     DEFAULT_OWNER_BY_SEVERITY,
                 )
                 fixplan_df = pd.DataFrame(sorted(fixplan_rows, key=lambda x: (-x["Affected Count"], x["Severity"])))
-                fixplan_df.to_excel(writer, index=False, sheet_name="FixPlan")
+                _to_excel_safe(fixplan_df, writer, "FixPlan", index=False)
+                content_hub_rows = build_content_optimization_hub_rows(main_rows, extra_rows, fixplan_rows)
+                content_hub_cols = [
+                    "Status",
+                    "Assigned Owner",
+                    "Content Cluster ID",
+                    "URL",
+                    "Elementor Builder Link",
+                    "Target Keywords",
+                    "Current Page Copy Snippet",
+                    "Current Title",
+                    "Proposed Title (50-60 Chars)",
+                    "Title Count",
+                    "Current Meta Desc",
+                    "Proposed Meta Desc (120-160 Chars)",
+                    "Desc Count",
+                    "Current H-Tag Structure",
+                    "Proposed H-Tag Fixes",
+                    "AEO Answer Block Draft",
+                    "FAQ/QA Draft",
+                    "Current OG-Image URL",
+                    "OG Image Preview",
+                    "Social Share Note",
+                ]
+                write_dict_rows_sheet(writer, "Content Optimization Hub", content_hub_cols, content_hub_rows)
                 priority_rows = []
                 for row in extra_rows:
                     risk_score = (row.get("Critical Issues Count") or 0) * 30 + (row.get("Warning Issues Count") or 0) * 10 + (100 - (row.get("SEO Health Score") or 100))
@@ -527,7 +663,7 @@ async def main() -> None:
                     )
                     priority_rows.append({"URL": row.get("URL"), "Business Risk Score": int(risk_score), "SEO Health Score": row.get("SEO Health Score"), "Severity Badge": row.get("Severity Badge"), "Critical Issues Count": row.get("Critical Issues Count"), "Warning Issues Count": row.get("Warning Issues Count"), "Indexability Reason": row.get("Indexability Reason"), "Broken Internal Links Count": row.get("Broken Internal Links Count"), "Canonical Type": row.get("Canonical Type"), "Why Prioritized": " | ".join(reasons) if reasons else "Monitor", "Action Needed": "Yes" if risk_score >= 30 else "No", "Owner": owner_for_issue(owner_seed_issue, str(row.get("Severity Badge") or "")), "Sprint": "", "Status": "Open"})
                 priority_df = pd.DataFrame(sorted(priority_rows, key=lambda x: x["Business Risk Score"], reverse=True))
-                priority_df.to_excel(writer, index=False, sheet_name="Priority URLs")
+                _to_excel_safe(priority_df, writer, "Priority URLs", index=False)
                 total_urls = len(extra_rows)
                 pass_count = len([r for r in extra_rows if r.get("Severity Badge") == "Pass"])
                 critical_count = len([r for r in extra_rows if r.get("Severity Badge") == "Critical"])
@@ -545,12 +681,7 @@ async def main() -> None:
                         score_bands["<70"] += 1
                 top_blockers = fixplan_df.head(10)[["Issue Type", "Severity", "Affected Count"]]
                 dashboard_rows = [{"Metric": "URLs Crawled", "Value": total_urls}, {"Metric": "Pass Rate (%)", "Value": round((pass_count / max(1, total_urls)) * 100, 2)}, {"Metric": "Critical URL Count", "Value": critical_count}, {"Metric": "Warning URL Count", "Value": warning_count}, {"Metric": "Status Distribution", "Value": ", ".join([f"{k}:{v}" for k, v in sorted(status_dist.items())])}, {"Metric": "Score Bands", "Value": ", ".join([f"{k}:{v}" for k, v in score_bands.items()])}]
-                pd.DataFrame(dashboard_rows).to_excel(writer, index=False, sheet_name="Dashboard")
-                top_blockers.to_excel(writer, index=False, sheet_name="Dashboard", startrow=len(dashboard_rows) + 3)
-                status_dist_df = pd.DataFrame([{"Status Class": k, "Count": v} for k, v in sorted(status_dist.items())])
-                status_dist_df.to_excel(writer, index=False, sheet_name="Dashboard", startrow=len(dashboard_rows) + 3, startcol=5)
-                score_band_df = pd.DataFrame([{"Score Band": k, "Count": v} for k, v in score_bands.items()])
-                score_band_df.to_excel(writer, index=False, sheet_name="Dashboard", startrow=len(dashboard_rows) + 3, startcol=8)
+                _to_excel_safe(pd.DataFrame(dashboard_rows), writer, "Dashboard", index=False)
                 immediate_action_cols = [
                     "URL",
                     "Business Risk Score",
@@ -562,38 +693,66 @@ async def main() -> None:
                 immediate_actions_df = priority_df.reindex(columns=immediate_action_cols).head(5).copy()
                 immediate_actions_df.insert(0, "Rank", range(1, len(immediate_actions_df) + 1))
                 immediate_actions_startrow = len(dashboard_rows) + len(top_blockers) + 7
-                pd.DataFrame([{"Immediate Actions": "Top 5 URLs by Business Risk Score"}]).to_excel(
+                _to_excel_safe(
+                    pd.DataFrame([{"Immediate Actions": "Top 5 URLs by Business Risk Score"}]),
                     writer,
+                    "Dashboard",
                     index=False,
-                    sheet_name="Dashboard",
                     startrow=immediate_actions_startrow,
                 )
-                immediate_actions_df.to_excel(
+                _to_excel_safe(
+                    immediate_actions_df,
                     writer,
+                    "Dashboard",
                     index=False,
-                    sheet_name="Dashboard",
                     startrow=immediate_actions_startrow + 2,
                 )
-                run_meta_rows = [{"Key": "Run Timestamp (South Africa format)", "Value": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")}, {"Key": "Total URLs", "Value": len(urls)}, {"Key": "Mode", "Value": "Full Suite"}, {"Key": "Workers", "Value": workers}, {"Key": "Delay Seconds", "Value": request_delay}, {"Key": "Retries", "Value": MAX_RETRIES}, {"Key": "Timeout Seconds", "Value": TIMEOUT_SECONDS}, {"Key": "Checkpoint Every", "Value": checkpoint_every}]
-                pd.DataFrame(run_meta_rows).to_excel(writer, index=False, sheet_name="RunMetadata")
-                current_issue_ids = {r["Stable Issue ID"] for r in issue_inventory_rows if r.get("Stable Issue ID")}
+                run_meta_rows = [{"Key": "Run Timestamp", "Value": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")}, {"Key": "Total URLs", "Value": len(urls)}, {"Key": "Mode", "Value": "Full Suite"}, {"Key": "Workers", "Value": workers}, {"Key": "Delay Seconds", "Value": request_delay}, {"Key": "Retries", "Value": MAX_RETRIES}, {"Key": "Timeout Seconds", "Value": TIMEOUT_SECONDS}, {"Key": "Checkpoint Every", "Value": checkpoint_every}, {"Key": "Previous Audit Path", "Value": previous_audit_path or "Not supplied"}]
+                _to_excel_safe(pd.DataFrame(run_meta_rows), writer, "RunMetadata", index=False)
+                current_issue_inventory_df = issue_inventory_df.copy()
+                current_issue_ids = {
+                    str(v).strip()
+                    for v in current_issue_inventory_df.get("Stable Issue ID", pd.Series(dtype="object")).dropna().tolist()
+                    if str(v).strip()
+                }
                 new_issues = current_issue_ids - prev_issue_ids
                 resolved_issues = prev_issue_ids - current_issue_ids
                 unchanged_issues = current_issue_ids & prev_issue_ids
                 delta_rows = [{"Metric": "New Issues", "Count": len(new_issues)}, {"Metric": "Resolved Issues", "Count": len(resolved_issues)}, {"Metric": "Unchanged Issues", "Count": len(unchanged_issues)}]
+                reopened_from_previously_fixed = len(current_issue_ids & prev_fixed_issue_ids)
+                delta_rows.append({"Metric": "Previously Fixed But Reopened", "Count": reopened_from_previously_fixed})
                 for _, issue_name, _ in summary_rules:
                     current_count = len([r for r in extra_rows if issue_name in str(r.get("Matched Issues") or "").split(" | ")])
                     delta_rows.append({"Metric": f"Issue Delta: {issue_name}", "Count": current_count - int(prev_counts.get(issue_name, 0))})
-                pd.DataFrame(delta_rows).to_excel(writer, index=False, sheet_name="DeltaFromPreviousRun")
+                _to_excel_safe(pd.DataFrame(delta_rows), writer, "DeltaFromPreviousRun", index=False)
+                if not previous_issue_inventory_df.empty and "Stable Issue ID" in previous_issue_inventory_df.columns:
+                    previous_issue_inventory_df = previous_issue_inventory_df.copy()
+                    previous_issue_inventory_df["Stable Issue ID"] = previous_issue_inventory_df["Stable Issue ID"].astype(str).str.strip()
+                    resolved_issues_df = previous_issue_inventory_df[
+                        previous_issue_inventory_df["Stable Issue ID"].isin(resolved_issues)
+                    ].copy()
+                else:
+                    resolved_issues_df = pd.DataFrame(columns=["Stable Issue ID"])
+                if resolved_issues_df.empty:
+                    resolved_issues_df = pd.DataFrame(
+                        [
+                            {
+                                "Stable Issue ID": "",
+                                "Issue": "No resolved issues identified for this comparison run.",
+                                "URL": "",
+                            }
+                        ]
+                    )
+                _to_excel_safe(resolved_issues_df, writer, "ResolvedIssues", index=False)
                 legend_rows = [
                     {"Section": "How To Use", "Term": "Step 1: Start on Dashboard", "Meaning": "Review pass rate, critical URL count, and Immediate Actions to understand overall risk first.", "Values/Threshold": "5-minute executive scan", "Related Tabs": "Dashboard, Priority URLs"},
                     {"Section": "How To Use", "Term": "Step 2: Prioritize and Assign", "Meaning": "Use Priority URLs and FixPlan to pick highest-impact items, assign owner, and set status/sprint.", "Values/Threshold": "Work top-down by Business Risk Score", "Related Tabs": "Priority URLs, FixPlan"},
                     {"Section": "How To Use", "Term": "Step 3: Execute and Validate", "Meaning": "Implement fixes, then verify by checking Technical/Indexability/AEO tabs and rerunning the audit.", "Values/Threshold": "Close loop every sprint", "Related Tabs": "Technical, Indexability, AEO, AIOSEO"},
-                    {"Section": "Orientation", "Term": "Where to Start", "Meaning": "If you're short on time, work only Critical and Warning issues first, then return to Info items.", "Values/Threshold": "Critical > Warning > Info", "Related Tabs": "Summary, FixPlan, Technical"},
+                    {"Section": "Orientation", "Term": "Where to Start", "Meaning": "If you're short on time, work only Critical and Warning issues first, then return to Observation items.", "Values/Threshold": "Critical > Warning > Observation", "Related Tabs": "Summary, FixPlan, Technical"},
                     {"Section": "Orientation", "Term": "How to Track Progress", "Meaning": "Use Status and Owner columns as your project board; move from To Do -> In Progress -> Fixed.", "Values/Threshold": "Update weekly", "Related Tabs": "FixPlan, AIOSEO, Priority URLs"},
                     {"Section": "Severity", "Term": "Critical", "Meaning": "High-impact SEO blocker that should be fixed first.", "Values/Threshold": "Immediate action", "Related Tabs": "Summary, FixPlan, Technical"},
                     {"Section": "Severity", "Term": "Warning", "Meaning": "Out-of-best-practice issue likely affecting performance.", "Values/Threshold": "Plan next sprint", "Related Tabs": "Summary, FixPlan, Technical"},
-                    {"Section": "Severity", "Term": "Info", "Meaning": "Optimization opportunity or context signal.", "Values/Threshold": "Backlog/monitor", "Related Tabs": "Summary, Technical"},
+                    {"Section": "Severity", "Term": "Observation", "Meaning": "Optimization opportunity or context signal.", "Values/Threshold": "Backlog/monitor", "Related Tabs": "Summary, Technical"},
                     {"Section": "Scoring", "Term": "SEO Health Score", "Meaning": "Weighted technical SEO quality score per URL.", "Values/Threshold": ">=90 green, 70-89 orange, <70 red", "Related Tabs": "Technical, Priority URLs, Dashboard"},
                     {"Section": "Scoring", "Term": "AEO Readiness Score", "Meaning": "Answer Engine Optimization readiness score per URL.", "Values/Threshold": ">=80 strong, 60-79 good, 40-59 fair", "Related Tabs": "AEO"},
                     {"Section": "Indexing", "Term": "Indexability Reason", "Meaning": "Primary reason URL may not be indexed.", "Values/Threshold": "Noindex, non-200, canonical mismatch", "Related Tabs": "Indexability, Technical"},
@@ -605,7 +764,7 @@ async def main() -> None:
                     {"Section": "Color Key", "Term": "Red", "Meaning": "Failure / high-priority issue or to-do critical task.", "Values/Threshold": "High risk", "Related Tabs": "All"},
                     {"Section": "Color Key", "Term": "Purple", "Meaning": "Informational edge-case or AEO category signal.", "Values/Threshold": "Context", "Related Tabs": "All"},
                 ]
-                pd.DataFrame(legend_rows).to_excel(writer, index=False, sheet_name="Legend")
+                _to_excel_safe(pd.DataFrame(legend_rows), writer, "Legend", index=False)
                 crawl_inlinks_map: defaultdict[str, set[str]] = defaultdict(set)
                 crawled_set_main = set(main_df["URL"].dropna().tolist())
                 for row in extra_rows:
@@ -614,7 +773,7 @@ async def main() -> None:
                         if target in crawled_set_main:
                             crawl_inlinks_map[target].add(source)
                 graph_rows = [{"URL": url_item, "Inlinks Count": len(inlinks := sorted(list(crawl_inlinks_map.get(url_item, set())))), "Inlinks URLs": " | ".join(inlinks) if inlinks else None, "Orphan Candidate": len(inlinks) == 0} for url_item in main_df["URL"].dropna().tolist()]
-                pd.DataFrame(graph_rows).to_excel(writer, index=False, sheet_name="CrawlGraph")
+                _to_excel_safe(pd.DataFrame(graph_rows), writer, "CrawlGraph", index=False)
                 sitemap_rows = []
                 if sitemap_meta:
                     for sitemap_url, meta in sitemap_meta.items():
@@ -622,35 +781,39 @@ async def main() -> None:
                         final_url = matched.get("Final URL") if matched else None
                         status_code = matched.get("Status Code") if matched else None
                         sitemap_rows.append({"Sitemap URL": sitemap_url, "Final URL": final_url, "Status Code": status_code, "In Sitemap but Non-200": status_code != 200, "Sitemap URL Redirects": (matched.get("Redirect Chain Length", 0) > 0 if matched else None), "In Sitemap but Canonicalized Elsewhere": (matched.get("Canonical Type") == "cross-canonical" if matched else None), "Missing <lastmod>": not bool(meta.get("lastmod")), "Missing <changefreq>": not bool(meta.get("changefreq")), "Missing <priority>": not bool(meta.get("priority")), "Sitemap <lastmod>": meta.get("lastmod"), "Sitemap <changefreq>": meta.get("changefreq"), "Sitemap <priority>": meta.get("priority")})
-                pd.DataFrame(sitemap_rows).to_excel(writer, index=False, sheet_name="SitemapQA")
+                _to_excel_safe(pd.DataFrame(sitemap_rows), writer, "SitemapQA", index=False)
                 preferred_first_tabs = [
                     "Dashboard",
-                    "Legend",
-                    "Summary",
+                    "Content Optimization Hub",
+                    "FixPlan",
                     "Main",
                     "Technical",
-                    "FixPlan",
-                    "Priority URLs",
-                    "Indexability",
                     "Content",
-                    "Redirects",
-                    "Links",
-                    "LinksDetail",
                     "AEO",
+                    "Schema & Metadata",
+                    "Links",
+                    "Indexability",
+                    "Redirects",
+                    "Priority URLs",
                     "AIOSEO",
-                    "SnippetCandidates",
+                    "Security",
+                    "Summary",
+                    "Legend",
+                    "LinksDetail",
                     "Media",
-                    "StructuredData",
                 ]
                 wb = writer.book
                 for idx, tab_name in enumerate(preferred_first_tabs):
                     if tab_name in wb.sheetnames:
                         wb.move_sheet(wb[tab_name], offset=-wb.index(wb[tab_name]) + idx)
                 apply_tab_hyperlinks(writer)
-                for sname in ["Dashboard", "Legend", "Technical", "Content", "Links", "LinksDetail", "Media", "StructuredData", "AEO", "AIOSEO", "SnippetCandidates", "Social", "Security", "Indexability", "Redirects", "Duplicates", "TemplateClusters", "Priority URLs", "FixPlan", "IssueInventory", "RunMetadata", "DeltaFromPreviousRun", "CrawlGraph", "SitemapQA", "Summary"]:
+                for sname in ["Dashboard", "Content Optimization Hub", "FixPlan", "Legend", "Technical", "Content", "Links", "LinksDetail", "Media", "Schema & Metadata", "AEO", "AIOSEO", "Security", "Indexability", "Redirects", "Duplicates", "TemplateClusters", "Priority URLs", "IssueInventory", "ResolvedIssues", "RunMetadata", "DeltaFromPreviousRun", "CrawlGraph", "SitemapQA", "Summary"]:
                     adjust_sheet_format(writer, sname)
-        print(f"\nAudit complete! Report saved to {output_filename}")
-        cache.close(cleanup_file=True)
+            print(f"\nAudit complete! Report saved to {output_filename}")
+        finally:
+            if writer is not None:
+                writer.close()
+            cache.close(cleanup_file=True)
 
 
 def _safe_rule(rule_fn, row):
@@ -677,7 +840,7 @@ def _build_aeo_rows(extra_rows: list[dict[str, object]]) -> list[dict[str, objec
 
         why_notes: list[str] = []
         if answer_para_count == 0:
-            why_notes.append("Missing 40-60 word answer blocks reduces eligibility for featured snippets.")
+            why_notes.append("Missing 30-60 word answer blocks reduces eligibility for featured snippets.")
         if question_heading_count == 0:
             why_notes.append("Question-style headings help match conversational search and answer intent.")
         if not has_qa_schema:
@@ -696,6 +859,10 @@ def _build_aeo_rows(extra_rows: list[dict[str, object]]) -> list[dict[str, objec
         row_copy["Question Heading Count"] = question_heading_count
         row_copy["FAQ Section Count"] = faq_count
         row_copy["Paragraphs 40-60 Words Count"] = answer_para_count
+        first_snippet = (row.get("aeo_snippets") or [{}])[0] if row.get("aeo_snippets") else {}
+        heading = str(first_snippet.get("heading") or "").strip()
+        snippet = str(first_snippet.get("snippet") or "").strip()
+        row_copy["Snippet Preview Mockup"] = f"{heading}\n{snippet}".strip() if heading or snippet else None
         rows.append(row_copy)
     return rows
 
@@ -706,7 +873,7 @@ def _build_aioseo_rows(
     default_owner_by_severity: dict[str, str],
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    severity_rank = {"Critical": 0, "Warning": 1, "Info": 2}
+    severity_rank = {"Critical": 0, "Warning": 1, "Observation": 2}
 
     def _to_int(value: object, fallback: int = 0) -> int:
         try:
@@ -737,6 +904,8 @@ def _build_aioseo_rows(
         rows.append(
             {
                 "URL": url,
+                "WordPress Post ID": current_post_id if current_post_id > 0 else None,
+                "Direct Edit Link": current_direct_edit_link,
                 "AIOSEO Panel": panel,
                 "Severity": severity,
                 "Issue": issue,
@@ -759,6 +928,15 @@ def _build_aioseo_rows(
         url = str(row.get("URL") or "").strip()
         if not url:
             continue
+        post_id_raw = row.get("WordPress Post ID")
+        current_post_id = _to_int(post_id_raw, 0)
+        parsed_url = urlparse(url)
+        site_root = f"{parsed_url.scheme}://{parsed_url.netloc}" if parsed_url.scheme and parsed_url.netloc else ""
+        current_direct_edit_link = (
+            f"{site_root}/wp-admin/post.php?post={current_post_id}&action=edit"
+            if site_root and current_post_id > 0
+            else None
+        )
         main_row = main_by_url.get(url, {})
         title = str(main_row.get("Title") or "").strip()
         meta = str(main_row.get("Meta Description") or "").strip()
@@ -827,7 +1005,7 @@ def _build_aioseo_rows(
                 add_issue(
                     url=url,
                     issue="SEO title too short",
-                    severity="Info",
+                    severity="Observation",
                     panel="Title",
                     current_value=title_len,
                     recommended_target="40-60 characters",
@@ -840,7 +1018,7 @@ def _build_aioseo_rows(
                 add_issue(
                     url=url,
                     issue="SEO title too long",
-                    severity="Info",
+                    severity="Observation",
                     panel="Title",
                     current_value=title_len,
                     recommended_target="40-60 characters",
@@ -868,7 +1046,7 @@ def _build_aioseo_rows(
                 add_issue(
                     url=url,
                     issue="Meta description too short",
-                    severity="Info",
+                    severity="Observation",
                     panel="Basic SEO",
                     current_value=meta_len,
                     recommended_target="120-160 characters",
@@ -881,7 +1059,7 @@ def _build_aioseo_rows(
                 add_issue(
                     url=url,
                     issue="Meta description too long",
-                    severity="Info",
+                    severity="Observation",
                     panel="Basic SEO",
                     current_value=meta_len,
                     recommended_target="120-160 characters",
@@ -908,7 +1086,7 @@ def _build_aioseo_rows(
             add_issue(
                 url=url,
                 issue="Multiple H1 headings",
-                severity="Info",
+                severity="Observation",
                 panel="Readability",
                 current_value=row.get("H1 Count"),
                 recommended_target="Exactly 1 H1",
@@ -938,7 +1116,7 @@ def _build_aioseo_rows(
             add_issue(
                 url=url,
                 issue="Low readability score",
-                severity="Info",
+                severity="Observation",
                 panel="Readability",
                 current_value=readability,
                 recommended_target=">=50",
@@ -952,7 +1130,7 @@ def _build_aioseo_rows(
             add_issue(
                 url=url,
                 issue="No internal links found",
-                severity="Info",
+                severity="Observation",
                 panel="Basic SEO",
                 current_value=0,
                 recommended_target=">=2 relevant internal links",
@@ -1000,7 +1178,7 @@ def _build_aioseo_rows(
                 recommended_target="At least one relevant schema type",
                 why_it_matters="Schema improves understanding and rich result eligibility.",
                 how_to_fix="In AIOSEO schema settings for the page, add the most relevant type (Article/FAQ/HowTo/Product, etc.).",
-                reference_tab="StructuredData",
+                reference_tab="Schema & Metadata",
                 reference_field="Schema Types Count",
             )
 
@@ -1022,7 +1200,7 @@ def _build_aioseo_rows(
             add_issue(
                 url=url,
                 issue="No FAQ/QA schema",
-                severity="Info",
+                severity="Observation",
                 panel="Schema",
                 current_value=False,
                 recommended_target="True when page has Q&A intent",
@@ -1035,7 +1213,7 @@ def _build_aioseo_rows(
             add_issue(
                 url=url,
                 issue="No question-style headings",
-                severity="Info",
+                severity="Observation",
                 panel="Readability",
                 current_value=0,
                 recommended_target=">=1 where intent is informational",
@@ -1048,7 +1226,7 @@ def _build_aioseo_rows(
             add_issue(
                 url=url,
                 issue="No concise answer paragraph (40-60 words)",
-                severity="Info",
+                severity="Observation",
                 panel="Content",
                 current_value=0,
                 recommended_target=">=1 concise answer block",

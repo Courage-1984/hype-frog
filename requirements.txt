@@ -4,3 +4,4 @@ pandas
 openpyxl
 lxml
 pytest
+python-dotenv
