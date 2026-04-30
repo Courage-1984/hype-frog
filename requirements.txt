@@ -1,0 +1,6 @@
+aiohttp>=3.9.0,<3.10.0
+beautifulsoup4
+pandas
+openpyxl
+lxml
+pytest
