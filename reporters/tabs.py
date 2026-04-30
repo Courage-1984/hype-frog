@@ -193,15 +193,7 @@ def write_snippet_candidates_chunked(
                 )
                 has_rows = True
     if not has_rows:
-        ws.append(
-            [
-                "https://example.com/sample-answer-page",
-                "What is technical SEO and why does it matter?",
-                "Technical SEO improves crawlability, indexation, and page performance so search engines can understand and rank your pages correctly.",
-                19,
-                "What is technical SEO and why does it matter?\nTechnical SEO improves crawlability, indexation, and page performance so search engines can understand and rank your pages correctly.",
-            ]
-        )
+        ws.append(["", "", "", 0, ""])
 
 
 def build_content_optimization_hub_rows(

@@ -200,6 +200,37 @@ def apply_global_conditional_formatting(worksheet) -> None:
             ),
         )
 
+    for score_header in ("Desktop Score", "Mobile Score"):
+        score_col = headers.get(score_header)
+        if score_col:
+            col = get_column_letter(score_col)
+            rng = f"{col}2:{col}{last_row}"
+            worksheet.conditional_formatting.add(
+                rng,
+                CellIsRule(operator="between", formula=["90", "100"], fill=PatternFill("solid", fgColor="C6EFCE")),
+            )
+            worksheet.conditional_formatting.add(
+                rng,
+                CellIsRule(operator="between", formula=["50", "89"], fill=PatternFill("solid", fgColor="FFEB9C")),
+            )
+            worksheet.conditional_formatting.add(
+                rng,
+                CellIsRule(operator="between", formula=["0", "49"], fill=PatternFill("solid", fgColor="FFC7CE")),
+            )
+
+    lcp_col = headers.get("Mobile LCP")
+    if lcp_col:
+        col = get_column_letter(lcp_col)
+        rng = f"{col}2:{col}{last_row}"
+        worksheet.conditional_formatting.add(
+            rng,
+            CellIsRule(operator="lessThan", formula=["2.5"], fill=PatternFill("solid", fgColor="C6EFCE")),
+        )
+        worksheet.conditional_formatting.add(
+            rng,
+            CellIsRule(operator="greaterThan", formula=["4.0"], fill=PatternFill("solid", fgColor="FFC7CE")),
+        )
+
     answer_para_col = headers.get("Paragraphs 40-60 Words Count")
     if answer_para_col:
         col = get_column_letter(answer_para_col)

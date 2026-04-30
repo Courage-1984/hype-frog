@@ -1007,6 +1007,9 @@ def _reorder_columns(worksheet, sheet_name: str) -> None:
             "Business Risk Score",
             "Severity Badge",
             "SEO Health Score",
+            "GSC Impressions",
+            "GSC CTR",
+            "Revenue Intent",
             "Critical Issues Count",
             "Warning Issues Count",
             "Action Needed",
@@ -1529,7 +1532,7 @@ def adjust_sheet_format(writer, sheet_name):
                     cell.fill = edge_fill
                 elif sev == "pass":
                     cell.fill = good_fill
-            if h == "SEO Health Score":
+            if h in {"SEO Health Score", "SEO Score", "Technical Health", "Copy Score"}:
                 try:
                     score = float(val)
                     if score < 70:
@@ -2003,7 +2006,8 @@ def apply_tab_hyperlinks(writer):
         "LinksDetail",
         "Media",
         "Duplicates",
-        "TemplateClusters",
+        "Pattern and Template Issues",
+        "PSI Performance",
         "IssueInventory",
         "CrawlGraph",
         "SitemapQA",
