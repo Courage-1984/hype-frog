@@ -56,14 +56,15 @@ def _header_map(worksheet) -> dict[str, int]:
 
 
 def ensure_auto_filter(worksheet) -> None:
-    if worksheet.max_row >= 1 and worksheet.max_column >= 1:
+    # Excel repair risk: avoid auto-filter on header-only ranges.
+    if worksheet.max_row >= 2 and worksheet.max_column >= 1:
         worksheet.auto_filter.ref = f"A1:{get_column_letter(worksheet.max_column)}{worksheet.max_row}"
 
 
 def ensure_freeze_header(worksheet) -> None:
-    if worksheet.max_row > 1:
-        # Freeze header row and first column so URLs stay visible while scrolling.
-        worksheet.freeze_panes = "B2"
+    if worksheet.max_row > 1 and worksheet.max_column >= 1:
+        # Keep sheetViews simple and stable across Excel versions.
+        worksheet.freeze_panes = "A2"
 
 
 def apply_global_conditional_formatting(worksheet) -> None:
@@ -199,6 +200,23 @@ def apply_global_conditional_formatting(worksheet) -> None:
             ),
         )
 
+    answer_para_col = headers.get("Paragraphs 40-60 Words Count")
+    if answer_para_col:
+        col = get_column_letter(answer_para_col)
+        rng = f"{col}2:{col}{last_row}"
+        worksheet.conditional_formatting.add(
+            rng,
+            CellIsRule(operator="equal", formula=["0"], fill=PatternFill("solid", fgColor="FFC7CE")),
+        )
+        worksheet.conditional_formatting.add(
+            rng,
+            CellIsRule(operator="between", formula=["1", "2"], fill=PatternFill("solid", fgColor="FFEB9C")),
+        )
+        worksheet.conditional_formatting.add(
+            rng,
+            CellIsRule(operator="greaterThanOrEqual", formula=["3"], fill=PatternFill("solid", fgColor="C6EFCE")),
+        )
+
     action_col = headers.get("Action Needed")
     if action_col:
         col = get_column_letter(action_col)
@@ -226,7 +244,7 @@ def apply_global_conditional_formatting(worksheet) -> None:
         )
         worksheet.conditional_formatting.add(
             rng,
-            FormulaRule(formula=[f'LOWER({col}2)="pass"'], stopIfTrue=True, fill=PatternFill("solid", fgColor="C6EFCE")),
+            FormulaRule(formula=[f'OR(LOWER({col}2)="pass",LOWER({col}2)="observation")'], stopIfTrue=True, fill=PatternFill("solid", fgColor="C6EFCE")),
         )
 
     status_text_col = headers.get("Status")

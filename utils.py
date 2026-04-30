@@ -67,13 +67,12 @@ def sanitize_filename_part(value: str) -> str:
 
 
 def build_output_filename(source_label: str, full_suite: bool) -> str:
-    mode = "full" if full_suite else "main"
-    source = sanitize_filename_part(source_label)
+    source = sanitize_filename_part(urlparse(source_label if "://" in source_label else f"https://{source_label}").netloc or source_label)
     output_dir = "output"
     os.makedirs(output_dir, exist_ok=True)
 
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    base_name = f"seo_audit_{source}_{mode}_{timestamp}"
+    base_name = f"SEO_AEO_Audit_{source}_{timestamp}"
     candidate = os.path.join(output_dir, f"{base_name}.xlsx")
 
     # Rare collision guard if multiple runs start within the same second.

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import random
+import re
 import time
 from collections import defaultdict
 from typing import Any
 from urllib.parse import urlparse
+import re
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -31,7 +33,7 @@ def _init_rows(url: str, sitemap_meta: dict[str, dict[str, Any]] | None) -> tupl
     for i in range(1, 7):
         main_data[f"H{i} Content"] = None
         main_data[f"H{i} Length"] = 0
-    extra = {"URL": url, "Status Code": None, "Final URL": None, "Protocol": None, "Redirect Chain Length": 0, "Redirect Target": None, "Redirect Hops": None, "HTTP->HTTPS Redirect": False, "Status Class": None, "TTFB (ms)": None, "Total Request Time (ms)": None, "Content-Type": None, "HTTP Version": None, "HTML Size (KB)": None, "Compression Enabled": False, "Cache-Control": None, "ETag": None, "X-Robots-Tag": None, "Meta Robots Raw": None, "Canonical URL": None, "Canonical Matches Final URL": None, "Canonical Type": None, "Canonical Absolute URL": None, "Canonical in Sitemap Match": None, "Hreflang Present": False, "Hreflang Count": 0, "Hreflang Self Reference": False, "Hreflang Reciprocal Check": None, "Hreflang Canonical Consistency": None, "x-default Present": False, "Pagination rel=next": False, "Pagination rel=prev": False, "H1 Count": 0, "Missing H1 Flag": False, "Multiple H1 Flag": False, "Thin Content Flag": False, "Body Text-to-HTML Ratio": None, "Word Count": 0, "Word Count Band": None, "Sentence Count": 0, "Readability (Rough Flesch)": None, "Last-Modified": None, "Published Date": None, "Modified Date": None, "Last Updated": None, "Change Frequency": None, "Priority": None, "Internal Links Count": 0, "External Links Count": 0, "Unique Internal Links Count": 0, "Nofollow Internal Links Count": 0, "Nofollow External Links Count": 0, "Generic Anchor Text Count": 0, "Param URL Flag": "?" in url, "URL Depth": url_depth(url), "Image Count": 0, "Images": None, "Images Missing Alt": 0, "Image Alt Coverage (%)": None, "Image Extension Distribution": None, "Likely Large Image Count": 0, "Image Filename Quality Issues": 0, "Image On Canonical Domain (%)": None, "Mixed Content Detected": False, "Schema Types Found": None, "Schema Types Count": 0, "Schema Parse Errors": 0, "Open Graph Complete": False, "Twitter Card Type": None, "OG Title": None, "OG Description": None, "OG Image": None, "Strict-Transport-Security": None, "Content-Security-Policy": None, "X-Content-Type-Options": None, "X-Frame-Options": None, "Referrer-Policy": None, "Permissions-Policy": None, "Robots.txt Accessible": None, "Sitemap in Robots.txt": None, "Robots.txt Crawl-Delay": None, "Robots.txt Disallow /": None, "Title Missing": True, "Meta Description Missing": True, "Indexability Reason": None, "SERP Title Truncation Risk": False, "SERP Meta Truncation Risk": False, "SERP Title Pixel Approx": 0, "SERP Meta Pixel Approx": 0, "Inlinks Bucket": None, "Important But Underlinked": False, "Cannibalization Hint": None, "FAQ Section Count": 0, "Question Heading Count": 0, "HowTo Signal": False, "Definition Signal": False, "List/Table Answer Signal": False, "Paragraphs 40-60 Words Count": 0, "Speakable Schema Present": False, "QAPage/FAQ Schema Present": False, "AEO Readiness Score": 0, "AEO Badge": "Needs Work", "Action Needed": "No", "Owner": None, "Sprint": "", "Status": "Open", "Stable Issue IDs": None, "Internal Links List Full": [], "Internal Links List": [], "Link Details": [], "aeo_snippets": []}
+    extra = {"URL": url, "Status Code": None, "Final URL": None, "Protocol": None, "Redirect Chain Length": 0, "Redirect Target": None, "Redirect Hops": None, "HTTP->HTTPS Redirect": False, "Status Class": None, "TTFB (ms)": None, "Total Request Time (ms)": None, "Content-Type": None, "HTTP Version": None, "HTML Size (KB)": None, "Compression Enabled": False, "Cache-Control": None, "ETag": None, "X-Robots-Tag": None, "Meta Robots Raw": None, "Canonical URL": None, "Canonical Matches Final URL": None, "Canonical Type": None, "Canonical Absolute URL": None, "Canonical in Sitemap Match": None, "Hreflang Present": False, "Hreflang Count": 0, "Hreflang Self Reference": False, "Hreflang Reciprocal Check": None, "Hreflang Canonical Consistency": None, "x-default Present": False, "Pagination rel=next": False, "Pagination rel=prev": False, "H1 Count": 0, "Current H-Tag Structure": None, "Current Page Copy Snippet": None, "Missing H1 Flag": False, "Multiple H1 Flag": False, "Thin Content Flag": False, "Body Text-to-HTML Ratio": None, "Word Count": 0, "Word Count Band": None, "Sentence Count": 0, "Readability (Rough Flesch)": None, "Last-Modified": None, "Published Date": None, "Modified Date": None, "Last Updated": None, "Change Frequency": None, "Priority": None, "Internal Links Count": 0, "External Links Count": 0, "Unique Internal Links Count": 0, "Nofollow Internal Links Count": 0, "Nofollow External Links Count": 0, "Generic Anchor Text Count": 0, "Param URL Flag": "?" in url, "URL Depth": url_depth(url), "Image Count": 0, "Images": None, "Images Missing Alt": 0, "Image Alt Coverage (%)": None, "Image Extension Distribution": None, "Likely Large Image Count": 0, "Image Filename Quality Issues": 0, "Image On Canonical Domain (%)": None, "Mixed Content Detected": False, "Schema Types Found": None, "Schema Types Count": 0, "Schema Parse Errors": 0, "Open Graph Complete": False, "Twitter Card Type": None, "OG Title": None, "OG Description": None, "OG Image": None, "Meta Keywords": None, "Strict-Transport-Security": None, "Content-Security-Policy": None, "X-Content-Type-Options": None, "X-Frame-Options": None, "Referrer-Policy": None, "Permissions-Policy": None, "Robots.txt Accessible": None, "Sitemap in Robots.txt": None, "Robots.txt Crawl-Delay": None, "Robots.txt Disallow /": None, "AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)": None, "llms.txt Present": None, "Title Missing": True, "Meta Description Missing": True, "Indexability Reason": None, "SERP Title Truncation Risk": False, "SERP Meta Truncation Risk": False, "SERP Title Pixel Approx": 0, "SERP Meta Pixel Approx": 0, "Inlinks Bucket": None, "Important But Underlinked": False, "Cannibalization Hint": None, "FAQ Section Count": 0, "Question Heading Count": 0, "HowTo Signal": False, "Definition Signal": False, "List/Table Answer Signal": False, "Paragraphs 40-60 Words Count": 0, "Answer Block Detected (First 60 Words)": False, "AEO Extractability Score": "Low", "Regional Authority Score": 0, "Regional Entity Hits": 0, "CWV LCP (s)": None, "CWV INP (ms)": None, "CWV CLS": None, "CWV Data Source": "Lab", "Field vs Lab": "Lab", "Speakable Schema Present": False, "QAPage/FAQ Schema Present": False, "AEO Readiness Score": 0, "AEO Badge": "Needs Work", "Action Needed": "No", "Owner": None, "Sprint": "", "Status": "Open", "Stable Issue IDs": None, "WordPress Post ID": None, "Internal Links List Full": [], "Internal Links List": [], "Link Details": [], "aeo_snippets": []}
     if sitemap_meta and url in sitemap_meta:
         extra["Change Frequency"] = sitemap_meta[url].get("changefreq")
         extra["Priority"] = sitemap_meta[url].get("priority")
@@ -54,11 +56,32 @@ async def fetch_and_parse(url: str, session: aiohttp.ClientSession, semaphore: a
                     extra["Status Code"] = response.status
                     extra["Final URL"] = str(response.url)
                     extra["Protocol"] = urlparse(str(response.url)).scheme
+                    parsed_final = urlparse(str(response.url))
+                    domain_key = f"{parsed_final.scheme}://{parsed_final.netloc}"
                     extra["Redirect Chain Length"] = len(response.history)
                     extra["Status Class"] = status_class(response.status)
                     extra["TTFB (ms)"] = round((time.time() - request_start) * 1000, 2)
                     extra["Content-Type"] = response.headers.get("Content-Type")
                     extra["HTTP Version"] = f"HTTP/{response.version.major}.{response.version.minor}"
+                    if robots_cache is not None and domain_key:
+                        if domain_key not in robots_cache:
+                            llms_present = False
+                            ai_allowed = None
+                            try:
+                                async with session.get(f"{domain_key}/llms.txt", timeout=timeout) as llms_resp:
+                                    llms_present = llms_resp.status == 200
+                            except Exception:
+                                llms_present = False
+                            try:
+                                async with session.get(f"{domain_key}/robots.txt", timeout=timeout) as robots_resp:
+                                    if robots_resp.status == 200:
+                                        robots_text = (await robots_resp.text()).lower()
+                                        ai_allowed = all(bot.lower() in robots_text for bot in ["gptbot", "claudebot", "perplexitybot"])
+                            except Exception:
+                                ai_allowed = None
+                            robots_cache[domain_key] = {"llms_present": llms_present, "ai_allowed": ai_allowed}
+                        extra["llms.txt Present"] = robots_cache.get(domain_key, {}).get("llms_present")
+                        extra["AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)"] = robots_cache.get(domain_key, {}).get("ai_allowed")
                     if response.status in RETRYABLE_STATUS_CODES and attempt < MAX_RETRIES:
                         wait_time = min(RETRY_MAX_DELAY_SECONDS, RETRY_BASE_DELAY_SECONDS * (RETRY_BACKOFF_FACTOR ** attempt)) + random.uniform(0, REQUEST_JITTER_SECONDS)
                         print(f"[{response.status}] Retrying {url} (attempt {attempt + 2}/{MAX_RETRIES + 1}) in {wait_time:.1f}s")
@@ -70,12 +93,24 @@ async def fetch_and_parse(url: str, session: aiohttp.ClientSession, semaphore: a
                         extra["HTML Size (KB)"] = round(len(html.encode("utf-8")) / 1024, 2)
                         parsed = parse_html_signals(html)
                         soup = BeautifulSoup(html, "lxml")
+                        body_classes = " ".join(soup.body.get("class", [])) if soup.body else ""
+                        post_id_match = re.search(r"(?:postid|page-id)-(\d+)", body_classes)
+                        if post_id_match:
+                            extra["WordPress Post ID"] = int(post_id_match.group(1))
+                        body_classes = " ".join(soup.body.get("class", [])) if soup.body else ""
+                        post_id_match = re.search(r"(?:postid|page-id)-(\d+)", body_classes)
+                        if post_id_match:
+                            extra["WordPress Post ID"] = int(post_id_match.group(1))
                         if parsed.get("title"):
                             title_text = str(parsed["title"])
                             main_data["Title"] = title_text
                             main_data["Title Length"] = len(title_text)
                             extra["Title Missing"] = False
                             extra["SERP Title Pixel Approx"] = int(len(title_text) * 7.2)
+                        meta_keywords = soup.find("meta", attrs={"name": "keywords"})
+                        if meta_keywords and (meta_keywords.get("content") or "").strip():
+                            extra["Meta Keywords"] = meta_keywords.get("content", "").strip()
+                            main_data["Meta Keywords"] = meta_keywords.get("content", "").strip()
                         if parsed.get("meta_description"):
                             desc_text = str(parsed["meta_description"])
                             main_data["Meta Description"] = desc_text
@@ -83,10 +118,34 @@ async def fetch_and_parse(url: str, session: aiohttp.ClientSession, semaphore: a
                             extra["Meta Description Missing"] = False
                             extra["SERP Meta Pixel Approx"] = int(len(desc_text) * 6.2)
                         extra["H1 Count"] = int(parsed.get("h1_count") or 0)
+                        h_tag_lines: list[str] = []
+                        h1_tag = soup.find("h1")
+                        if h1_tag:
+                            h_tag_lines.append(f"H1: {h1_tag.get_text(' ', strip=True)}")
+                        for tag in soup.find_all(["h2", "h3"]):
+                            text = tag.get_text(" ", strip=True)
+                            if not text:
+                                continue
+                            h_tag_lines.append(f"{tag.name.upper()}: {text}")
+                            if len(h_tag_lines) >= 6:
+                                break
+                        extra["Current H-Tag Structure"] = "\n".join(h_tag_lines).strip()
                         extra["Missing H1 Flag"] = extra["H1 Count"] == 0
                         extra["Multiple H1 Flag"] = extra["H1 Count"] > 1
                         if soup.body:
-                            body_text = soup.body.get_text(separator=" ", strip=True)
+                            content_soup = BeautifulSoup(html, "lxml")
+                            for tag in content_soup.select("nav, header, footer, aside, script"):
+                                tag.decompose()
+                            primary = (
+                                content_soup.find("main")
+                                or content_soup.find("article")
+                                or content_soup.find("div", attrs={"role": "main"})
+                                or content_soup.body
+                            )
+                            body_text = primary.get_text(separator=" ", strip=True) if primary else ""
+                            extra["Current Page Copy Snippet"] = (
+                                (body_text[:250] + "...") if len(body_text) > 250 else body_text
+                            )
                             words = body_text.split()
                             word_count = len(words)
                             main_data["Word Count (Body)"] = word_count
@@ -100,6 +159,31 @@ async def fetch_and_parse(url: str, session: aiohttp.ClientSession, semaphore: a
                         extra["aeo_snippets"] = aeo_snippets
                         extra["Question Heading Count"] = len({s["heading"] for s in aeo_snippets})
                         extra["Paragraphs 40-60 Words Count"] = len(aeo_snippets)
+                        # 2026 answer-first heuristic: first 60 words should directly answer.
+                        first_60_words = " ".join((soup.get_text(" ", strip=True) or "").split()[:60]).lower()
+                        extra["Answer Block Detected (First 60 Words)"] = any(
+                            token in first_60_words for token in [" is ", " are ", " means ", " refers to ", " can "]
+                        ) and len(first_60_words.split()) >= 30
+                        has_list = bool(soup.find(["ul", "ol"]))
+                        has_table = bool(soup.find("table"))
+                        has_question_headings = extra["Question Heading Count"] > 0
+                        if has_question_headings and (has_list or has_table):
+                            extra["AEO Extractability Score"] = "High"
+                        elif has_question_headings or has_list or has_table:
+                            extra["AEO Extractability Score"] = "Medium"
+                        else:
+                            extra["AEO Extractability Score"] = "Low"
+                        regional_terms = [
+                            "africa", "african", "pan-african", "sadc", "ecowas", "east africa", "west africa",
+                            "southern africa", "north africa", "kenya", "south africa", "nigeria", "ghana", "zambia",
+                            "botswana", "namibia", "uganda", "tanzania", "ethiopia", "rwanda", "angola", "mozambique",
+                        ]
+                        h_text = " ".join(h.get_text(" ", strip=True) for h in soup.find_all(["h1", "h2", "h3"])).lower()
+                        body_text_l = (soup.get_text(" ", strip=True) or "").lower()
+                        schema_text_l = " ".join(s.get_text(" ", strip=True) for s in soup.find_all("script", attrs={"type": "application/ld+json"})).lower()
+                        regional_hits = sum(1 for term in regional_terms if term in h_text or term in body_text_l or term in schema_text_l)
+                        extra["Regional Entity Hits"] = regional_hits
+                        extra["Regional Authority Score"] = min(100, regional_hits * 10 + (20 if regional_hits > 0 and any(term in h_text for term in regional_terms) else 0))
                         images = soup.find_all("img")
                         extra["Image Count"] = len(images)
                         image_urls: list[str] = []

@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from collections import Counter
 from collections import defaultdict
+import math
+import os
 from typing import Any
 
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.utils.cell import coordinate_to_tuple
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.comments import Comment
+from openpyxl.formatting.rule import FormulaRule
 from reporters.formatting import (
     apply_fixplan_workflow_formatting,
     apply_global_conditional_formatting,
@@ -14,10 +19,23 @@ from reporters.formatting import (
     ensure_freeze_header,
 )
 
-STD_NAVY = "1F4E78"
+STD_NAVY = "2F3A4A"
 STD_WHITE = "FFFFFF"
-STD_BLUE = "0563C1"
-DATA_HEAVY_TABS = {"Main", "Technical", "AEO", "AIOSEO", "FixPlan", "SnippetCandidates", "Summary"}
+STD_BLUE = "2F6FA3"
+DATA_HEAVY_TABS = {"Main", "Technical", "AEO", "AIOSEO", "FixPlan", "Summary", "Schema & Metadata", "Content Optimization Hub"}
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+DEBUG_EXCEL_ISOLATION_MODE = _env_bool("HF_DEBUG_EXCEL_ISOLATION_MODE", False)
+DISABLE_DATA_VALIDATION = _env_bool("HF_DISABLE_DATA_VALIDATION", False)
+DISABLE_CONDITIONAL_FORMATTING = _env_bool("HF_DISABLE_CONDITIONAL_FORMATTING", False)
+DISABLE_EXTERNAL_LINKS_AND_IMAGES = _env_bool("HF_DISABLE_EXTERNAL_LINKS_AND_IMAGES", False)
 
 
 def _header_index(worksheet) -> dict[str, int]:
@@ -25,6 +43,8 @@ def _header_index(worksheet) -> dict[str, int]:
 
 
 def _add_back_to_dashboard_link(worksheet, sheet_name: str) -> None:
+    if DEBUG_EXCEL_ISOLATION_MODE:
+        return
     if sheet_name == "Dashboard":
         return
     target_col = worksheet.max_column + 1
@@ -34,6 +54,12 @@ def _add_back_to_dashboard_link(worksheet, sheet_name: str) -> None:
     worksheet[target_ref].style = "Hyperlink"
     worksheet[target_ref].font = Font(color=STD_BLUE, underline="single", bold=True)
     worksheet[target_ref].alignment = Alignment(horizontal="left")
+
+
+def _is_safe_hyperlink_target(target: str) -> bool:
+    if DISABLE_EXTERNAL_LINKS_AND_IMAGES:
+        return False
+    return bool(target) and len(target) <= 255
 
 
 def _to_int(value: Any, default: int = 0) -> int:
@@ -56,7 +82,7 @@ def _sort_worksheet_rows(worksheet, key_fn) -> None:
 def _apply_intelligent_sorting(worksheet, sheet_name: str) -> None:
     headers = _header_index(worksheet)
     if sheet_name == "FixPlan":
-        severity_rank = {"Critical": 0, "High": 1, "Warning": 2, "Medium": 3, "Low": 4, "Info": 5}
+        severity_rank = {"Critical": 0, "High": 1, "Warning": 2, "Medium": 3, "Low": 4, "Observation": 5}
         pcol = headers.get("Priority Score")
         scol = headers.get("Severity")
         ucol = headers.get("URL")
@@ -81,7 +107,7 @@ def _apply_intelligent_sorting(worksheet, sheet_name: str) -> None:
                 ),
             )
     elif sheet_name == "AIOSEO":
-        severity_rank = {"Critical": 0, "Warning": 1, "Info": 2}
+        severity_rank = {"Critical": 0, "Warning": 1, "Observation": 2}
         sev_col = headers.get("Severity")
         pri_col = headers.get("Priority Score")
         panel_col = headers.get("AIOSEO Panel")
@@ -168,6 +194,8 @@ def _tooltip_for_header(header: str) -> str:
 
 
 def _add_all_header_tooltips(worksheet) -> None:
+    if DISABLE_DATA_VALIDATION:
+        return
     headers = _header_index(worksheet)
     for header, col_idx in headers.items():
         ref = f"{get_column_letter(col_idx)}1"
@@ -179,6 +207,8 @@ def _add_all_header_tooltips(worksheet) -> None:
 
 
 def _add_url_navigation_links(writer, worksheet, sheet_name: str) -> None:
+    if DEBUG_EXCEL_ISOLATION_MODE:
+        return
     headers = _header_index(worksheet)
     url_col = headers.get("URL")
     if not url_col or worksheet.max_row <= 1:
@@ -186,7 +216,7 @@ def _add_url_navigation_links(writer, worksheet, sheet_name: str) -> None:
     for r in range(2, worksheet.max_row + 1):
         url_cell = worksheet.cell(row=r, column=url_col)
         url_val = str(url_cell.value or "").strip()
-        if url_val.startswith(("http://", "https://")):
+        if url_val.startswith(("http://", "https://")) and _is_safe_hyperlink_target(url_val):
             url_cell.hyperlink = url_val
             url_cell.style = "Hyperlink"
             # Hyperlink style can reset wrapping; force wrapped top alignment for long URLs.
@@ -205,7 +235,117 @@ def _add_url_navigation_links(writer, worksheet, sheet_name: str) -> None:
                 )
 
 
+def _sanitize_excel_url(url_value: Any) -> str:
+    raw = str(url_value or "").strip()
+    if not raw:
+        return ""
+    raw = "".join(ch for ch in raw if ord(ch) >= 32).replace('"', "").replace("'", "")
+    return raw
+
+
+def _ranges_overlap(range_a, range_b) -> bool:
+    return not (
+        range_a.max_row < range_b.min_row
+        or range_b.max_row < range_a.min_row
+        or range_a.max_col < range_b.min_col
+        or range_b.max_col < range_a.min_col
+    )
+
+
+def _audit_non_overlapping_merges(worksheet) -> None:
+    merge_ranges = list(worksheet.merged_cells.ranges)
+    if len(merge_ranges) < 2:
+        return
+    kept = []
+    for merge_range in merge_ranges:
+        if any(_ranges_overlap(merge_range, existing) for existing in kept):
+            worksheet.unmerge_cells(str(merge_range))
+            continue
+        kept.append(merge_range)
+
+
+def _audit_freeze_merge_conflicts(worksheet) -> None:
+    freeze = worksheet.freeze_panes
+    if not freeze:
+        return
+    freeze_ref = freeze if isinstance(freeze, str) else freeze.coordinate
+    freeze_row, freeze_col = coordinate_to_tuple(freeze_ref)
+    for merge_range in list(worksheet.merged_cells.ranges):
+        if (
+            merge_range.min_row <= freeze_row <= merge_range.max_row
+            and merge_range.min_col <= freeze_col <= merge_range.max_col
+        ):
+            worksheet.unmerge_cells(str(merge_range))
+
+
+def _normalize_table_headers(worksheet, header_row: int = 1) -> None:
+    seen: dict[str, int] = {}
+    for col_idx in range(1, worksheet.max_column + 1):
+        cell = worksheet.cell(row=header_row, column=col_idx)
+        raw = cell.value
+        if raw is None or (isinstance(raw, float) and math.isnan(raw)) or not str(raw).strip():
+            header = f"Column_{col_idx}"
+        else:
+            header = str(raw).replace("\n", " ").replace("\r", " ").strip()
+            if len(header) > 255:
+                header = header[:255].strip() or f"Column_{col_idx}"
+        if header in seen:
+            seen[header] += 1
+            header = f"{header}_{seen[header]}"
+        else:
+            seen[header] = 0
+        cell.value = header
+
+
+def _compute_exact_table_ref(worksheet, header_row: int) -> str | None:
+    if worksheet.max_row < header_row + 1:
+        return None
+    max_col = 1
+    for row_idx in range(header_row, worksheet.max_row + 1):
+        for col_idx in range(worksheet.max_column, 0, -1):
+            value = worksheet.cell(row=row_idx, column=col_idx).value
+            if value is not None and str(value) != "":
+                if col_idx > max_col:
+                    max_col = col_idx
+                break
+    if max_col < 1:
+        return None
+    return f"A{header_row}:{get_column_letter(max_col)}{worksheet.max_row}"
+
+
+def _apply_mock_table_styling(worksheet, min_col: int, max_col: int, min_row: int, max_row: int) -> None:
+    if min_col > max_col or min_row > max_row:
+        return
+    if max_row >= min_row + 1:
+        ref = f"{get_column_letter(min_col)}{min_row}:{get_column_letter(max_col)}{max_row}"
+        worksheet.auto_filter.ref = ref
+
+    header_fill = PatternFill(start_color=STD_NAVY, end_color=STD_NAVY, fill_type="solid")
+    header_font = Font(color=STD_WHITE, bold=True)
+    for col_idx in range(min_col, max_col + 1):
+        cell = worksheet.cell(row=min_row, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    band_fill = PatternFill(start_color="F7F7F7", end_color="F7F7F7", fill_type="solid")
+    for row_idx in range(min_row + 1, max_row + 1):
+        if row_idx % 2 == 0:
+            for col_idx in range(min_col, max_col + 1):
+                cell = worksheet.cell(row=row_idx, column=col_idx)
+                if cell.fill.fill_type is None:
+                    cell.fill = band_fill
+
+    if max_row >= min_row:
+        if worksheet.title == "Content Optimization Hub":
+            worksheet.freeze_panes = "D3"
+        else:
+            worksheet.freeze_panes = "A2"
+
+
 def _apply_fixplan_interactivity(writer, worksheet) -> None:
+    if DEBUG_EXCEL_ISOLATION_MODE:
+        return
     headers = _header_index(worksheet)
     if worksheet.max_row <= 1:
         return
@@ -240,7 +380,7 @@ def _apply_fixplan_interactivity(writer, worksheet) -> None:
         if url_col:
             url_cell = worksheet.cell(row=row_idx, column=url_col)
             url = str(url_cell.value or "").strip()
-            if url.startswith(("http://", "https://")):
+            if url.startswith(("http://", "https://")) and _is_safe_hyperlink_target(url):
                 url_cell.hyperlink = url
                 url_cell.style = "Hyperlink"
                 url_cell.alignment = Alignment(wrap_text=True, vertical="top")
@@ -248,7 +388,10 @@ def _apply_fixplan_interactivity(writer, worksheet) -> None:
             url = str(worksheet.cell(row=row_idx, column=url_col).value or "").strip()
             jump_cell = worksheet.cell(row=row_idx, column=jump_col)
             if url:
-                jump_cell.value = f'=IFERROR(HYPERLINK("#Main!A"&MATCH("{url}",Main!A:A,0),"Jump to Main"),HYPERLINK("#Main!A1","Open Main"))'
+                if len(url) <= 255:
+                    jump_cell.value = f'=IFERROR(HYPERLINK("#Main!A"&MATCH("{url}",Main!A:A,0),"Jump to Main"),HYPERLINK("#Main!A1","Open Main"))'
+                else:
+                    jump_cell.value = "Jump to Main"
             else:
                 jump_cell.value = '=HYPERLINK("#Main!A1","Open Main")'
         if details_col and url_col:
@@ -258,9 +401,19 @@ def _apply_fixplan_interactivity(writer, worksheet) -> None:
                 column=details_col,
                 value=f'=IFERROR(HYPERLINK("#Main!A"&MATCH({url_col_letter}{row_idx},Main!A:A,0),"View URL Details"),HYPERLINK("#Main!A1","View URL Details"))',
             )
+        affected_col = headers.get("Affected URLs")
+        detail_tab_col = headers.get("Detail Reference Tab")
+        if affected_col and detail_tab_col:
+            affected_cell = worksheet.cell(row=row_idx, column=affected_col)
+            detail_tab = str(worksheet.cell(row=row_idx, column=detail_tab_col).value or "").strip()
+            affected_text = str(affected_cell.value or "").strip()
+            if affected_text.startswith("SEE DETAILS IN ") and detail_tab:
+                affected_cell.value = f'=HYPERLINK("#{detail_tab}!A1","SEE DETAILS IN {detail_tab}")'
 
 
 def _apply_status_dropdown(worksheet, status_col: int) -> None:
+    if DISABLE_DATA_VALIDATION:
+        return
     if status_col <= 0 or worksheet.max_row <= 1:
         return
     status_dv = DataValidation(type="list", formula1='"To Do,In Progress,Fixed"', allow_blank=True)
@@ -285,8 +438,6 @@ def _style_dashboard(worksheet, writer) -> None:
     value_col = headers.get("Value")
     total_urls = 0
     pass_rate_pct = 0.0
-    critical_urls = 0
-    warning_urls = 0
     if metric_col and value_col:
         metric_to_value = {}
         for row_idx in range(2, worksheet.max_row + 1):
@@ -302,8 +453,8 @@ def _style_dashboard(worksheet, writer) -> None:
         warning_urls = _to_int(metric_to_value.get("Warning URL Count"), 0)
 
         title = worksheet["B2"]
-        title.value = "Executive SEO Performance Report"
-        worksheet["B1"] = "Technical Audit Dashboard"
+        title.value = "Executive SEO & AEO Performance Report"
+        worksheet["B1"] = "Executive SEO & AEO Dashboard"
         worksheet["B1"].font = Font(color=STD_NAVY, bold=True, size=12)
         title.font = Font(color=STD_NAVY, bold=True, size=16)
         title.alignment = Alignment(horizontal="left", vertical="center")
@@ -311,7 +462,7 @@ def _style_dashboard(worksheet, writer) -> None:
 
         header_fill = PatternFill("solid", fgColor=STD_NAVY)
         header_font = Font(color=STD_WHITE, bold=True, size=12)
-        value_fill = PatternFill("solid", fgColor="F5F7FA")
+        value_fill = PatternFill("solid", fgColor="DCE3EA")
 
         worksheet["B4"] = "EXECUTIVE METRICS"
         worksheet["C4"] = "Value"
@@ -346,16 +497,27 @@ def _style_dashboard(worksheet, writer) -> None:
         worksheet["B14"] = '=HYPERLINK("#Technical!A1","Warning URL Rate %")'
         worksheet["C14"] = "=IFERROR(0,0)"
         worksheet["C14"].number_format = "0.00%"
-        for ref in ("B5", "C5", "B6", "C6", "B7", "C7", "B8", "C8", "B9", "C9", "B10", "C10", "B11", "C11", "B12", "C12", "B13", "C13", "B14", "C14"):
+        worksheet["B15"] = "Projected Health Score % (if all To Do done)"
+        worksheet["C15"] = "=IFERROR(0,0)"
+        worksheet["C15"].number_format = "0.00%"
+        worksheet["B16"] = "Projected Pass Rate % (if all To Do done)"
+        worksheet["C16"] = "=IFERROR(0,0)"
+        worksheet["C16"].number_format = "0.00%"
+        for ref in ("B5", "C5", "B6", "C6", "B7", "C7", "B8", "C8", "B9", "C9", "B10", "C10", "B11", "C11", "B12", "C12", "B13", "C13", "B14", "C14", "B15", "C15", "B16", "C16"):
             worksheet[ref].fill = value_fill
             worksheet[ref].font = Font(color="1F2937", bold=True, size=12 if ref.startswith("B") else 14)
             worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
         for ref in ("B5", "B6", "B7", "B8", "B9", "B10", "B11", "B12", "B13", "B14"):
             worksheet[ref].font = Font(color=STD_BLUE, underline="single", bold=True, size=12)
+        for row in range(5, 17):
+            worksheet[f"B{row}"].alignment = Alignment(horizontal="left", vertical="center")
+            worksheet.row_dimensions[row].height = 24
 
     # In-cell dashboard tables: status and severity summaries.
     status_buckets = {"200 OK": 0, "3xx Redirects": 0, "4xx Errors": 0, "5xx Errors": 0, "Other": 0}
     pass_urls = 0
+    critical_urls = 0
+    warning_urls = 0
     avg_ttfb_ms = 0.0
     if "Technical" in writer.book.sheetnames:
         tech_ws = writer.book["Technical"]
@@ -398,7 +560,7 @@ def _style_dashboard(worksheet, writer) -> None:
             for r in range(2, tech_ws.max_row + 1):
                 crit_count = _to_int(tech_ws.cell(row=r, column=crit_col).value, 0)
                 warn_count = _to_int(tech_ws.cell(row=r, column=warn_col).value, 0)
-                # Treat Info-only URLs as pass; failing means critical/warning exists.
+                # Treat Observation-only URLs as pass; failing means critical/warning exists.
                 if crit_count == 0 and warn_count == 0:
                     pass_urls += 1
         else:
@@ -447,6 +609,10 @@ def _style_dashboard(worksheet, writer) -> None:
     worksheet["C14"].number_format = "0.00%"
     worksheet["C7"] = f"=IFERROR({pass_urls}/{crawl_denominator},0)"
     worksheet["C7"].number_format = "0.00%"
+    # Keep labels readable with left alignment and breathing room.
+    for row in range(5, 15):
+        worksheet[f"B{row}"].alignment = Alignment(horizontal="left", vertical="center")
+        worksheet.row_dimensions[row].height = 24
 
     avg_health_score = None
     if "Technical" in writer.book.sheetnames:
@@ -472,7 +638,7 @@ def _style_dashboard(worksheet, writer) -> None:
 
     table_header_fill = PatternFill("solid", fgColor=STD_NAVY)
     table_header_font = Font(color=STD_WHITE, bold=True, size=11)
-    for ref, val in {"B16": "Status", "C16": "Count", "B23": "Severity", "C23": "Count"}.items():
+    for ref, val in {"B18": "Status", "C18": "Count", "B25": "Severity", "C25": "Count"}.items():
         cell = worksheet[ref]
         cell.value = val
         cell.fill = table_header_fill
@@ -486,7 +652,7 @@ def _style_dashboard(worksheet, writer) -> None:
         ("5xx Errors", status_buckets["5xx Errors"], "FFC1C1"),
         ("Other", status_buckets["Other"], "FFCC99"),
     ]
-    for idx, (label, count, color) in enumerate(status_rows, start=17):
+    for idx, (label, count, color) in enumerate(status_rows, start=19):
         worksheet[f"B{idx}"] = label
         worksheet[f"C{idx}"] = count
         worksheet[f"B{idx}"].fill = PatternFill("solid", fgColor=color)
@@ -498,20 +664,20 @@ def _style_dashboard(worksheet, writer) -> None:
         ("Medium", severity_counts.get("Medium", 0), "FFCC99"),
         ("Low", severity_counts.get("Low", 0), "C6EFCE"),
     ]
-    for idx, (label, count, color) in enumerate(sev_rows, start=24):
+    for idx, (label, count, color) in enumerate(sev_rows, start=26):
         worksheet[f"B{idx}"] = label
         worksheet[f"C{idx}"] = count
         worksheet[f"B{idx}"].fill = PatternFill("solid", fgColor=color)
         worksheet[f"C{idx}"].fill = PatternFill("solid", fgColor=color)
 
-    for row in range(17, 28):
+    for row in range(19, 30):
         for col in ("B", "C"):
             worksheet[f"{col}{row}"].alignment = Alignment(horizontal="center", vertical="center")
 
     # High-priority operational snapshot.
-    worksheet["B29"] = "PRIORITY SNAPSHOT"
-    worksheet["C29"] = "Value"
-    for ref in ("B29", "C29"):
+    worksheet["B31"] = "PRIORITY SNAPSHOT"
+    worksheet["C31"] = "Value"
+    for ref in ("B31", "C31"):
         worksheet[ref].fill = table_header_fill
         worksheet[ref].font = table_header_font
         worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
@@ -541,15 +707,15 @@ def _style_dashboard(worksheet, writer) -> None:
                     owner_rollup[owner_name]["warning"] += 1
                 else:
                     owner_rollup[owner_name]["info"] += 1
-    worksheet["B30"] = "Top Blocking Issue"
-    worksheet["C30"] = top_issue_name
-    worksheet["B31"] = "Top Issue Affected URLs"
-    worksheet["C31"] = top_issue_affected
-    worksheet["B32"] = "4xx/5xx URLs"
-    worksheet["C32"] = status_buckets["4xx Errors"] + status_buckets["5xx Errors"]
-    worksheet["B33"] = "Avg TTFB (ms)"
-    worksheet["C33"] = avg_ttfb_ms
-    for row in range(30, 34):
+    worksheet["B32"] = "Top Blocking Issue"
+    worksheet["C32"] = top_issue_name
+    worksheet["B33"] = "Top Issue Affected URLs"
+    worksheet["C33"] = top_issue_affected
+    worksheet["B34"] = "4xx/5xx URLs"
+    worksheet["C34"] = status_buckets["4xx Errors"] + status_buckets["5xx Errors"]
+    worksheet["B35"] = "Avg TTFB (ms)"
+    worksheet["C35"] = avg_ttfb_ms
+    for row in range(32, 36):
         worksheet[f"B{row}"].fill = PatternFill("solid", fgColor="F5F7FA")
         worksheet[f"C{row}"].fill = PatternFill("solid", fgColor="F5F7FA")
 
@@ -560,7 +726,7 @@ def _style_dashboard(worksheet, writer) -> None:
     worksheet["G5"] = "Affected URLs"
     worksheet["H5"] = "Critical"
     worksheet["I5"] = "Warning"
-    worksheet["J5"] = "Info"
+    worksheet["J5"] = "Observation"
     for ref in ("E4", "E5", "F5", "G5", "H5", "I5", "J5"):
         worksheet[ref].fill = table_header_fill
         worksheet[ref].font = table_header_font
@@ -591,23 +757,27 @@ def _style_dashboard(worksheet, writer) -> None:
         worksheet.column_dimensions[col].width = width
 
     # KPI emphasis colors.
-    try:
-        overall_health = float((worksheet["C6"].value or "0").replace("=IFERROR(", "").split("/")[0])
-    except Exception:
-        overall_health = 0.0
+    overall_health = float(avg_health_score or pass_rate_pct)
     health_fill = "C6EFCE" if overall_health >= 80 else "FFEB9C" if overall_health >= 60 else "FFC7CE"
     worksheet["C6"].fill = PatternFill("solid", fgColor=health_fill)
-    worksheet["C7"].fill = PatternFill("solid", fgColor=health_fill)
     worksheet["C7"].fill = PatternFill("solid", fgColor="C6EFCE" if pass_rate_pct >= 70 else "FFEB9C" if pass_rate_pct >= 40 else "FFC7CE")
     worksheet["C11"].fill = PatternFill("solid", fgColor="FFC7CE" if error_count > 0 else "C6EFCE")
     worksheet["C12"].fill = PatternFill("solid", fgColor="C6EFCE" if success_count >= max(1, crawl_denominator * 0.9) else "FFEB9C")
-    worksheet["C13"].fill = PatternFill("solid", fgColor="FFC7CE" if critical_rate_pct >= 0.1 else "FFEB9C" if critical_rate_pct > 0 else "C6EFCE")
-    worksheet["C14"].fill = PatternFill("solid", fgColor="FFC7CE" if warning_rate_pct >= 0.5 else "FFEB9C" if warning_rate_pct > 0.2 else "C6EFCE")
+    worksheet["C13"].fill = PatternFill("solid", fgColor="FFC7CE" if critical_rate_pct >= 10 else "FFEB9C" if critical_rate_pct > 0 else "C6EFCE")
+    worksheet["C14"].fill = PatternFill("solid", fgColor="FFC7CE" if warning_rate_pct >= 50 else "FFEB9C" if warning_rate_pct > 20 else "C6EFCE")
+    projected_pass_rate_pct = min(100.0, pass_rate_pct + ((critical_urls * 1.0 + warning_urls * 0.75) / max(1, crawl_denominator)) * 100.0)
+    projected_health_pct = min(100.0, (overall_health if overall_health <= 100 else 100.0) + ((100.0 - overall_health) * 0.6))
+    worksheet["C15"] = projected_health_pct / 100.0
+    worksheet["C15"].number_format = "0.00%"
+    worksheet["C16"] = projected_pass_rate_pct / 100.0
+    worksheet["C16"].number_format = "0.00%"
+    worksheet["C15"].fill = PatternFill("solid", fgColor="C6EFCE" if projected_health_pct >= 80 else "FFEB9C" if projected_health_pct >= 60 else "FFC7CE")
+    worksheet["C16"].fill = PatternFill("solid", fgColor="C6EFCE" if projected_pass_rate_pct >= 70 else "FFEB9C" if projected_pass_rate_pct >= 40 else "FFC7CE")
 
     # Top issue list with direct links.
-    worksheet["B42"] = "TOP ISSUES TO FIX FIRST"
-    worksheet["C42"] = "Affected URLs"
-    for ref in ("B42", "C42"):
+    worksheet["B44"] = "TOP ISSUES TO FIX FIRST"
+    worksheet["C44"] = "Affected URLs"
+    for ref in ("B44", "C44"):
         worksheet[ref].fill = table_header_fill
         worksheet[ref].font = table_header_font
         worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
@@ -626,7 +796,7 @@ def _style_dashboard(worksheet, writer) -> None:
                 if issue_name:
                     top_rows.append((issue_name, affected, priority, r))
         top_rows.sort(key=lambda x: (-x[1], -x[2], x[0]))
-        for idx, (issue_name, affected, _priority, source_row) in enumerate(top_rows[:5], start=43):
+        for idx, (issue_name, affected, _priority, source_row) in enumerate(top_rows[:5], start=45):
             worksheet[f"B{idx}"] = f'=HYPERLINK("#FixPlan!A{source_row}","{issue_name}")'
             worksheet[f"C{idx}"] = affected
             worksheet[f"B{idx}"].fill = PatternFill("solid", fgColor="F5F7FA")
@@ -635,9 +805,9 @@ def _style_dashboard(worksheet, writer) -> None:
 
     # Quick navigation block.
     quick_nav_fill = PatternFill("solid", fgColor=STD_NAVY)
-    worksheet["B35"] = "Quick Navigation"
-    worksheet["C35"] = "Open"
-    for ref in ("B35", "C35"):
+    worksheet["B37"] = "Quick Navigation"
+    worksheet["C37"] = "Open"
+    for ref in ("B37", "C37"):
         worksheet[ref].fill = quick_nav_fill
         worksheet[ref].font = Font(color=STD_WHITE, bold=True, size=11)
         worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
@@ -649,12 +819,76 @@ def _style_dashboard(worksheet, writer) -> None:
         ("AEO Opportunities", '#AEO!A1'),
     ]
     quick_links.append(("AIOSEO Action Queue", '#AIOSEO!A1'))
-    for idx, (label, target) in enumerate(quick_links, start=36):
+    for idx, (label, target) in enumerate(quick_links, start=38):
         worksheet[f"B{idx}"] = label
         worksheet[f"C{idx}"] = f'=HYPERLINK("{target}","Open")'
         worksheet[f"C{idx}"].font = Font(color=STD_BLUE, underline="single", bold=True)
         worksheet[f"B{idx}"].fill = PatternFill("solid", fgColor="F5F7FA")
         worksheet[f"C{idx}"].fill = PatternFill("solid", fgColor="F5F7FA")
+
+    worksheet["B51"] = "BUSINESS IMPACT SUMMARY"
+    worksheet["B52"] = (
+        f"{status_buckets['4xx Errors'] + status_buckets['5xx Errors']} error URLs detected "
+        f"({status_buckets['4xx Errors']} 4xx / {status_buckets['5xx Errors']} 5xx). "
+        f"Critical issue volume is {critical_urls} URLs and warning volume is {warning_urls}. "
+        f"Top blocker: {top_issue_name} affecting {top_issue_affected} URLs."
+    )
+    worksheet.merge_cells("B51:C51")
+    worksheet.merge_cells("B52:C55")
+    worksheet["B51"].fill = table_header_fill
+    worksheet["B51"].font = table_header_font
+    worksheet["B51"].alignment = Alignment(horizontal="center", vertical="center")
+    worksheet["B52"].fill = PatternFill("solid", fgColor="F5F7FA")
+    worksheet["B52"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+    # Traditional SEO vs AEO Readiness block.
+    worksheet["E20"] = "Traditional SEO vs. 2026 AEO Readiness"
+    worksheet["E21"] = "Dimension"
+    worksheet["F21"] = "Score"
+    for ref in ("E20", "E21", "F21"):
+        worksheet[ref].fill = table_header_fill
+        worksheet[ref].font = table_header_font
+        worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
+    worksheet.merge_cells("E20:F20")
+
+    traditional_score = max(0.0, min(100.0, (success_count / max(1, crawl_denominator)) * 100.0))
+    if avg_health_score is not None:
+        traditional_score = round((traditional_score * 0.4) + (avg_health_score * 0.6), 2)
+    aeo_score_values: list[float] = []
+    if "AEO" in writer.book.sheetnames:
+        aeo_ws = writer.book["AEO"]
+        aeo_headers = _header_index(aeo_ws)
+        aeo_col = aeo_headers.get("AEO Readiness Score")
+        if aeo_col:
+            for r in range(2, aeo_ws.max_row + 1):
+                try:
+                    raw = aeo_ws.cell(row=r, column=aeo_col).value
+                    if raw is not None and str(raw).strip() != "":
+                        aeo_score_values.append(float(raw))
+                except Exception:
+                    pass
+    aeo_readiness = round(sum(aeo_score_values) / len(aeo_score_values), 2) if aeo_score_values else 0.0
+    worksheet["E22"] = "Traditional SEO"
+    worksheet["F22"] = traditional_score / 100.0
+    worksheet["F22"].number_format = "0.00%"
+    worksheet["E23"] = "2026 AEO Readiness"
+    worksheet["F23"] = aeo_readiness / 100.0
+    worksheet["F23"].number_format = "0.00%"
+    for ref in ("E22", "F22", "E23", "F23"):
+        worksheet[ref].fill = PatternFill("solid", fgColor="F5F7FA")
+        worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
+    worksheet["E24"] = "Strategic Narrative"
+    worksheet["E25"] = (
+        "High SEO / Low AEO suggests the site is visible to humans but invisible to AI answer engines."
+        if traditional_score >= 70 and aeo_readiness < 60
+        else "SEO and AEO signals are moving together; continue balancing crawl health with answer-first content."
+    )
+    worksheet.merge_cells("E25:F27")
+    worksheet["E24"].fill = table_header_fill
+    worksheet["E24"].font = table_header_font
+    worksheet["E24"].alignment = Alignment(horizontal="center", vertical="center")
+    worksheet["E25"].fill = PatternFill("solid", fgColor="F5F7FA")
+    worksheet["E25"].alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
     # Dashboard KPI tooltips on result cells.
     dashboard_tooltips = {
@@ -668,15 +902,17 @@ def _style_dashboard(worksheet, writer) -> None:
         "C12": "Crawl Success Rate %. Calculated as 2xx URLs / Total URLs.",
         "C13": "Critical URL Rate %. Calculated as Critical URLs / Total URLs.",
         "C14": "Warning URL Rate %. Calculated as Warning URLs / Total URLs.",
-        "C30": "Most widespread issue from FixPlan by affected URL count.",
-        "C31": "Number of URLs impacted by the top blocking issue.",
-        "C32": "Total URLs returning client/server errors (4xx + 5xx).",
-        "C33": "Average Time to First Byte across Technical URLs (ms).",
-        "C43": "Affected URL count for the highest-priority issue (linked to FixPlan).",
-        "C44": "Affected URL count for the next issue in the priority list.",
-        "C45": "Affected URL count for the next issue in the priority list.",
+        "C15": "Projected Health Score if all current To Do items are completed in this cycle.",
+        "C16": "Projected Pass Rate if all current To Do items are completed in this cycle.",
+        "C32": "Most widespread issue from FixPlan by affected URL count.",
+        "C33": "Number of URLs impacted by the top blocking issue.",
+        "C34": "Total URLs returning client/server errors (4xx + 5xx).",
+        "C35": "Average Time to First Byte across Technical URLs (ms).",
+        "C45": "Affected URL count for the highest-priority issue (linked to FixPlan).",
         "C46": "Affected URL count for the next issue in the priority list.",
         "C47": "Affected URL count for the next issue in the priority list.",
+        "C48": "Affected URL count for the next issue in the priority list.",
+        "C49": "Affected URL count for the next issue in the priority list.",
         "E5": "Owner responsible for remediation. Click to open FixPlan.",
         "F5": "Number of issue rows assigned to this owner.",
         "G5": "Total affected URLs across this owner's assigned issues.",
@@ -733,6 +969,8 @@ def _reorder_columns(worksheet, sheet_name: str) -> None:
             "Priority Score",
             "Affected Count",
             "Affected URLs",
+            "Detail Reference Tab",
+            "Resolution Type",
             "URL",
             "Recommended Fix",
             "Likely Root Cause",
@@ -743,6 +981,9 @@ def _reorder_columns(worksheet, sheet_name: str) -> None:
             "Est. Sprint Points",
             "Aging/Priority",
             "Status",
+            "Verified By",
+            "Date Resolved",
+            "Revenue Risk",
             "Action Needed",
             "Jump to Details",
             "View Details",
@@ -795,6 +1036,8 @@ def _reorder_columns(worksheet, sheet_name: str) -> None:
         ],
         "AIOSEO": [
             "URL",
+            "WordPress Post ID",
+            "Direct Edit Link",
             "AIOSEO Panel",
             "Severity",
             "Issue",
@@ -809,6 +1052,28 @@ def _reorder_columns(worksheet, sheet_name: str) -> None:
             "Status",
             "Est. Hours",
             "Stable Issue ID",
+        ],
+        "Content Optimization Hub": [
+            "Status",
+            "Assigned Owner",
+            "Content Cluster ID",
+            "URL",
+            "Elementor Builder Link",
+            "Target Keywords",
+            "Current Page Copy Snippet",
+            "Current Title",
+            "Proposed Title (50-60 Chars)",
+            "Title Count",
+            "Current Meta Desc",
+            "Proposed Meta Desc (120-160 Chars)",
+            "Desc Count",
+            "Current H-Tag Structure",
+            "Proposed H-Tag Fixes",
+            "AEO Answer Block Draft",
+            "FAQ/QA Draft",
+            "Current OG-Image URL",
+            "OG Image Preview",
+            "Social Share Note",
         ],
         "AEO": [
             "URL",
@@ -910,6 +1175,8 @@ def _collapse_technical_deep_dive_columns(worksheet, sheet_name: str) -> None:
 
 
 def _apply_cross_sheet_links(writer, worksheet, sheet_name: str) -> None:
+    if DEBUG_EXCEL_ISOLATION_MODE:
+        return
     headers = _header_index(worksheet)
     if sheet_name == "Summary":
         issue_col = headers.get("Issue")
@@ -1017,9 +1284,26 @@ def _apply_cross_sheet_links(writer, worksheet, sheet_name: str) -> None:
                     column=technical_col,
                     value=f'=IFERROR(HYPERLINK("#Technical!A"&MATCH({url_letter}{r},Technical!A:A,0),"Open"),HYPERLINK("#Technical!A1","Open"))',
                 )
+    if sheet_name == "FixPlan" and "Content Optimization Hub" in writer.book.sheetnames:
+        headers = _header_index(worksheet)
+        url_col = headers.get("URL")
+        hub_status_col = headers.get("Hub Status (Content Hub)")
+        if not hub_status_col:
+            hub_status_col = worksheet.max_column + 1
+            worksheet.cell(row=1, column=hub_status_col, value="Hub Status (Content Hub)")
+        if url_col:
+            u_letter = get_column_letter(url_col)
+            for r in range(2, worksheet.max_row + 1):
+                worksheet.cell(
+                    row=r,
+                    column=hub_status_col,
+                    value=f'=IFERROR(INDEX(\'Content Optimization Hub\'!A:A,MATCH({u_letter}{r},\'Content Optimization Hub\'!C:C,0)),"Not in Hub")',
+                )
 
 
 def _add_header_tooltips(worksheet) -> None:
+    if DISABLE_DATA_VALIDATION:
+        return
     tooltip_messages = {
         "TTFB (ms)": "Time to First Byte. Measures server responsiveness. Fix: Optimize server-side code or use a CDN.",
         "AEO Readiness Score": "Composite Answer Engine Optimization quality score. Fix: Add concise answer sections, FAQ schema, and clear question headings.",
@@ -1027,7 +1311,7 @@ def _add_header_tooltips(worksheet) -> None:
         "Status Code": "HTTP status returned for the URL. Fix: Resolve 4xx/5xx errors and remove unnecessary redirect chains.",
         "SEO Health Score": "Weighted technical SEO quality score for this URL. Fix: Prioritize critical issues and improve warnings in FixPlan.",
         "Priority Score": "Issue priority score for execution order. Fix: Start with the highest values to reduce risk fastest.",
-        "Severity": "Impact level of the issue. Fix: Resolve Critical first, then Warning, then Info opportunities.",
+        "Severity": "Impact level of the issue. Fix: Resolve Critical first, then Warning, then Observation opportunities.",
         "Word Count": "Approximate body word count depth. Fix: Expand thin pages with original, search-intent-aligned content.",
         "Canonical Type": "Canonical relationship classification. Fix: Use self-canonical on indexable pages; avoid unintended cross-canonicals.",
         "Redirect Chain Length": "Number of redirect hops before final destination. Fix: Reduce to a single hop where possible.",
@@ -1235,7 +1519,7 @@ def adjust_sheet_format(writer, sheet_name):
                 elif sev == "warning":
                     cell.fill = traffic_warn_fill
                     row_has_issue = True
-                elif sev == "info":
+                elif sev in {"info", "observation"}:
                     cell.fill = edge_fill
                 elif sev == "pass":
                     cell.fill = good_fill
@@ -1262,6 +1546,21 @@ def adjust_sheet_format(writer, sheet_name):
                     row_has_issue = True
                 elif st in {"fixed", "done", "closed"}:
                     cell.fill = good_fill
+            if h == "Direct Edit Link" and isinstance(val, str) and val.startswith(("http://", "https://")):
+                if _is_safe_hyperlink_target(val):
+                    cell.hyperlink = val
+                    cell.style = "Hyperlink"
+                    cell.fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+                    cell.font = Font(color="FFFFFF", bold=True, underline="single")
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+            if h in {"Owner", "Agency Owner"} and isinstance(val, str):
+                owner = val.strip().lower()
+                if "dev" in owner:
+                    cell.fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+                elif "copy" in owner:
+                    cell.fill = PatternFill(start_color="E4DFEC", end_color="E4DFEC", fill_type="solid")
+                elif "server" in owner or "host" in owner:
+                    cell.fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
         if not row_has_issue:
             worksheet.cell(row=row_idx, column=1).fill = good_fill
         if sheet_name != "Dashboard" and row_idx % 2 == 0:
@@ -1299,7 +1598,8 @@ def adjust_sheet_format(writer, sheet_name):
         _apply_fixplan_interactivity(writer, worksheet)
     _hide_noisy_columns(worksheet, sheet_name)
     _apply_south_african_formats(worksheet)
-    apply_global_conditional_formatting(worksheet)
+    if not DISABLE_CONDITIONAL_FORMATTING:
+        apply_global_conditional_formatting(worksheet)
     _collapse_technical_deep_dive_columns(worksheet, sheet_name)
     _add_url_navigation_links(writer, worksheet, sheet_name)
     _apply_cross_sheet_links(writer, worksheet, sheet_name)
@@ -1308,15 +1608,279 @@ def adjust_sheet_format(writer, sheet_name):
         if status_col:
             _apply_status_dropdown(worksheet, status_col)
     _add_back_to_dashboard_link(worksheet, sheet_name)
+    if sheet_name == "Content Optimization Hub":
+        # Insert instruction row and keep editorial controls pinned.
+        worksheet.insert_rows(1)
+        max_col_letter = get_column_letter(worksheet.max_column)
+        worksheet.merge_cells(f"A1:{max_col_letter}1")
+        worksheet["A1"] = (
+            "🚀 CONTENT HUB INSTRUCTIONS: 1. Draft content in 'Proposed' columns. | "
+            "2. Ensure 'Count' columns are Green. | "
+            "3. Use 'Elementor' link for direct editing. | "
+            "4. Update 'Status' to 'Completed' when finished. | "
+            "5. Preview branding in 'OG Image Preview' column."
+        )
+        worksheet["A1"].fill = PatternFill(start_color="BFE9E4", end_color="BFE9E4", fill_type="solid")
+        worksheet["A1"].font = Font(color=STD_NAVY, bold=True)
+        worksheet["A1"].alignment = Alignment(horizontal="left", vertical="center")
+        worksheet.row_dimensions[1].height = 28
+        worksheet.freeze_panes = "D3"
+        hub_headers = {str(cell.value): idx for idx, cell in enumerate(worksheet[2], start=1) if cell.value}
+        status_col = hub_headers.get("Status")
+        if status_col:
+            if not DISABLE_DATA_VALIDATION:
+                dv = DataValidation(type="list", formula1='"To Do,Drafting,Implementation,Completed"', allow_blank=True)
+                worksheet.add_data_validation(dv)
+                dv.add(f"{get_column_letter(status_col)}2:{get_column_letter(status_col)}{worksheet.max_row}")
+            if not DISABLE_CONDITIONAL_FORMATTING:
+                worksheet.conditional_formatting.add(
+                    f"{get_column_letter(status_col)}3:{get_column_letter(status_col)}{worksheet.max_row}",
+                    FormulaRule(formula=[f'LOWER({get_column_letter(status_col)}3)="to do"'], stopIfTrue=True, fill=PatternFill("solid", fgColor="FFE0E0")),
+                )
+                worksheet.conditional_formatting.add(
+                    f"{get_column_letter(status_col)}3:{get_column_letter(status_col)}{worksheet.max_row}",
+                    FormulaRule(formula=[f'LOWER({get_column_letter(status_col)}3)="drafting"'], stopIfTrue=True, fill=PatternFill("solid", fgColor="FFF2CC")),
+                )
+                worksheet.conditional_formatting.add(
+                    f"{get_column_letter(status_col)}3:{get_column_letter(status_col)}{worksheet.max_row}",
+                    FormulaRule(formula=[f'LOWER({get_column_letter(status_col)}3)="implementation"'], stopIfTrue=True, fill=PatternFill("solid", fgColor="D9E1F2")),
+                )
+                worksheet.conditional_formatting.add(
+                    f"{get_column_letter(status_col)}3:{get_column_letter(status_col)}{worksheet.max_row}",
+                    FormulaRule(formula=[f'LOWER({get_column_letter(status_col)}3)="completed"'], stopIfTrue=True, fill=PatternFill("solid", fgColor="D9EAD3")),
+                )
+                worksheet.conditional_formatting.add(
+                    f"A3:Z{worksheet.max_row}",
+                    FormulaRule(
+                        formula=['$A3="Completed"'],
+                        stopIfTrue=False,
+                        fill=PatternFill("solid", fgColor="D0D0D0"),
+                        font=Font(color="666666"),
+                    ),
+                )
+        headers = hub_headers
+        assigned_owner_col = headers.get("Assigned Owner")
+        if assigned_owner_col and not DISABLE_DATA_VALIDATION:
+            owner_dv = DataValidation(type="list", formula1='"Unassigned,Copywriter A,Copywriter B,Copywriter C"', allow_blank=True)
+            worksheet.add_data_validation(owner_dv)
+            owner_dv.add(f"{get_column_letter(assigned_owner_col)}3:{get_column_letter(assigned_owner_col)}1000")
+            for r in range(3, worksheet.max_row + 1):
+                cell = worksheet.cell(row=r, column=assigned_owner_col)
+                if not str(cell.value or "").strip():
+                    cell.value = "Unassigned"
+        proposed_cols = [
+            headers.get("Current Title"),
+            headers.get("Proposed Title (50-60 Chars)"),
+            headers.get("Current Meta Desc"),
+            headers.get("Proposed Meta Desc (120-160 Chars)"),
+            headers.get("Current H-Tag Structure"),
+            headers.get("Current Page Copy Snippet"),
+            headers.get("Social Share Note"),
+            headers.get("Proposed H-Tag Fixes"),
+            headers.get("AEO Answer Block Draft"),
+            headers.get("FAQ/QA Draft"),
+        ]
+        black_font = Font(color="000000")
+        for r in range(3, worksheet.max_row + 1):
+            for c in range(1, worksheet.max_column + 1):
+                cell = worksheet.cell(row=r, column=c)
+                cell.font = black_font
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+        for col_idx in [c for c in proposed_cols if c]:
+            col_letter = get_column_letter(col_idx)
+            worksheet.column_dimensions[col_letter].width = max(40, 48)
+            for r in range(3, worksheet.max_row + 1):
+                cell = worksheet.cell(row=r, column=col_idx)
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+                cell.fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                cell.font = black_font
+        current_cols = [
+            headers.get("Current Title"),
+            headers.get("Current Meta Desc"),
+            headers.get("Current H-Tag Structure"),
+            headers.get("Current Page Copy Snippet"),
+            headers.get("Current OG-Image URL"),
+        ]
+        readonly_fill = PatternFill(start_color="F3F4F6", end_color="F3F4F6", fill_type="solid")
+        for col_idx in [c for c in current_cols if c]:
+            for r in range(3, worksheet.max_row + 1):
+                cell = worksheet.cell(row=r, column=col_idx)
+                cell.fill = readonly_fill
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+                cell.font = black_font
+        title_prop_col = headers.get("Proposed Title (50-60 Chars)")
+        title_count_col = headers.get("Title Count")
+        desc_prop_col = headers.get("Proposed Meta Desc (120-160 Chars)")
+        desc_count_col = headers.get("Desc Count")
+        if title_prop_col and title_count_col:
+            tp_letter = get_column_letter(title_prop_col)
+            for r in range(3, worksheet.max_row + 1):
+                worksheet.cell(row=r, column=title_count_col, value=f"=LEN({tp_letter}{r})")
+            if not DISABLE_CONDITIONAL_FORMATTING:
+                tc_letter = get_column_letter(title_count_col)
+                worksheet.conditional_formatting.add(
+                    f"{tc_letter}3:{tc_letter}{worksheet.max_row}",
+                    FormulaRule(formula=[f"AND({tc_letter}3>=50,{tc_letter}3<=60)"], stopIfTrue=True, fill=PatternFill("solid", fgColor="C6EFCE")),
+                )
+                worksheet.conditional_formatting.add(
+                    f"{tc_letter}3:{tc_letter}{worksheet.max_row}",
+                    FormulaRule(formula=[f"{tc_letter}3>60"], stopIfTrue=True, fill=PatternFill("solid", fgColor="FFC7CE")),
+                )
+        if desc_prop_col and desc_count_col:
+            dp_letter = get_column_letter(desc_prop_col)
+            for r in range(3, worksheet.max_row + 1):
+                worksheet.cell(row=r, column=desc_count_col, value=f"=LEN({dp_letter}{r})")
+            if not DISABLE_CONDITIONAL_FORMATTING:
+                dc_letter = get_column_letter(desc_count_col)
+                worksheet.conditional_formatting.add(
+                    f"{dc_letter}3:{dc_letter}{worksheet.max_row}",
+                    FormulaRule(formula=[f"AND({dc_letter}3>=120,{dc_letter}3<=160)"], stopIfTrue=True, fill=PatternFill("solid", fgColor="C6EFCE")),
+                )
+                worksheet.conditional_formatting.add(
+                    f"{dc_letter}3:{dc_letter}{worksheet.max_row}",
+                    FormulaRule(formula=[f"{dc_letter}3>160"], stopIfTrue=True, fill=PatternFill("solid", fgColor="FFC7CE")),
+                )
+        for key in ("Status", "Assigned Owner", "URL", "Elementor Builder Link"):
+            cidx = headers.get(key)
+            if cidx:
+                col_letter = get_column_letter(cidx)
+                worksheet.column_dimensions[col_letter].width = 18 if key in {"Status", "Assigned Owner"} else 42
+        for key in ("Current Title", "Current Meta Desc", "Current Page Copy Snippet"):
+            cidx = headers.get(key)
+            if cidx:
+                worksheet.column_dimensions[get_column_letter(cidx)].width = max(
+                    40, worksheet.column_dimensions[get_column_letter(cidx)].width or 40
+                )
+        elm_col = headers.get("Elementor Builder Link")
+        if elm_col:
+            worksheet.column_dimensions[get_column_letter(elm_col)].width = 42
+        ct_col = headers.get("Current Title")
+        cmd_col = headers.get("Current Meta Desc")
+        ch1_col = headers.get("Current H-Tag Structure")
+        if ct_col and cmd_col and ch1_col:
+            for col_idx in (ct_col, cmd_col, ch1_col):
+                worksheet.column_dimensions[get_column_letter(col_idx)].outlineLevel = 1
+                worksheet.column_dimensions[get_column_letter(col_idx)].hidden = False
+        # Editorial palette
+        soft_header = PatternFill(start_color="6A5ACD", end_color="6A5ACD", fill_type="solid")
+        for cell in worksheet[2]:
+            cell.fill = soft_header
+            cell.font = Font(color="FFFFFF", bold=True)
+        header_comments = {
+            "URL": "The live page being audited.",
+            "Elementor Builder Link": "Opens the Elementor editor directly, bypassing the standard WordPress dashboard.",
+            "Current Title": "Live crawled <title> value from the page.",
+            "Target Keywords": "The primary search terms for this page. Keep these in mind while drafting.",
+            "Current Page Copy Snippet": "The first 250 characters of the actual page body text. Use this to understand the page context.",
+            "Proposed Title (50-60 Chars)": "SEO RULE: 50-60 characters. Put the most important keyword at the beginning.",
+            "Title Count": "Green = Good. Red = Too long (will be cut off by Google) or too short.",
+            "Current Meta Desc": "Live crawled meta description from the page.",
+            "Proposed Meta Desc (120-160 Chars)": "SEO RULE: 120-160 characters. Must include a Call-To-Action (e.g., 'Read more', 'Register here').",
+            "Desc Count": "Green = Good. Red = Too long (will be cut off by Google) or too short.",
+            "Current H-Tag Structure": "Current H1/H2/H3 structure scraped from the page.",
+            "Current OG-Image URL": "The image shared on Social Media (Facebook/LinkedIn).",
+            "OG Image Preview": "Live preview of the social share image. Requires Microsoft 365 and an active internet connection to render.",
+            "Proposed H-Tag Fixes": "Ensure exactly ONE H1. Use H2s for main sections, and H3s for sub-sections. Format headings as questions where possible.",
+            "AEO Answer Block Draft": "A 40-60 word, highly factual paragraph designed to win AI overviews/Featured Snippets. Do not use marketing fluff here.",
+            "FAQ/QA Draft": "Draft Question & Answer pairs. These will be loaded into the AIOSEO FAQ schema block in Elementor.",
+        }
+        for h, msg in header_comments.items():
+            cidx = headers.get(h)
+            if cidx:
+                worksheet.cell(row=2, column=cidx).comment = Comment(msg, "SEO Audit Bot")
+        url_col = headers.get("URL")
+        elm_col = headers.get("Elementor Builder Link")
+        og_url_col = headers.get("Current OG-Image URL")
+        og_preview_col = headers.get("OG Image Preview")
+        if url_col:
+            for r in range(3, worksheet.max_row + 1):
+                cell = worksheet.cell(row=r, column=url_col)
+                value = str(cell.value or "").strip()
+                if value.startswith(("http://", "https://")) and _is_safe_hyperlink_target(value):
+                    cell.hyperlink = value
+                    cell.style = "Hyperlink"
+        if elm_col:
+            for r in range(3, worksheet.max_row + 1):
+                cell = worksheet.cell(row=r, column=elm_col)
+                value = str(cell.value or "").strip()
+                if value.startswith(("http://", "https://")) and _is_safe_hyperlink_target(value):
+                    cell.hyperlink = value
+                    cell.style = "Hyperlink"
+                    cell.fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+                    cell.font = Font(color="FFFFFF", bold=True, underline="single")
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+        if og_preview_col and og_url_col:
+            og_url_letter = get_column_letter(og_url_col)
+            preview_letter = get_column_letter(og_preview_col)
+            og_url_col_letter = get_column_letter(og_url_col)
+            worksheet.column_dimensions[og_url_col_letter].width = 42
+            worksheet.column_dimensions[preview_letter].width = 25
+            for r in range(3, worksheet.max_row + 1):
+                og_url_cell = worksheet.cell(row=r, column=og_url_col)
+                og_url_cell.value = _sanitize_excel_url(og_url_cell.value)
+                worksheet.cell(
+                    row=r,
+                    column=og_preview_col,
+                    value=(
+                        str(og_url_cell.value or "")
+                        if (DEBUG_EXCEL_ISOLATION_MODE or DISABLE_EXTERNAL_LINKS_AND_IMAGES)
+                        else f'=IF(LEN({og_url_letter}{r})>0, IMAGE({og_url_letter}{r}), "")'
+                    ),
+                )
+                pcell = worksheet.cell(row=r, column=og_preview_col)
+                pcell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                worksheet.row_dimensions[r].height = 100
+        # Enable filters on the Hub headers.
+        if worksheet.max_row >= 3 and worksheet.max_column >= 1:
+            worksheet.auto_filter.ref = f"A2:{get_column_letter(worksheet.max_column)}{worksheet.max_row}"
+    if sheet_name == "AEO":
+        _audit_non_overlapping_merges(worksheet)
     _add_all_header_tooltips(worksheet)
     if sheet_name in DATA_HEAVY_TABS:
         _add_header_tooltips(worksheet)
     if sheet_name == "Dashboard":
-        _style_dashboard(worksheet, writer)
+        if not DEBUG_EXCEL_ISOLATION_MODE:
+            _style_dashboard(worksheet, writer)
+    header_row = 2 if sheet_name == "Content Optimization Hub" else 1
+    _normalize_table_headers(worksheet, header_row=header_row)
+    header_values = [worksheet.cell(row=header_row, column=c).value for c in range(1, worksheet.max_column + 1)]
+    valid_table_headers = all(isinstance(v, str) and v.strip() for v in header_values)
+    if worksheet.max_row > header_row and worksheet.max_column > 0 and valid_table_headers:
+        ref_string = _compute_exact_table_ref(worksheet, header_row)
+        if ref_string:
+            start_ref, end_ref = ref_string.split(":")
+            min_row, min_col = coordinate_to_tuple(start_ref)
+            max_row, max_col = coordinate_to_tuple(end_ref)
+            _apply_mock_table_styling(worksheet, min_col=min_col, max_col=max_col, min_row=min_row, max_row=max_row)
+    _audit_non_overlapping_merges(worksheet)
+    _audit_freeze_merge_conflicts(worksheet)
 
 
 def apply_tab_hyperlinks(writer):
+    if DEBUG_EXCEL_ISOLATION_MODE:
+        return
     wb = writer.book
+    if "Table of Contents" not in wb.sheetnames:
+        toc_ws = wb.create_sheet("Table of Contents")
+        toc_ws["A1"] = "Table of Contents"
+        toc_ws["A1"].font = Font(color=STD_NAVY, bold=True, size=14)
+        toc_ws["A2"] = "Section"
+        toc_ws["B2"] = "Open"
+        toc_ws["A2"].fill = PatternFill("solid", fgColor=STD_NAVY)
+        toc_ws["B2"].fill = PatternFill("solid", fgColor=STD_NAVY)
+        toc_ws["A2"].font = Font(color=STD_WHITE, bold=True)
+        toc_ws["B2"].font = Font(color=STD_WHITE, bold=True)
+        row_ptr = 3
+        for sheet_name in wb.sheetnames:
+            if sheet_name == "Table of Contents":
+                continue
+            toc_ws[f"A{row_ptr}"] = sheet_name
+            toc_ws[f"B{row_ptr}"] = f'=HYPERLINK("#{sheet_name}!A1","Open")'
+            toc_ws[f"B{row_ptr}"].font = Font(color=STD_BLUE, underline="single", bold=True)
+            row_ptr += 1
+        toc_ws.column_dimensions["A"].width = 35
+        toc_ws.column_dimensions["B"].width = 18
+        toc_ws.freeze_panes = "A3"
     link_map = {
         "Summary": "Reference Tab",
         "FixPlan": "Reference Tab",
@@ -1339,25 +1903,25 @@ def apply_tab_hyperlinks(writer):
                 cell.hyperlink = f"#{target}!A1"
                 cell.style = "Hyperlink"
     preferred_first_tabs = [
+        "Table of Contents",
         "Dashboard",
-        "Legend",
-        "Summary",
+        "Content Optimization Hub",
+        "FixPlan",
         "Main",
         "Technical",
-        "FixPlan",
-        "Priority URLs",
-        "Indexability",
         "Content",
-        "Redirects",
-        "Links",
-        "LinksDetail",
         "AEO",
+        "Schema & Metadata",
+        "Links",
+        "Indexability",
+        "Redirects",
+        "Priority URLs",
         "AIOSEO",
-        "SnippetCandidates",
-        "Media",
-        "StructuredData",
-        "Social",
         "Security",
+        "Summary",
+        "Legend",
+        "LinksDetail",
+        "Media",
         "Duplicates",
         "TemplateClusters",
         "IssueInventory",

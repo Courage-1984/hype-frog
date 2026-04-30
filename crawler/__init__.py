@@ -1,6 +1,7 @@
 from .client import create_session
 from .fetcher import fetch_and_parse
 from .link_checks import check_url_status_light, check_url_status_light_limited
+from .psi import fetch_psi_metrics_batch
 from .sitemap import parse_sitemap
 
 __all__ = [
@@ -9,4 +10,5 @@ __all__ = [
     "parse_sitemap",
     "check_url_status_light",
     "check_url_status_light_limited",
+    "fetch_psi_metrics_batch",
 ]
