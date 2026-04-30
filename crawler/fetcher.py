@@ -117,6 +117,17 @@ async def fetch_and_parse(url: str, session: aiohttp.ClientSession, semaphore: a
                             main_data["Meta Desc Length"] = len(desc_text)
                             extra["Meta Description Missing"] = False
                             extra["SERP Meta Pixel Approx"] = int(len(desc_text) * 6.2)
+                        # Prefer strict OG image meta tags used by social platforms.
+                        og_image_meta = soup.find("meta", attrs={"property": "og:image"})
+                        twitter_image_meta = soup.find("meta", attrs={"name": "twitter:image"})
+                        og_image_url = ""
+                        if og_image_meta and (og_image_meta.get("content") or "").strip():
+                            og_image_url = og_image_meta.get("content", "").strip()
+                        elif twitter_image_meta and (twitter_image_meta.get("content") or "").strip():
+                            og_image_url = twitter_image_meta.get("content", "").strip()
+                        if og_image_url:
+                            extra["OG Image"] = og_image_url
+                            main_data["OG-Image"] = og_image_url
                         extra["H1 Count"] = int(parsed.get("h1_count") or 0)
                         h_tag_lines: list[str] = []
                         h1_tag = soup.find("h1")
