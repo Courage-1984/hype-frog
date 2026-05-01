@@ -33,6 +33,12 @@ from crawler import (
     parse_sitemap,
 )
 from models import CrawlResult, harden_page_row_metrics
+from pipeline.enrich import (
+    compute_internal_link_intelligence as _compute_internal_link_intelligence_pipeline,
+)
+from pipeline.enrich import value_or_default as _value_or_default_pipeline
+from pipeline.export import sanitize_rows as _sanitize_rows_pipeline
+from pipeline.export import to_excel_safe as _to_excel_safe_pipeline
 from reporters import adjust_sheet_format, apply_tab_hyperlinks
 from reporters.tabs import (
     build_content_optimization_hub_rows,
@@ -75,10 +81,7 @@ def _sanitize_excel_value(value: object) -> object:
 
 
 def _sanitize_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    sanitized: list[dict[str, object]] = []
-    for row in rows:
-        sanitized.append({k: _sanitize_excel_value(v) for k, v in row.items()})
-    return sanitized
+    return _sanitize_rows_pipeline(rows)
 
 
 def _sanitize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
@@ -112,9 +115,7 @@ def _safe_sheet_name(name: str) -> str:
 
 
 def _to_excel_safe(df: pd.DataFrame, writer: pd.ExcelWriter, sheet_name: str, **kwargs) -> None:
-    safe_df = _sanitize_dataframe(df)
-    safe_df.columns = [str(col).replace("\n", " ").replace("\r", " ").strip()[:255] or f"Column_{idx + 1}" for idx, col in enumerate(safe_df.columns)]
-    safe_df.to_excel(writer, sheet_name=_safe_sheet_name(sheet_name), **kwargs)
+    return _to_excel_safe_pipeline(df, writer, sheet_name, **kwargs)
 
 
 def _normalize_url_key(url: object) -> str:
@@ -128,58 +129,11 @@ def _extract_subfolder(url: str) -> str:
 
 
 def _compute_internal_link_intelligence(extra_rows: list[dict[str, object]], source_label: str) -> dict[str, dict[str, object]]:
-    graph = nx.DiGraph()
-    crawled_urls = {
-        _normalize_url_key(row.get("Final URL") or row.get("URL"))
-        for row in extra_rows
-        if row.get("Final URL") or row.get("URL")
-    }
-    for url in crawled_urls:
-        graph.add_node(url)
-    for row in extra_rows:
-        source = _normalize_url_key(row.get("Final URL") or row.get("URL"))
-        if not source:
-            continue
-        for target in row.get("Internal Links List", []):
-            target_norm = _normalize_url_key(target)
-            if target_norm in crawled_urls:
-                graph.add_edge(source, target_norm)
-
-    homepage_candidates = sorted(
-        [u for u in crawled_urls if urlparse(u).path in {"", "/"}],
-        key=len,
-    )
-    source_candidate = f"https://{source_label.strip('/')}/"
-    homepage = _normalize_url_key(homepage_candidates[0] if homepage_candidates else source_candidate)
-
-    click_depth: dict[str, int | None] = {}
-    if homepage in graph:
-        lengths = nx.single_source_shortest_path_length(graph, homepage)
-        for node in graph.nodes:
-            click_depth[node] = lengths.get(node)
-    else:
-        for node in graph.nodes:
-            click_depth[node] = None
-
-    orphan_map = {node: graph.in_degree(node) == 0 for node in graph.nodes}
-    pagerank_map = nx.pagerank(graph, alpha=0.85, max_iter=100) if graph.number_of_nodes() else {}
-
-    return {
-        node: {
-            "Click Depth": click_depth.get(node),
-            "Orphan Pages": orphan_map.get(node, False),
-            "Internal PageRank": round(float(pagerank_map.get(node, 0.0)), 6),
-            "Internal Inlinks": int(graph.in_degree(node)),
-        }
-        for node in graph.nodes
-    }
+    return _compute_internal_link_intelligence_pipeline(extra_rows, source_label)
 
 
 def _value_or_default(value: object, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return default
+    return _value_or_default_pipeline(value, default)
 
 
 async def main() -> None:
