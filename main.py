@@ -48,7 +48,7 @@ from rules import (
     stable_issue_id,
     workflow_metrics_for_issue,
 )
-from utils import build_output_filename, normalize_text_hash, sanitize_filename_part
+from utils import build_output_filename, normalize_text_hash, normalize_url_key, sanitize_filename_part
 
 logger = get_logger(__name__)
 
@@ -118,7 +118,7 @@ def _to_excel_safe(df: pd.DataFrame, writer: pd.ExcelWriter, sheet_name: str, **
 
 
 def _normalize_url_key(url: object) -> str:
-    return str(url or "").strip().rstrip("/")
+    return normalize_url_key(url)
 
 
 def _extract_subfolder(url: str) -> str:
@@ -186,7 +186,7 @@ async def main() -> None:
     configure_logging()
     load_dotenv()
     logger.info("=== Python Technical SEO Auditor ===")
-    target_input, max_urls, max_psi_urls, high_value_slugs = get_user_config()
+    target_input, max_urls, max_psi_urls, high_value_slugs, crawl_mode, render_wait_ms, selector_wait_ms = get_user_config()
     urls: list[str] = []
     sitemap_meta: dict[str, dict[str, str | None]] = {}
     workers = MAX_WORKERS
@@ -275,7 +275,16 @@ async def main() -> None:
         tasks = [
             asyncio.create_task(
                 fetch_and_parse(
-                    url, session, semaphore, full_suite, robots_cache, request_delay, sitemap_meta
+                    url,
+                    session,
+                    semaphore,
+                    full_suite,
+                    robots_cache,
+                    request_delay,
+                    sitemap_meta,
+                    crawl_mode=crawl_mode,
+                    render_wait_ms=render_wait_ms,
+                    selector_wait_ms=selector_wait_ms,
                 )
             )
             for url in urls
@@ -311,19 +320,28 @@ async def main() -> None:
 
         print("\nGenerating Excel report...")
         main_rows, extra_rows = load_cached_rows(cache)
-        gsc_metrics = await asyncio.to_thread(fetch_gsc_page_metrics, target_input)
+        sitemap_url_keys = {_normalize_url_key(u) for u in sitemap_meta.keys()}
+        try:
+            gsc_metrics = await asyncio.to_thread(fetch_gsc_page_metrics, target_input)
+        except Exception as exc:
+            logger.warning("GSC metrics unavailable due to runtime error: %s", exc)
+            gsc_metrics = {}
         if gsc_metrics:
             print(f"Merged GSC metrics for last 30 days: {len(gsc_metrics)} URL records.")
         else:
             logger.warning("GSC metrics unavailable (missing credentials, property mismatch, or no data).")
 
-        psi_map = await fetch_psi_metrics_batch(
-            session,
-            [str(r.get("URL") or "") for r in extra_rows if r.get("URL")],
-            max_urls=max_psi_urls,
-        )
-        if max_psi_urls is not None:
-            print(f"PSI URL cap applied: processed up to {max_psi_urls} URLs.")
+        if max_psi_urls == 0:
+            psi_map = {}
+            print("PSI disabled for this run (max PSI URLs set to 0).")
+        else:
+            psi_map = await fetch_psi_metrics_batch(
+                session,
+                [str(r.get("URL") or "") for r in extra_rows if r.get("URL")],
+                max_urls=max_psi_urls,
+            )
+            if max_psi_urls is not None:
+                print(f"PSI URL cap applied: processed up to {max_psi_urls} URLs.")
 
         for row in extra_rows:
             url_key = str(row.get("Final URL") or row.get("URL") or "").strip()
@@ -364,14 +382,14 @@ async def main() -> None:
         status_by_url: dict[str, object] = {}
         for row in extra_rows:
             if row.get("Final URL"):
-                status_by_url[str(row["Final URL"]).rstrip("/")] = row.get("Status Code")
+                status_by_url[_normalize_url_key(row["Final URL"])] = row.get("Status Code")
             if row.get("URL"):
-                status_by_url[str(row["URL"]).rstrip("/")] = row.get("Status Code")
+                status_by_url[_normalize_url_key(row["URL"])] = row.get("Status Code")
 
         unresolved_targets = set()
         for row in extra_rows:
             for target in row.get("Internal Links List Full", []):
-                if target.rstrip("/") not in status_by_url:
+                if _normalize_url_key(target) not in status_by_url:
                     unresolved_targets.add(target)
         if unresolved_targets:
             print(f"Running lightweight status checks for {len(unresolved_targets)} internal links not in crawl set...")
@@ -380,21 +398,21 @@ async def main() -> None:
                 check_url_status_light_limited(session, t, link_check_semaphore) for t in unresolved_targets
             ])
             for target, status in zip(unresolved_targets, checked_statuses):
-                status_by_url[target.rstrip("/")] = status
+                status_by_url[_normalize_url_key(target)] = status
 
-        crawled_finals = {str(row.get("Final URL")).rstrip("/") for row in extra_rows if row.get("Final URL")}
+        crawled_finals = {_normalize_url_key(row.get("Final URL")) for row in extra_rows if row.get("Final URL")}
         for row in extra_rows:
             canonical_url = row.get("Canonical URL")
             if canonical_url and row.get("URL"):
-                row["Canonical in Sitemap Match"] = canonical_url.rstrip("/") == str(row["URL"]).rstrip("/")
+                row["Canonical in Sitemap Match"] = _normalize_url_key(canonical_url) == _normalize_url_key(row["URL"])
             row["Hreflang Canonical Consistency"] = (bool(row.get("Hreflang Present")) and row.get("Canonical Type") in {"self", "missing"}) if row.get("Hreflang Present") else None
             if row.get("Hreflang Present"):
-                row["Hreflang Reciprocal Check"] = str(row.get("Final URL", "")).rstrip("/") in crawled_finals and bool(row.get("Hreflang Self Reference"))
+                row["Hreflang Reciprocal Check"] = _normalize_url_key(row.get("Final URL", "")) in crawled_finals and bool(row.get("Hreflang Self Reference"))
             broken_internal = 0
             unresolved_internal = 0
             link_statuses: list[str] = []
             for target in row.get("Internal Links List Full", []):
-                status = status_by_url.get(target.rstrip("/"))
+                status = status_by_url.get(_normalize_url_key(target))
                 if isinstance(status, int) and status >= 400:
                     broken_internal += 1
                 elif status is None:
@@ -405,11 +423,11 @@ async def main() -> None:
             row["Internal Link Statuses"] = " | ".join(link_statuses) if link_statuses else None
 
         inlinks_map: defaultdict[str, set[str]] = defaultdict(set)
-        crawled_set = {str((row.get("Final URL") or row.get("URL") or "")).rstrip("/") for row in extra_rows if (row.get("Final URL") or row.get("URL"))}
+        crawled_set = {_normalize_url_key(row.get("Final URL") or row.get("URL") or "") for row in extra_rows if (row.get("Final URL") or row.get("URL"))}
         for row in extra_rows:
-            source = str((row.get("Final URL") or row.get("URL") or "")).rstrip("/")
+            source = _normalize_url_key(row.get("Final URL") or row.get("URL") or "")
             for target in row.get("Internal Links List", []):
-                t_norm = str(target).rstrip("/")
+                t_norm = _normalize_url_key(target)
                 if t_norm in crawled_set and source:
                     inlinks_map[t_norm].add(source)
         graph_metrics = _compute_internal_link_intelligence(extra_rows, source_label)
@@ -432,21 +450,38 @@ async def main() -> None:
         score_by_url: dict[str, dict[str, object]] = {}
         for row in extra_rows:
             score, badge, icon, matched = score_url_health(row, summary_rules)
-            row["SEO Health Score"] = score
+            row_url_norm = _normalize_url_key(row.get("Final URL") or row.get("URL"))
+            row["Found via Sitemap"] = bool(row_url_norm and row_url_norm in sitemap_url_keys)
+            row["Found via Crawl"] = bool(row_url_norm)
+            row["Discovery Source"] = (
+                "Both"
+                if row["Found via Sitemap"] and row["Found via Crawl"]
+                else "Sitemap"
+                if row["Found via Sitemap"]
+                else "Crawl"
+            )
+            row["SEO Health Score"] = score if score is not None else None
             row["Severity Badge"] = badge
             row["Health Icon"] = icon
-            row["Critical Issues Count"] = len(matched["Critical"])
-            row["Warning Issues Count"] = len(matched["Warning"])
-            row["Observation Issues Count"] = len(matched["Observation"])
-            row["Matched Issues"] = " | ".join(matched["Critical"] + matched["Warning"] + matched["Observation"])
-            row["Action Needed"] = "Yes" if badge in {"Critical", "Warning"} else "No"
+            if badge == "Unmeasured":
+                row["Critical Issues Count"] = None
+                row["Warning Issues Count"] = None
+                row["Observation Issues Count"] = None
+                row["Matched Issues"] = "Unmeasured"
+                row["Action Needed"] = ""
+            else:
+                row["Critical Issues Count"] = len(matched["Critical"])
+                row["Warning Issues Count"] = len(matched["Warning"])
+                row["Observation Issues Count"] = len(matched["Observation"])
+                row["Matched Issues"] = " | ".join(matched["Critical"] + matched["Warning"] + matched["Observation"])
+                row["Action Needed"] = "Yes" if badge in {"Critical", "Warning"} else "No"
             top_issue = (matched["Critical"] + matched["Warning"] + matched["Observation"])[0] if (matched["Critical"] + matched["Warning"] + matched["Observation"]) else ""
             row["Owner"] = owner_for_issue(top_issue, badge)
             row["Sprint"] = ""
             row["Status"] = "Open"
             all_issue_ids = [stable_issue_id(row.get("URL"), issue) for issue in matched["Critical"] + matched["Warning"] + matched["Observation"]]
             row["Stable Issue IDs"] = " | ".join(all_issue_ids) if all_issue_ids else None
-            final_norm = str((row.get("Final URL") or row.get("URL") or "")).rstrip("/")
+            final_norm = _normalize_url_key(row.get("Final URL") or row.get("URL") or "")
             inlinks_count = len(inlinks_map.get(final_norm, set()))
             graph_row = graph_metrics.get(final_norm, {})
             row["Click Depth"] = graph_row.get("Click Depth")
@@ -454,7 +489,10 @@ async def main() -> None:
             row["Internal PageRank"] = graph_row.get("Internal PageRank", 0.0)
             row["Internal Inlinks"] = graph_row.get("Internal Inlinks", inlinks_count)
             row["Inlinks Bucket"] = "0" if inlinks_count == 0 else "1-2" if inlinks_count <= 2 else "3-10" if inlinks_count <= 10 else "10+"
-            row["Important But Underlinked"] = score < 70 and inlinks_count <= 2
+            if badge == "Unmeasured":
+                row["Important But Underlinked"] = None
+            else:
+                row["Important But Underlinked"] = _value_or_default(score, 0.0) < 70 and inlinks_count <= 2
             url_for_hint = row.get("URL")
             title_key = normalize_text_hash(next((m.get("Title") for m in main_rows if m.get("URL") == url_for_hint), None))
             meta_key = normalize_text_hash(next((m.get("Meta Description") for m in main_rows if m.get("URL") == url_for_hint), None))
@@ -469,7 +507,7 @@ async def main() -> None:
             if hints:
                 row["Cannibalization Hint"] = " | ".join(hints)
             if row.get("URL"):
-                score_by_url[row["URL"]] = {"score": score, "badge": badge, "icon": icon}
+                score_by_url[row["URL"]] = {"score": score if score is not None else None, "badge": badge, "icon": icon}
 
         for mrow in main_rows:
             score_data = score_by_url.get(mrow.get("URL"), {})
@@ -477,6 +515,8 @@ async def main() -> None:
             mrow["Severity Badge"] = score_data.get("badge")
             mrow["Health Icon"] = score_data.get("icon")
             extra_match = next((e for e in extra_rows if e.get("URL") == mrow.get("URL")), {})
+            mrow["Extraction State"] = mrow.get("Extraction State") or extra_match.get("Extraction State", "skipped")
+            mrow["Extraction Source"] = mrow.get("Extraction Source") or extra_match.get("Extraction Source", "raw_http")
             mrow["CWV LCP (s)"] = extra_match.get("CWV LCP (s)")
             mrow["CWV CLS"] = extra_match.get("CWV CLS")
             mrow["Field vs Lab"] = extra_match.get("Field vs Lab")
@@ -493,6 +533,18 @@ async def main() -> None:
             mrow["Click Depth"] = extra_match.get("Click Depth")
             mrow["Orphan Pages"] = extra_match.get("Orphan Pages", False)
             mrow["Internal PageRank"] = extra_match.get("Internal PageRank", 0.0)
+            url_norm = _normalize_url_key(mrow.get("URL"))
+            found_via_sitemap = bool(url_norm and url_norm in sitemap_url_keys)
+            found_via_crawl = bool(url_norm)
+            mrow["Found via Sitemap"] = found_via_sitemap
+            mrow["Found via Crawl"] = found_via_crawl
+            mrow["Discovery Source"] = (
+                "Both"
+                if found_via_sitemap and found_via_crawl
+                else "Sitemap"
+                if found_via_sitemap
+                else "Crawl"
+            )
 
         main_df = pd.DataFrame(main_rows)
         main_by_url = {str(r.get("URL") or "").strip(): r for r in main_rows if r.get("URL")}
@@ -589,7 +641,7 @@ async def main() -> None:
             adjust_sheet_format(writer, "Main")
             if full_suite:
                 technical_cols = [
-                    "URL", "Health Icon", "Severity Badge", "SEO Health Score", "SEO Score", "Technical Health", "Copy Score",
+                    "URL", "Extraction State", "Extraction Source", "Health Icon", "Severity Badge", "SEO Health Score", "SEO Score", "Technical Health", "Copy Score",
                     "Action Needed", "Owner", "Sprint", "Status", "Status Code", "Final URL", "Protocol", "Redirect Chain Length",
                     "Redirect Target", "Redirect Hops", "HTTP->HTTPS Redirect", "Status Class", "TTFB (ms)", "Total Request Time (ms)",
                     "Content-Type", "HTTP Version", "HTML Size (KB)", "Compression Enabled", "Cache-Control", "ETag", "X-Robots-Tag",
@@ -597,6 +649,8 @@ async def main() -> None:
                     "Canonical in Sitemap Match", "Hreflang Present", "Hreflang Count", "Hreflang Self Reference", "Hreflang Reciprocal Check",
                     "Hreflang Canonical Consistency", "x-default Present", "Pagination rel=next", "Pagination rel=prev", "Last-Modified",
                     "Published Date", "Modified Date", "Last Updated", "Change Frequency", "Priority", "Indexability Reason",
+                    "Schema Types Count", "Schema Types Found",
+                    "Internal Links Count", "Unique Internal Links Count", "External Links Count",
                     "AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)", "llms.txt Present", "Desktop PSI Score", "Mobile PSI Score",
                     "Mobile LCP (s)", "Mobile CLS", "Mobile TTFB (s)", "CWV LCP (s)", "CWV CLS", "CWV Data Source", "Field vs Lab",
                     "GSC Clicks", "GSC Impressions", "GSC CTR", "GSC Avg Position", "Click Depth", "Internal Inlinks", "Orphan Pages",
@@ -686,7 +740,7 @@ async def main() -> None:
                             "HTTP->HTTPS Redirect": r.get("HTTP->HTTPS Redirect"),
                             "Redirect Loop Flag": (
                                 isinstance(r.get("Redirect Hops"), str)
-                                and str(r.get("URL", "")).rstrip("/") == str(r.get("Final URL", "")).rstrip("/")
+                                and _normalize_url_key(r.get("URL", "")) == _normalize_url_key(r.get("Final URL", ""))
                                 and int(r.get("Redirect Chain Length") or 0) > 0
                             ),
                         }
@@ -700,7 +754,7 @@ async def main() -> None:
                 link_rows = []
                 for row in extra_rows:
                     for item in row.get("Link Details", []):
-                        target_status = status_by_url.get(str(item.get("Target URL", "")).rstrip("/"))
+                        target_status = status_by_url.get(_normalize_url_key(item.get("Target URL", "")))
                         item["Target Status (if crawled)"] = target_status
                         item["Crawlable"] = target_status is None or (isinstance(target_status, int) and target_status < 400)
                         link_rows.append(item)
@@ -781,7 +835,13 @@ async def main() -> None:
                 severity_order = {"Critical": 0, "Warning": 1, "Observation": 2}
                 summary_rows = sorted(summary_rows, key=lambda x: (x.get("Section", ""), severity_order.get(x.get("Severity", ""), 99), -(x.get("Affected URL Count") or 0), x.get("Issue", "")))
                 summary_rows.append({"Section": "Top 10 Critical URLs", "Severity": None, "Issue": None, "Affected URL Count": None, "Affected URLs (sample)": None})
-                critical_urls = sorted([r for r in extra_rows if (r.get("Critical Issues Count") or 0) > 0], key=lambda r: (-(r.get("Critical Issues Count") or 0), r.get("SEO Health Score") or 100))[:10]
+                critical_urls = sorted(
+                    [r for r in extra_rows if _value_or_default(r.get("Critical Issues Count"), 0.0) > 0],
+                    key=lambda r: (
+                        -_value_or_default(r.get("Critical Issues Count"), 0.0),
+                        _value_or_default(r.get("SEO Health Score"), 100.0),
+                    ),
+                )[:10]
                 for idx, row in enumerate(critical_urls, start=1):
                     summary_rows.append({"Section": "Top 10 Critical URLs", "Severity": "Critical", "Issue": f"#{idx} {row.get('URL')}", "Affected URL Count": row.get("Critical Issues Count"), "Reference Tab": "Priority URLs", "Affected URLs (sample)": row.get("Matched Issues")})
                 summary_rows.append({"Section": "Top Issues by Template", "Severity": None, "Issue": None, "Affected URL Count": None, "Affected URLs (sample)": None})
@@ -907,9 +967,13 @@ async def main() -> None:
                 _to_excel_safe(pd.DataFrame(quick_reference_rows), writer, "Quick Reference Guide", index=False)
                 priority_rows = []
                 for row in extra_rows:
-                    risk_score = (row.get("Critical Issues Count") or 0) * 30 + (row.get("Warning Issues Count") or 0) * 10 + (100 - (row.get("SEO Health Score") or 100))
+                    risk_score = (
+                        _value_or_default(row.get("Critical Issues Count"), 0.0) * 30
+                        + _value_or_default(row.get("Warning Issues Count"), 0.0) * 10
+                        + (100 - _value_or_default(row.get("SEO Health Score"), 100.0))
+                    )
                     reasons = []
-                    if (row.get("Critical Issues Count") or 0) > 0:
+                    if _value_or_default(row.get("Critical Issues Count"), 0.0) > 0:
                         reasons.append("Has critical issues")
                     if (row.get("Broken Internal Links Count") or 0) > 0:
                         reasons.append("Broken internal links")
@@ -963,7 +1027,7 @@ async def main() -> None:
                 status_dist: defaultdict[str, int] = defaultdict(int)
                 for row in extra_rows:
                     status_dist[str(row.get("Status Class"))] += 1
-                    s = row.get("SEO Health Score") or 0
+                    s = _value_or_default(row.get("SEO Health Score"), 0.0)
                     if s >= 90:
                         score_bands["90-100"] += 1
                     elif s >= 70:
@@ -1013,7 +1077,7 @@ async def main() -> None:
                 critical_issues_rows = [
                     {"Block": "Critical Issues", "URL": r.get("URL"), "Issue": r.get("Matched Issues")}
                     for r in extra_rows
-                    if (r.get("Critical Issues Count") or 0) > 0
+                    if _value_or_default(r.get("Critical Issues Count"), 0.0) > 0
                 ][:10]
                 quick_wins_rows = [
                     {"Block": "Quick Wins", "URL": r.get("URL"), "Issue": "Missing meta on high-impression page"}
@@ -1120,20 +1184,21 @@ async def main() -> None:
                 ]
                 _to_excel_safe(pd.DataFrame(legend_rows), writer, "Glossary & Legend", index=False)
                 crawl_inlinks_map: defaultdict[str, set[str]] = defaultdict(set)
-                crawled_set_main = set(main_df["URL"].dropna().tolist())
+                crawled_set_main = {_normalize_url_key(u) for u in main_df["URL"].dropna().tolist()}
                 for row in extra_rows:
-                    source = row.get("URL")
+                    source = _normalize_url_key(row.get("URL"))
                     for target in row.get("Internal Links List", []):
-                        if target in crawled_set_main:
-                            crawl_inlinks_map[target].add(source)
+                        target_norm = _normalize_url_key(target)
+                        if target_norm in crawled_set_main:
+                            crawl_inlinks_map[target_norm].add(source)
                 graph_rows = [
                     {
                         "URL": url_item,
-                        "Inlinks Count": len(inlinks := sorted(list(crawl_inlinks_map.get(url_item, set())))),
+                        "Inlinks Count": len(inlinks := sorted(list(crawl_inlinks_map.get(_normalize_url_key(url_item), set())))),
                         "Inlinks URLs": " | ".join(inlinks) if inlinks else None,
                         "Orphan Candidate": len(inlinks) == 0,
-                        "Click Depth": next((e.get("Click Depth") for e in extra_rows if e.get("URL") == url_item), None),
-                        "Internal PageRank": next((e.get("Internal PageRank") for e in extra_rows if e.get("URL") == url_item), 0.0),
+                        "Click Depth": next((e.get("Click Depth") for e in extra_rows if _normalize_url_key(e.get("URL")) == _normalize_url_key(url_item)), None),
+                        "Internal PageRank": next((e.get("Internal PageRank") for e in extra_rows if _normalize_url_key(e.get("URL")) == _normalize_url_key(url_item)), 0.0),
                     }
                     for url_item in main_df["URL"].dropna().tolist()
                 ]
@@ -1141,10 +1206,10 @@ async def main() -> None:
                 sitemap_rows = []
                 if sitemap_meta:
                     for sitemap_url, meta in sitemap_meta.items():
-                        matched = next((row for row in extra_rows if str(row.get("URL", "")).rstrip("/") == str(sitemap_url).rstrip("/")), None)
+                        matched = next((row for row in extra_rows if _normalize_url_key(row.get("URL", "")) == _normalize_url_key(sitemap_url)), None)
                         final_url = matched.get("Final URL") if matched else None
                         status_code = matched.get("Status Code") if matched else None
-                        sitemap_rows.append({"Sitemap URL": sitemap_url, "Final URL": final_url, "Status Code": status_code, "In Sitemap but Non-200": status_code != 200, "Sitemap URL Redirects": (matched.get("Redirect Chain Length", 0) > 0 if matched else None), "In Sitemap but Canonicalized Elsewhere": (matched.get("Canonical Type") == "cross-canonical" if matched else None), "Missing <lastmod>": not bool(meta.get("lastmod")), "Missing <changefreq>": not bool(meta.get("changefreq")), "Missing <priority>": not bool(meta.get("priority")), "Sitemap <lastmod>": meta.get("lastmod"), "Sitemap <changefreq>": meta.get("changefreq"), "Sitemap <priority>": meta.get("priority")})
+                        sitemap_rows.append({"Sitemap URL": sitemap_url, "Final URL": final_url, "Status Code": status_code, "Found via Crawl": bool(matched), "Found via Sitemap": True, "Discovery Source": "Both" if matched else "Sitemap", "In Sitemap but Non-200": status_code != 200, "Sitemap URL Redirects": (matched.get("Redirect Chain Length", 0) > 0 if matched else None), "In Sitemap but Canonicalized Elsewhere": (matched.get("Canonical Type") == "cross-canonical" if matched else None), "Missing <lastmod>": not bool(meta.get("lastmod")), "Missing <changefreq>": not bool(meta.get("changefreq")), "Missing <priority>": not bool(meta.get("priority")), "Sitemap <lastmod>": meta.get("lastmod"), "Sitemap <changefreq>": meta.get("changefreq"), "Sitemap <priority>": meta.get("priority"), "Source Sitemap": meta.get("source_sitemap")})
                 _to_excel_safe(pd.DataFrame(sitemap_rows), writer, "SitemapQA", index=False)
                 preferred_first_tabs = [
                     "Dashboard",

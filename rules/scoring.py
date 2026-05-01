@@ -6,7 +6,11 @@ from typing import Any
 
 def score_url_health(
     row: dict[str, Any], summary_rules: list[tuple[str, str, Callable[[dict[str, Any]], bool]]]
-) -> tuple[int, str, str, dict[str, list[str]]]:
+) -> tuple[Any, str, str, dict[str, list[str]]]:
+    extraction_state = str(row.get("Extraction State") or "").strip().lower()
+    if extraction_state != "complete":
+        return None, "Unmeasured", "UNMEASURED", {"Critical": [], "Warning": [], "Observation": []}
+
     matched = {"Critical": [], "Warning": [], "Observation": []}
     for severity, issue_name, rule_fn in summary_rules:
         try:

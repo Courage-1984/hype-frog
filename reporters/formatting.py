@@ -56,15 +56,33 @@ def _header_map(worksheet) -> dict[str, int]:
 
 
 def ensure_auto_filter(worksheet) -> None:
-    # Excel repair risk: avoid auto-filter on header-only ranges.
-    if worksheet.max_row >= 2 and worksheet.max_column >= 1:
-        worksheet.auto_filter.ref = f"A1:{get_column_letter(worksheet.max_column)}{worksheet.max_row}"
+    # Nuclear safety: fragile, tiny sheets are more likely to trigger view repairs.
+    if worksheet.title not in {"Main", "Dashboard"} and (
+        worksheet.max_row < 10 or worksheet.max_column < 5
+    ):
+        worksheet.auto_filter.ref = None
+        return
+
+    header_row = 2 if worksheet.title == "Content Optimization Hub" else 1
+    if worksheet.max_row >= header_row + 1 and worksheet.max_column >= 1:
+        worksheet.auto_filter.ref = (
+            f"A{header_row}:{get_column_letter(worksheet.max_column)}{worksheet.max_row}"
+        )
+    else:
+        worksheet.auto_filter.ref = None
 
 
 def ensure_freeze_header(worksheet) -> None:
+    if worksheet.title not in {"Main", "Dashboard"} and (
+        worksheet.max_row < 10 or worksheet.max_column < 5
+    ):
+        worksheet.freeze_panes = None
+        return
     if worksheet.max_row > 1 and worksheet.max_column >= 1:
         # Keep sheetViews simple and stable across Excel versions.
         worksheet.freeze_panes = "A2"
+    else:
+        worksheet.freeze_panes = None
 
 
 def apply_global_conditional_formatting(worksheet) -> None:

@@ -5,6 +5,8 @@ import re
 from datetime import datetime
 from urllib.parse import urlparse
 
+from core.url_normalization import normalize_url
+
 
 def readability_flesch(words: int, sentences: int) -> float | None:
     if words <= 0 or sentences <= 0:
@@ -14,6 +16,10 @@ def readability_flesch(words: int, sentences: int) -> float | None:
 
 def normalize_text_hash(value: str | None) -> str:
     return re.sub(r"\s+", " ", (value or "").strip().lower())
+
+
+def normalize_url_key(url: object, keep_query: bool = True) -> str:
+    return normalize_url(url, keep_query=keep_query)
 
 
 def status_class(status_code: object) -> str:

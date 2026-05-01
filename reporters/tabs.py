@@ -8,6 +8,7 @@ import pandas as pd
 
 from checkpoint.cache import AuditCache
 from rules import owner_for_issue, workflow_metrics_for_issue
+from utils import normalize_url_key
 
 _ILLEGAL_XLSX_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
 _INVALID_SHEET_CHARS_RE = re.compile(r"[:\\/*?\[\]]")
@@ -27,7 +28,9 @@ def _sanitize_excel_value(value: Any) -> Any:
     return value
 
 
-def load_cached_rows(cache: AuditCache) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def load_cached_rows(
+    cache: AuditCache,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     main_rows: list[dict[str, Any]] = []
     extra_rows: list[dict[str, Any]] = []
     for result in cache.iter_results():
@@ -36,12 +39,16 @@ def load_cached_rows(cache: AuditCache) -> tuple[list[dict[str, Any]], list[dict
     return main_rows, extra_rows
 
 
-def build_core_dataframes(cache: AuditCache) -> tuple[pd.DataFrame, pd.DataFrame, list[dict[str, Any]], list[dict[str, Any]]]:
+def build_core_dataframes(
+    cache: AuditCache,
+) -> tuple[pd.DataFrame, pd.DataFrame, list[dict[str, Any]], list[dict[str, Any]]]:
     main_rows, extra_rows = load_cached_rows(cache)
     return pd.DataFrame(main_rows), pd.DataFrame(extra_rows), main_rows, extra_rows
 
 
-def write_dict_rows_sheet(writer, sheet_name: str, columns: list[str], rows: list[dict[str, Any]]) -> None:
+def write_dict_rows_sheet(
+    writer, sheet_name: str, columns: list[str], rows: list[dict[str, Any]]
+) -> None:
     ws = writer.book.create_sheet(title=_safe_sheet_name(sheet_name))
     writer.sheets[sheet_name] = ws
     ws.append(columns)
@@ -62,19 +69,15 @@ def _sanitize_excel_url(url_value: Any) -> str:
         cleaned_path = quote(unquote(parts.path), safe="/:@-._~!$&()*+,;=")
         cleaned_query = quote(unquote(parts.query), safe="=&:@-._~!$()*+,;/?")
         cleaned_fragment = quote(unquote(parts.fragment), safe=":@-._~!$&()*+,;=/?")
-        return urlunsplit((parts.scheme, parts.netloc, cleaned_path, cleaned_query, cleaned_fragment))
+        return urlunsplit(
+            (parts.scheme, parts.netloc, cleaned_path, cleaned_query, cleaned_fragment)
+        )
     except Exception:
         return raw
 
 
 def _normalize_url_for_match(url_value: Any) -> str:
-    cleaned = _sanitize_excel_url(url_value)
-    if not cleaned:
-        return ""
-    if "?" in cleaned:
-        base, query = cleaned.split("?", 1)
-        return f"{base.rstrip('/')}?{query}"
-    return cleaned.rstrip("/")
+    return normalize_url_key(_sanitize_excel_url(url_value))
 
 
 def _fallback_keyword(url: str, h1_text: str) -> str:
@@ -120,7 +123,9 @@ def build_fixplan_rows(
     }
     for severity, issue_name, _ in summary_rules:
         affected = [
-            r for r in extra_rows if issue_name in str(r.get("Matched Issues") or "").split(" | ")
+            r
+            for r in extra_rows
+            if issue_name in str(r.get("Matched Issues") or "").split(" | ")
         ]
         root_cause, recommended_fix = root_cause_resolver(issue_name)
         effort = default_effort_by_severity.get(severity, "S")
@@ -128,15 +133,40 @@ def build_fixplan_rows(
         reference_tab = (
             "Indexability"
             if ("Canonical" in issue_name or "Noindex" in issue_name)
-            else "Links"
-            if ("Links" in issue_name or "Anchor" in issue_name)
-            else "AEO"
-            if ("AEO" in issue_name or "Question" in issue_name or "FAQ" in issue_name or "Answer" in issue_name)
-            else "Technical"
+            else (
+                "Links"
+                if ("Links" in issue_name or "Anchor" in issue_name)
+                else (
+                    "AEO"
+                    if (
+                        "AEO" in issue_name
+                        or "Question" in issue_name
+                        or "FAQ" in issue_name
+                        or "Answer" in issue_name
+                    )
+                    else "Technical"
+                )
+            )
         )
         affected_urls = [str(r.get("URL") or "") for r in affected if r.get("URL")]
-        systemic_issue_tokens = ("CWV", "Schema", "Robots", "Compression", "Cache-Control", "ETag", "Canonical", "Redirect")
-        resolution_type = "Global Template" if any(token.lower() in issue_name.lower() for token in systemic_issue_tokens) or len(affected_urls) > 10 else "Manual Content"
+        systemic_issue_tokens = (
+            "CWV",
+            "Schema",
+            "Robots",
+            "Compression",
+            "Cache-Control",
+            "ETag",
+            "Canonical",
+            "Redirect",
+        )
+        resolution_type = (
+            "Global Template"
+            if any(
+                token.lower() in issue_name.lower() for token in systemic_issue_tokens
+            )
+            or len(affected_urls) > 10
+            else "Manual Content"
+        )
         rows.append(
             {
                 "Category": "AEO" if issue_name in aeo_issue_names else "SEO",
@@ -160,7 +190,11 @@ def build_fixplan_rows(
                 "Status": status_by_severity.get(severity, "To Do"),
                 "Verified By": "",
                 "Date Resolved": "",
-                "Revenue Risk": "High Risk" if severity == "Critical" and workflow["Priority Score"] >= 100 else "Medium Risk" if severity == "Warning" else "Monitor",
+                "Revenue Risk": (
+                    "High Risk"
+                    if severity == "Critical" and workflow["Priority Score"] >= 100
+                    else "Medium Risk" if severity == "Warning" else "Monitor"
+                ),
                 "Agency Owner": owner_for_issue(issue_name, severity),
                 "Jump to Details": "Open in Main Tab",
                 "Est. Sprint Points": workflow["Est. Sprint Points"],
@@ -178,7 +212,13 @@ def write_snippet_candidates_chunked(
     sheet_name: str = "SnippetCandidates",
     chunk_size: int = 500,
 ) -> None:
-    columns = ["URL", "Heading (Question)", "Snippet (Answer)", "Word Count", "Snippet Preview Mockup"]
+    columns = [
+        "URL",
+        "Heading (Question)",
+        "Snippet (Answer)",
+        "Word Count",
+        "Snippet Preview Mockup",
+    ]
     ws = writer.book.create_sheet(title=_safe_sheet_name(sheet_name))
     writer.sheets[sheet_name] = ws
     ws.append(columns)
@@ -207,12 +247,17 @@ def build_content_optimization_hub_rows(
     extra_rows: list[dict[str, Any]],
     fixplan_rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    main_by_url = {_normalize_url_for_match(r.get("URL")): r for r in main_rows if r.get("URL")}
-    extra_by_url = {_normalize_url_for_match(r.get("URL")): r for r in extra_rows if r.get("URL")}
+    main_by_url = {
+        _normalize_url_for_match(r.get("URL")): r for r in main_rows if r.get("URL")
+    }
+    extra_by_url = {
+        _normalize_url_for_match(r.get("URL")): r for r in extra_rows if r.get("URL")
+    }
     manual_content_urls = {
         _normalize_url_for_match(r.get("URL"))
         for r in fixplan_rows
-        if str(r.get("Resolution Type") or "").strip().lower() == "manual content" and _normalize_url_for_match(r.get("URL"))
+        if str(r.get("Resolution Type") or "").strip().lower() == "manual content"
+        and _normalize_url_for_match(r.get("URL"))
     }
     content_issue_tokens = (
         "title",
@@ -249,11 +294,17 @@ def build_content_optimization_hub_rows(
             parsed = urlparse(url)
             if parsed.scheme and parsed.netloc:
                 elementor_link = f"{parsed.scheme}://{parsed.netloc}/wp-admin/post.php?post={post_id}&action=elementor"
-        target_keywords = str(e.get("Meta Keywords") or m.get("Meta Keywords") or "").strip()
+        target_keywords = str(
+            e.get("Meta Keywords") or m.get("Meta Keywords") or ""
+        ).strip()
         if not target_keywords:
-            target_keywords = _fallback_keyword(url, str(e.get("Current H-Tag Structure") or m.get("H1 Content") or ""))
+            target_keywords = _fallback_keyword(
+                url, str(e.get("Current H-Tag Structure") or m.get("H1 Content") or "")
+            )
         raw_title = str(m.get("Title") or "").strip().lower()
-        title_pattern = re.sub(r"\d+", "{n}", raw_title)[:24] if raw_title else "untitled"
+        title_pattern = (
+            re.sub(r"\d+", "{n}", raw_title)[:24] if raw_title else "untitled"
+        )
         seg = [s for s in urlparse(url).path.strip("/").split("/") if s]
         cluster_id = f"{(seg[0] if seg else 'home')}-{title_pattern}".replace(" ", "-")
         cluster_counts[cluster_id] = cluster_counts.get(cluster_id, 0) + 1
@@ -269,13 +320,18 @@ def build_content_optimization_hub_rows(
                 "Current Title": str(m.get("Title") or "").strip() or "MISSING TITLE",
                 "Proposed Title (50-60 Chars)": "",
                 "Title Count": "",
-                "Current Meta Desc": str(m.get("Meta Description") or "").strip() or "MISSING DESCRIPTION",
+                "Current Meta Desc": str(m.get("Meta Description") or "").strip()
+                or "MISSING DESCRIPTION",
                 "Proposed Meta Desc (120-160 Chars)": "",
                 "Desc Count": "",
-                "Current H-Tag Structure": str(e.get("Current H-Tag Structure") or m.get("H1 Content") or "").strip(),
+                "Current H-Tag Structure": str(
+                    e.get("Current H-Tag Structure") or m.get("H1 Content") or ""
+                ).strip(),
                 "Current OG-Image URL": _sanitize_excel_url(e.get("OG Image")),
                 "OG Image Preview": "",
-                "Current Page Copy Snippet": str(e.get("Current Page Copy Snippet") or "").strip(),
+                "Current Page Copy Snippet": str(
+                    e.get("Current Page Copy Snippet") or ""
+                ).strip(),
                 "Social Share Note": "",
                 "Proposed H-Tag Fixes": "",
                 "AEO Answer Block Draft": "",
@@ -287,6 +343,10 @@ def build_content_optimization_hub_rows(
         )
     for row in draft_rows:
         row["Assigned Owner"] = "Unassigned"
-        row["Batch Ready"] = "Yes" if cluster_counts.get(str(row.get("Content Cluster ID") or ""), 0) >= 5 else "No"
+        row["Batch Ready"] = (
+            "Yes"
+            if cluster_counts.get(str(row.get("Content Cluster ID") or ""), 0) >= 5
+            else "No"
+        )
         rows.append(row)
     return rows
