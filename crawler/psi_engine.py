@@ -6,6 +6,9 @@ from typing import Any
 from urllib.parse import quote
 
 import aiohttp
+from core import get_logger
+
+logger = get_logger(__name__)
 
 
 def get_psi_api_key() -> str | None:
@@ -82,32 +85,47 @@ async def fetch_psi_metrics_batch(
 ) -> dict[str, dict[str, Any]]:
     api_key = get_psi_api_key()
     if not api_key:
+        logger.warning("PSI API key missing. Skipping PSI enrichment.")
         return {}
 
     unique_urls = [u for u in dict.fromkeys([str(url or "").strip() for url in urls]) if u]
     if max_urls is not None and max_urls > 0:
         unique_urls = unique_urls[:max_urls]
+    if not unique_urls:
+        logger.info("PSI batch skipped: no URLs provided.")
+        return {}
 
     semaphore = asyncio.Semaphore(max_parallel)
     results: dict[str, dict[str, Any]] = {}
+    completed = 0
+    total = len(unique_urls)
+    progress_lock = asyncio.Lock()
+
+    logger.info("PSI batch started: %s URLs (max_parallel=%s).", total, max_parallel)
 
     async def _worker(target_url: str) -> None:
+        nonlocal completed
         async with semaphore:
             mobile = await _fetch_strategy(session, target_url, api_key, "mobile")
             desktop = await _fetch_strategy(session, target_url, api_key, "desktop")
             if not mobile and not desktop:
-                return
-            results[target_url] = {
-                "URL": target_url,
-                "Desktop Score": desktop.get("score", 0) if desktop else 0,
-                "Mobile Score": mobile.get("score", 0) if mobile else 0,
-                "Mobile LCP": mobile.get("lcp_seconds", 0.0) if mobile else 0.0,
-                "Mobile CLS": mobile.get("cls", 0.0) if mobile else 0.0,
-                "Mobile TTFB": round(float(mobile.get("ttfb_seconds") or 0.0), 3) if mobile else 0.0,
-                "Desktop LCP": desktop.get("lcp_seconds", 0.0) if desktop else 0.0,
-                "Desktop CLS": desktop.get("cls", 0.0) if desktop else 0.0,
-                "Desktop TTFB": round(float(desktop.get("ttfb_seconds") or 0.0), 3) if desktop else 0.0,
-            }
+                logger.warning("PSI unavailable for URL: %s", target_url)
+            else:
+                results[target_url] = {
+                    "URL": target_url,
+                    "Desktop Score": desktop.get("score", 0) if desktop else 0,
+                    "Mobile Score": mobile.get("score", 0) if mobile else 0,
+                    "Mobile LCP": mobile.get("lcp_seconds", 0.0) if mobile else 0.0,
+                    "Mobile CLS": mobile.get("cls", 0.0) if mobile else 0.0,
+                    "Mobile TTFB": round(float(mobile.get("ttfb_seconds") or 0.0), 3) if mobile else 0.0,
+                    "Desktop LCP": desktop.get("lcp_seconds", 0.0) if desktop else 0.0,
+                    "Desktop CLS": desktop.get("cls", 0.0) if desktop else 0.0,
+                    "Desktop TTFB": round(float(desktop.get("ttfb_seconds") or 0.0), 3) if desktop else 0.0,
+                }
+            async with progress_lock:
+                completed += 1
+                logger.info("PSI progress: %s/%s URLs processed.", completed, total)
 
     await asyncio.gather(*[_worker(url) for url in unique_urls])
+    logger.info("PSI batch complete: %s/%s URLs returned metrics.", len(results), total)
     return results

@@ -1,2 +1,13 @@
 output/
 client_secrets.json
+.env
+
+# Local secrets and auth artifacts
+token.json
+
+# Runtime logs
+logs/
+
+# Python bytecode/cache artifacts
+__pycache__/
+*.py[cod]
