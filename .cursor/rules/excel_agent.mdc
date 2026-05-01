@@ -9,9 +9,15 @@ alwaysApply: false
 - Treat workbook integrity as highest priority for client-facing exports.
 - When disabling frozen panes (`freeze_panes = None`), always clear orphaned sheet selections:
   - `worksheet.views.sheetView[0].selection = []`
+- Ghost pane selection guard (critical):
+  - Selection panes must match existing split panes.
+  - If `xSplit == 0`, remove selections with pane `topRight` or `bottomRight`.
+  - If `ySplit == 0`, remove selections with pane `bottomLeft` or `bottomRight`.
+  - Never allow `bottomRight` unless both x/y splits exist.
 - Keep Nuclear view-state guardrails intact:
   - For non-`Main`/`Dashboard` sheets with `max_row < 10` or `max_column < 5`, disable freeze panes and autofilter.
 - Never inject non-numeric strings into columns that have numeric conditional formatting rules.
   - Use `None`/blank in numeric fields when data is unmeasured.
 - Sanitize all outgoing string cell values to remove control/non-printable characters before writing with pandas/openpyxl.
 - Validate TOC and internal hyperlinks against actual workbook sheet names and escaped quote handling.
+- Skill: whenever a new sheet/tab is added, automatically update TOC generation and enforce Nuclear view-state guardrails for that sheet.
