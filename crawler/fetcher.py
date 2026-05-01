@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 from config import (
     CONNECT_TIMEOUT_SECONDS,
     DELAY_BETWEEN_REQUESTS,
+    PLAYWRIGHT_MAX_SESSIONS,
     MAX_RETRIES,
     READ_TIMEOUT_SECONDS,
     REQUEST_JITTER_SECONDS,
@@ -33,6 +34,7 @@ from extractors import (
 from utils import image_extension, looks_generic_image_filename, normalize_url_key, readability_flesch, status_class, url_depth, word_count_band
 
 logger = get_logger(__name__)
+_PLAYWRIGHT_SEMAPHORE = asyncio.Semaphore(max(1, int(PLAYWRIGHT_MAX_SESSIONS)))
 
 
 async def _fetch_rendered_html(
@@ -40,77 +42,78 @@ async def _fetch_rendered_html(
     render_wait_ms: int,
     selector_wait_ms: int,
 ) -> tuple[str | None, str, str, dict[str, str] | None]:
-    try:
-        probe = await asyncio.create_subprocess_exec(
-            "python",
-            "-c",
-            "print('ok')",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        await probe.communicate()
-    except NotImplementedError:
-        logger.warning(
-            "Accurate mode requested but this asyncio event loop cannot spawn subprocesses. "
-            "Falling back to HTTP mode."
-        )
-        return None, "raw_http", "partial", None
+    async with _PLAYWRIGHT_SEMAPHORE:
+        try:
+            probe = await asyncio.create_subprocess_exec(
+                "python",
+                "-c",
+                "print('ok')",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await probe.communicate()
+        except NotImplementedError:
+            logger.warning(
+                "Accurate mode requested but this asyncio event loop cannot spawn subprocesses. "
+                "Falling back to HTTP mode."
+            )
+            return None, "raw_http", "partial", None
 
-    try:
-        from playwright.async_api import Error as PlaywrightError
-        from playwright.async_api import TimeoutError as PlaywrightTimeoutError
-        from playwright.async_api import async_playwright
-    except Exception:
-        logger.warning(
-            "Accurate mode requested but Playwright is unavailable. "
-            "Install with: pip install playwright && playwright install chromium"
-        )
-        return None, "raw_http", "partial", None
+        try:
+            from playwright.async_api import Error as PlaywrightError
+            from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+            from playwright.async_api import async_playwright
+        except Exception:
+            logger.warning(
+                "Accurate mode requested but Playwright is unavailable. "
+                "Install with: pip install playwright && playwright install chromium"
+            )
+            return None, "raw_http", "partial", None
 
-    browser = None
-    try:
-        async with async_playwright() as p:
-            try:
-                browser = await p.chromium.launch(headless=True)
-            except Exception:
-                logger.warning("Chromium browser binaries are missing. Run: playwright install chromium")
-                return None, "raw_http", "partial", None
-            context = await browser.new_context()
-            page = await context.new_page()
-            try:
-                nav_response = await page.goto(target_url, wait_until="domcontentloaded", timeout=max(3000, render_wait_ms))
+        browser = None
+        try:
+            async with async_playwright() as p:
                 try:
-                    await page.wait_for_load_state("networkidle", timeout=max(1000, render_wait_ms))
-                except PlaywrightTimeoutError:
-                    # Keep current DOM snapshot if network-idle is noisy.
-                    pass
-                extraction_state = "complete"
-                selectors = ["title", "meta[name='description']", "link[rel='canonical']", "script[type='application/ld+json']"]
-                for selector in selectors:
+                    browser = await p.chromium.launch(headless=True)
+                except Exception:
+                    logger.warning("Chromium browser binaries are missing. Run: playwright install chromium")
+                    return None, "raw_http", "partial", None
+                context = await browser.new_context()
+                page = await context.new_page()
+                try:
+                    nav_response = await page.goto(target_url, wait_until="domcontentloaded", timeout=max(3000, render_wait_ms))
                     try:
-                        await page.wait_for_selector(selector, timeout=max(1000, selector_wait_ms))
+                        await page.wait_for_load_state("networkidle", timeout=max(1000, render_wait_ms))
                     except PlaywrightTimeoutError:
-                        extraction_state = "partial"
-                html = await page.content()
-                response_headers = dict(nav_response.headers) if nav_response else {}
-                await context.close()
-                return html, "rendered_browser", extraction_state, response_headers
-            except PlaywrightTimeoutError:
-                html = await page.content()
-                response_headers = dict(nav_response.headers) if "nav_response" in locals() and nav_response else {}
-                await context.close()
-                return html, "rendered_browser", "partial", response_headers
-            except PlaywrightError:
-                await context.close()
-                return None, "raw_http", "partial", None
-    except Exception:
-        return None, "raw_http", "partial", None
-    finally:
-        if browser:
-            try:
-                await browser.close()
-            except Exception:
-                pass
+                        # Keep current DOM snapshot if network-idle is noisy.
+                        pass
+                    extraction_state = "complete"
+                    selectors = ["title", "meta[name='description']", "link[rel='canonical']", "script[type='application/ld+json']"]
+                    for selector in selectors:
+                        try:
+                            await page.wait_for_selector(selector, timeout=max(1000, selector_wait_ms))
+                        except PlaywrightTimeoutError:
+                            extraction_state = "partial"
+                    html = await page.content()
+                    response_headers = dict(nav_response.headers) if nav_response else {}
+                    await context.close()
+                    return html, "rendered_browser", extraction_state, response_headers
+                except PlaywrightTimeoutError:
+                    html = await page.content()
+                    response_headers = dict(nav_response.headers) if "nav_response" in locals() and nav_response else {}
+                    await context.close()
+                    return html, "rendered_browser", "partial", response_headers
+                except PlaywrightError:
+                    await context.close()
+                    return None, "raw_http", "partial", None
+        except Exception:
+            return None, "raw_http", "partial", None
+        finally:
+            if browser:
+                try:
+                    await browser.close()
+                except Exception:
+                    pass
 
 
 def _init_rows(url: str, sitemap_meta: dict[str, dict[str, Any]] | None) -> tuple[dict[str, Any], dict[str, Any]]:
