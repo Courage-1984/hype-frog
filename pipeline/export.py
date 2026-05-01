@@ -6,14 +6,17 @@ import re
 import numpy as np
 import pandas as pd
 
-_ILLEGAL_XLSX_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
+_ILLEGAL_XLSX_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]")
 _INVALID_SHEET_CHARS_RE = re.compile(r"[:\\/*?\[\]]")
 
 
 def sanitize_excel_string(value: object) -> object:
     if not isinstance(value, str):
         return value
-    return _ILLEGAL_XLSX_CHARS_RE.sub("", value)
+    # Keep printable text and common whitespace, strip control/non-printables
+    # that can corrupt worksheet XML.
+    cleaned = _ILLEGAL_XLSX_CHARS_RE.sub("", value)
+    return "".join(ch for ch in cleaned if ch.isprintable() or ch in {"\n", "\r", "\t"})
 
 
 def sanitize_excel_value(value: object) -> object:

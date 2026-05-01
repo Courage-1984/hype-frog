@@ -72,17 +72,26 @@ def ensure_auto_filter(worksheet) -> None:
         worksheet.auto_filter.ref = None
 
 
+def _clear_orphaned_selection(worksheet) -> None:
+    try:
+        worksheet.views.sheetView[0].selection = []
+    except Exception:
+        pass
+
+
 def ensure_freeze_header(worksheet) -> None:
     if worksheet.title not in {"Main", "Dashboard"} and (
         worksheet.max_row < 10 or worksheet.max_column < 5
     ):
         worksheet.freeze_panes = None
+        _clear_orphaned_selection(worksheet)
         return
     if worksheet.max_row > 1 and worksheet.max_column >= 1:
         # Keep sheetViews simple and stable across Excel versions.
         worksheet.freeze_panes = "A2"
     else:
         worksheet.freeze_panes = None
+        _clear_orphaned_selection(worksheet)
 
 
 def apply_global_conditional_formatting(worksheet) -> None:

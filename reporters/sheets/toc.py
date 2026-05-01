@@ -12,6 +12,15 @@ def apply_workbook_toc_and_links(
     std_white: str,
     std_blue: str,
 ) -> None:
+    def _sheet_link_target(name: str) -> str:
+        return str(name).replace("'", "''")
+
+    def _clear_orphaned_selection(ws) -> None:
+        try:
+            ws.views.sheetView[0].selection = []
+        except Exception:
+            pass
+
     if debug_excel_isolation_mode:
         return
     wb = writer.book
@@ -64,7 +73,7 @@ def apply_workbook_toc_and_links(
             if sheet_name == "Table of Contents":
                 continue
             toc_ws[f"A{row_ptr}"] = sheet_name
-            toc_ws[f"B{row_ptr}"] = f'=HYPERLINK("#\'{sheet_name}\'!A1","Open")'
+            toc_ws[f"B{row_ptr}"] = f'=HYPERLINK("#\'{_sheet_link_target(sheet_name)}\'!A1","Open")'
             toc_ws[f"C{row_ptr}"] = toc_descriptions.get(
                 sheet_name, "Detailed URL diagnostic data."
             )
@@ -144,15 +153,19 @@ def apply_workbook_toc_and_links(
         ws = wb[tab_name]
         if disable_non_core_freeze_panes and tab_name not in {"Main", "Dashboard"}:
             ws.freeze_panes = None
+            _clear_orphaned_selection(ws)
             continue
         if tab_name not in {"Main", "Dashboard"} and (
             ws.max_row < 10 or ws.max_column < 5
         ):
             ws.freeze_panes = None
             ws.auto_filter.ref = None
+            _clear_orphaned_selection(ws)
             continue
         if tab_name == "Content Optimization Hub":
             ws.freeze_panes = "F3" if ws.max_row >= 3 and ws.max_column >= 6 else None
+            if ws.freeze_panes is None:
+                _clear_orphaned_selection(ws)
         elif tab_name in {
             "Main",
             "Technical",
@@ -180,3 +193,5 @@ def apply_workbook_toc_and_links(
             "FixPlan",
         }:
             ws.freeze_panes = "B2" if ws.max_row >= 2 and ws.max_column >= 2 else None
+            if ws.freeze_panes is None:
+                _clear_orphaned_selection(ws)

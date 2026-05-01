@@ -1,0 +1,17 @@
+---
+description: Use this when modifying Excel output, formatting, or reporters.
+globs: reporters/**/*.py
+alwaysApply: false
+---
+
+# Excel Reporter Safety Rules
+
+- Treat workbook integrity as highest priority for client-facing exports.
+- When disabling frozen panes (`freeze_panes = None`), always clear orphaned sheet selections:
+  - `worksheet.views.sheetView[0].selection = []`
+- Keep Nuclear view-state guardrails intact:
+  - For non-`Main`/`Dashboard` sheets with `max_row < 10` or `max_column < 5`, disable freeze panes and autofilter.
+- Never inject non-numeric strings into columns that have numeric conditional formatting rules.
+  - Use `None`/blank in numeric fields when data is unmeasured.
+- Sanitize all outgoing string cell values to remove control/non-printable characters before writing with pandas/openpyxl.
+- Validate TOC and internal hyperlinks against actual workbook sheet names and escaped quote handling.
