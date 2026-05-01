@@ -23,6 +23,7 @@ from config import (
     TIMEOUT_SECONDS,
     DELAY_BETWEEN_REQUESTS,
 )
+from core import configure_logging, get_logger, get_user_config
 from crawler import (
     check_url_status_light_limited,
     create_session,
@@ -31,7 +32,7 @@ from crawler import (
     fetch_and_parse,
     parse_sitemap,
 )
-from models import CrawlResult
+from models import CrawlResult, harden_page_row_metrics
 from reporters import adjust_sheet_format, apply_tab_hyperlinks
 from reporters.tabs import (
     build_content_optimization_hub_rows,
@@ -48,6 +49,8 @@ from rules import (
     workflow_metrics_for_issue,
 )
 from utils import build_output_filename, normalize_text_hash, sanitize_filename_part
+
+logger = get_logger(__name__)
 
 
 _ILLEGAL_XLSX_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
@@ -180,35 +183,10 @@ def _value_or_default(value: object, default: float = 0.0) -> float:
 
 
 async def main() -> None:
+    configure_logging()
     load_dotenv()
-    print("=== Python Technical SEO Auditor ===")
-    target_input = input("Enter the target URL or Sitemap: ").strip()
-    max_urls_raw = input("Enter Max URLs to crawl (leave blank for no limit): ").strip()
-    psi_limit_raw = input(
-        "Enter Max URLs for PageSpeed Insights check (PSI is slow; enter a number to limit, or leave blank to check all): "
-    ).strip()
-    high_value_slugs_raw = input(
-        "Enter high-value URL substrings for this client, comma-separated (e.g., pricing, services). Enter 0 or leave blank to skip: "
-    ).strip()
-    max_urls: int | None = None
-    max_psi_urls: int | None = None
-    high_value_slugs: list[str] = []
-    if max_urls_raw:
-        try:
-            parsed_limit = int(max_urls_raw)
-            if parsed_limit > 0:
-                max_urls = parsed_limit
-        except ValueError:
-            print(f"Invalid max URL limit '{max_urls_raw}'. Proceeding with no limit.")
-    if psi_limit_raw:
-        try:
-            parsed_psi = int(psi_limit_raw)
-            if parsed_psi > 0:
-                max_psi_urls = parsed_psi
-        except ValueError:
-            print(f"Invalid PSI limit '{psi_limit_raw}'. Checking all crawled URLs.")
-    if high_value_slugs_raw and high_value_slugs_raw.strip() != "0":
-        high_value_slugs = [slug.strip().lower() for slug in high_value_slugs_raw.split(",") if slug.strip()]
+    logger.info("=== Python Technical SEO Auditor ===")
+    target_input, max_urls, max_psi_urls, high_value_slugs = get_user_config()
     urls: list[str] = []
     sitemap_meta: dict[str, dict[str, str | None]] = {}
     workers = MAX_WORKERS
@@ -226,11 +204,11 @@ async def main() -> None:
                 urls = [target_input]
                 source_label = parsed_target.netloc
             else:
-                print("Invalid target input. Provide a full URL or a sitemap XML URL.")
+                logger.error("Invalid target input. Provide a full URL or a sitemap XML URL.")
                 return
 
         if not urls:
-            print("No URLs to crawl. Exiting.")
+            logger.error("No URLs to crawl. Exiting.")
             return
 
         original_count = len(urls)
@@ -265,8 +243,8 @@ async def main() -> None:
         os.makedirs(output_dir, exist_ok=True)
 
         print(f"Output file: {output_filename}")
-        print(f"\nStarting crawl of {len(urls)} URLs...")
-        print(
+        logger.info("Starting crawl of %s URLs...", len(urls))
+        logger.info(
             f"Max Workers: {workers} | Delay: {request_delay}s | "
             f"Retries: {MAX_RETRIES} | Timeout: {TIMEOUT_SECONDS}s | "
             f"Mode: {'Full Suite' if full_suite else 'Main Only'}"
@@ -324,7 +302,7 @@ async def main() -> None:
                     pending_batch = []
                 checkpoint_results = cache.all_results()
                 save_checkpoint(checkpoint_file, checkpoint_results, urls, checkpoint_completed_urls)
-                print(f"Checkpoint saved: {done_count}/{total_urls} -> {checkpoint_file}")
+                logger.info("Checkpoint saved: %s/%s -> %s", done_count, total_urls, checkpoint_file)
         if pending_batch:
             cache.upsert_results(pending_batch)
         if checkpoint_every > 0:
@@ -337,7 +315,7 @@ async def main() -> None:
         if gsc_metrics:
             print(f"Merged GSC metrics for last 30 days: {len(gsc_metrics)} URL records.")
         else:
-            print("GSC metrics unavailable (missing credentials, property mismatch, or no data).")
+            logger.warning("GSC metrics unavailable (missing credentials, property mismatch, or no data).")
 
         psi_map = await fetch_psi_metrics_batch(
             session,
@@ -379,6 +357,9 @@ async def main() -> None:
                 row["GSC Impressions"] = 0.0
                 row["GSC CTR"] = 0.0
                 row["GSC Avg Position"] = 0.0
+
+            # Enforce strict numeric defaults for report-bound PSI/GSC fields.
+            row.update(harden_page_row_metrics(row))
 
         status_by_url: dict[str, object] = {}
         for row in extra_rows:
@@ -1196,7 +1177,7 @@ async def main() -> None:
                     wb.move_sheet(wb["Glossary & Legend"], offset=len(wb.sheetnames) - 1 - wb.index(wb["Glossary & Legend"]))
                 for sname in ["Dashboard", "Content Optimization Hub", "Quick Reference Guide", "FixPlan", "Glossary & Legend", "Technical", "Content", "Links", "LinksDetail", "Media", "Schema & Metadata", "AEO", "AIOSEO", "Security", "Indexability", "Redirects", "Duplicates", "Pattern and Template Issues", "PSI Performance", "Priority URLs", "IssueInventory", "ResolvedIssues", "RunMetadata", "DeltaFromPreviousRun", "CrawlGraph", "SitemapQA", "Summary"]:
                     adjust_sheet_format(writer, sname)
-            print(f"\nAudit complete! Report saved to {output_filename}")
+            logger.info("Audit complete! Report saved to %s", output_filename)
         finally:
             if writer is not None:
                 writer.close()

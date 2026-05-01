@@ -24,8 +24,11 @@ from config import (
     RETRYABLE_STATUS_CODES,
     TIMEOUT_SECONDS,
 )
+from core import get_logger
 from extractors import extract_aeo_snippets, parse_html_signals
 from utils import image_extension, looks_generic_image_filename, readability_flesch, status_class, url_depth, word_count_band
+
+logger = get_logger(__name__)
 
 
 def _init_rows(url: str, sitemap_meta: dict[str, dict[str, Any]] | None) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -84,7 +87,14 @@ async def fetch_and_parse(url: str, session: aiohttp.ClientSession, semaphore: a
                         extra["AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)"] = robots_cache.get(domain_key, {}).get("ai_allowed")
                     if response.status in RETRYABLE_STATUS_CODES and attempt < MAX_RETRIES:
                         wait_time = min(RETRY_MAX_DELAY_SECONDS, RETRY_BASE_DELAY_SECONDS * (RETRY_BACKOFF_FACTOR ** attempt)) + random.uniform(0, REQUEST_JITTER_SECONDS)
-                        print(f"[{response.status}] Retrying {url} (attempt {attempt + 2}/{MAX_RETRIES + 1}) in {wait_time:.1f}s")
+                        logger.warning(
+                            "[%s] Retrying %s (attempt %s/%s) in %.1fs",
+                            response.status,
+                            url,
+                            attempt + 2,
+                            MAX_RETRIES + 1,
+                            wait_time,
+                        )
                         await asyncio.sleep(wait_time)
                         continue
                     if response.status == 200 and "text/html" in response.headers.get("Content-Type", ""):
@@ -221,7 +231,13 @@ async def fetch_and_parse(url: str, session: aiohttp.ClientSession, semaphore: a
             except asyncio.TimeoutError:
                 if attempt < MAX_RETRIES:
                     wait_time = min(RETRY_MAX_DELAY_SECONDS, RETRY_BASE_DELAY_SECONDS * (RETRY_BACKOFF_FACTOR ** attempt)) + random.uniform(0, REQUEST_JITTER_SECONDS)
-                    print(f"[Timeout] Retrying {url} (attempt {attempt + 2}/{MAX_RETRIES + 1}) in {wait_time:.1f}s")
+                    logger.warning(
+                        "[Timeout] Retrying %s (attempt %s/%s) in %.1fs",
+                        url,
+                        attempt + 2,
+                        MAX_RETRIES + 1,
+                        wait_time,
+                    )
                     await asyncio.sleep(wait_time)
                     continue
                 main_data["Status Code"] = "Timeout"
@@ -230,7 +246,13 @@ async def fetch_and_parse(url: str, session: aiohttp.ClientSession, semaphore: a
             except aiohttp.ClientError:
                 if attempt < MAX_RETRIES:
                     wait_time = min(RETRY_MAX_DELAY_SECONDS, RETRY_BASE_DELAY_SECONDS * (RETRY_BACKOFF_FACTOR ** attempt)) + random.uniform(0, REQUEST_JITTER_SECONDS)
-                    print(f"[Connection Error] Retrying {url} (attempt {attempt + 2}/{MAX_RETRIES + 1}) in {wait_time:.1f}s")
+                    logger.warning(
+                        "[Connection Error] Retrying %s (attempt %s/%s) in %.1fs",
+                        url,
+                        attempt + 2,
+                        MAX_RETRIES + 1,
+                        wait_time,
+                    )
                     await asyncio.sleep(wait_time)
                     continue
                 main_data["Status Code"] = "Connection Error"
@@ -254,7 +276,7 @@ async def fetch_and_parse(url: str, session: aiohttp.ClientSession, semaphore: a
         if not indexability_reasons:
             indexability_reasons.append("Indexable")
         extra["Indexability Reason"] = " | ".join(indexability_reasons)
-        print(f"[{main_data['Status Code']}] Crawled: {url}")
+        logger.info("[%s] Crawled: %s", main_data["Status Code"], url)
         delay_seconds = request_delay if request_delay is not None else DELAY_BETWEEN_REQUESTS
         await asyncio.sleep(delay_seconds + random.uniform(0, REQUEST_JITTER_SECONDS))
         return {"main": main_data, "extra": extra}

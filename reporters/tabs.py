@@ -67,17 +67,23 @@ def _sanitize_excel_url(url_value: Any) -> str:
         return raw
 
 
+def _normalize_url_for_match(url_value: Any) -> str:
+    cleaned = _sanitize_excel_url(url_value)
+    if not cleaned:
+        return ""
+    if "?" in cleaned:
+        base, query = cleaned.split("?", 1)
+        return f"{base.rstrip('/')}?{query}"
+    return cleaned.rstrip("/")
+
+
 def _fallback_keyword(url: str, h1_text: str) -> str:
     slug_parts = [p for p in urlparse(url).path.strip("/").split("/") if p]
     if slug_parts:
         slug = slug_parts[-1].replace("-", " ").replace("_", " ").strip()
         slug = re.sub(r"\s+", " ", slug)
         if slug:
-            return f"[Auto]: {slug}"
-    h1_clean = re.sub(r"[^A-Za-z0-9\s]", " ", str(h1_text or "")).strip()
-    h1_clean = re.sub(r"\s+", " ", h1_clean)
-    if h1_clean:
-        return f"[Auto]: {h1_clean}"
+            return slug.title()
     return ""
 
 
@@ -201,12 +207,12 @@ def build_content_optimization_hub_rows(
     extra_rows: list[dict[str, Any]],
     fixplan_rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    main_by_url = {str(r.get("URL") or ""): r for r in main_rows if r.get("URL")}
-    extra_by_url = {str(r.get("URL") or ""): r for r in extra_rows if r.get("URL")}
+    main_by_url = {_normalize_url_for_match(r.get("URL")): r for r in main_rows if r.get("URL")}
+    extra_by_url = {_normalize_url_for_match(r.get("URL")): r for r in extra_rows if r.get("URL")}
     manual_content_urls = {
-        str(r.get("URL") or "").strip()
+        _normalize_url_for_match(r.get("URL"))
         for r in fixplan_rows
-        if str(r.get("Resolution Type") or "").strip().lower() == "manual content" and str(r.get("URL") or "").strip()
+        if str(r.get("Resolution Type") or "").strip().lower() == "manual content" and _normalize_url_for_match(r.get("URL"))
     }
     content_issue_tokens = (
         "title",
@@ -220,7 +226,7 @@ def build_content_optimization_hub_rows(
         "regional authority",
     )
     for e in extra_rows:
-        url = str(e.get("URL") or "").strip()
+        url = _normalize_url_for_match(e.get("URL"))
         issues = str(e.get("Matched Issues") or "").lower()
         if url and any(tok in issues for tok in content_issue_tokens):
             manual_content_urls.add(url)
@@ -257,6 +263,8 @@ def build_content_optimization_hub_rows(
                 "Status": "To Do",
                 "Assigned Owner": "Unassigned",
                 "URL": url,
+                "Current SEO Score": score,
+                "Projected SEO Score": "",
                 "Elementor Builder Link": elementor_link,
                 "Current Title": str(m.get("Title") or "").strip() or "MISSING TITLE",
                 "Proposed Title (50-60 Chars)": "",

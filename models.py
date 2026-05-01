@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import math
 from typing import Any, TypedDict
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 
 class MainRow(TypedDict, total=False):
@@ -66,3 +69,73 @@ class CheckpointPayload(TypedDict):
     completed_urls: list[str]
     remaining_urls: list[str]
     results: list[CrawlResult]
+
+
+class CrawlResultModel(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    main: dict[str, Any] = Field(default_factory=dict)
+    extra: dict[str, Any] = Field(default_factory=dict)
+
+
+class PageRowMetricsModel(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+        extra="allow",
+        validate_assignment=True,
+    )
+
+    url: str = Field(default="", alias="URL")
+    desktop_psi_score: int = Field(default=0, alias="Desktop PSI Score")
+    mobile_psi_score: int = Field(default=0, alias="Mobile PSI Score")
+    mobile_lcp_s: float = Field(default=0.0, alias="Mobile LCP (s)")
+    cwv_lcp_s: float = Field(default=0.0, alias="CWV LCP (s)")
+    gsc_clicks: float = Field(default=0.0, alias="GSC Clicks")
+    gsc_impressions: float = Field(default=0.0, alias="GSC Impressions")
+
+    @field_validator(
+        "desktop_psi_score",
+        "mobile_psi_score",
+        "mobile_lcp_s",
+        "cwv_lcp_s",
+        "gsc_clicks",
+        "gsc_impressions",
+        mode="before",
+    )
+    @classmethod
+    def _coerce_numeric_defaults(cls, value: Any) -> Any:
+        if value is None:
+            return 0
+        if isinstance(value, str) and not value.strip():
+            return 0
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return 0
+        if math.isnan(numeric) or math.isinf(numeric):
+            return 0
+        return value
+
+
+def harden_page_row_metrics(row: dict[str, Any]) -> dict[str, Any]:
+    def _safe_float(raw: Any) -> float:
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return 0.0
+        if math.isnan(value) or math.isinf(value):
+            return 0.0
+        return value
+
+    try:
+        validated = PageRowMetricsModel.model_validate(row)
+    except ValidationError:
+        fallback = dict(row)
+        fallback["Desktop PSI Score"] = int(_safe_float(fallback.get("Desktop PSI Score") or 0))
+        fallback["Mobile PSI Score"] = int(_safe_float(fallback.get("Mobile PSI Score") or 0))
+        fallback["Mobile LCP (s)"] = _safe_float(fallback.get("Mobile LCP (s)") or 0.0)
+        fallback["CWV LCP (s)"] = _safe_float(fallback.get("CWV LCP (s)") or 0.0)
+        fallback["GSC Clicks"] = _safe_float(fallback.get("GSC Clicks") or 0.0)
+        fallback["GSC Impressions"] = _safe_float(fallback.get("GSC Impressions") or 0.0)
+        return fallback
+    return validated.model_dump(by_alias=True, exclude_none=False)

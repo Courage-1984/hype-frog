@@ -1,0 +1,25 @@
+[project]
+name = "hype-frog"
+version = "0.1.0"
+description = "SEO/AEO crawler"
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.9.0,<3.10.0",
+    "beautifulsoup4",
+    "pandas",
+    "openpyxl",
+    "lxml",
+    "pytest",
+    "python-dotenv",
+    "networkx",
+    "google-api-python-client",
+    "google-auth-oauthlib",
+    "pydantic",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = false
