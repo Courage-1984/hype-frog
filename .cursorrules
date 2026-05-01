@@ -1,0 +1,16 @@
+Tech stack: Python 3.12 with aiohttp, playwright.async_api, openpyxl, pandas.
+
+Code style:
+- All new or modified function signatures must use explicit Python type hints from typing.
+- Keep formatting Black/Ruff compatible.
+- Prefer small, testable functions and clear separation of concerns.
+
+Resilience and runtime safety:
+- Network operations must use retries with exponential backoff before marking a crawl/extraction failed.
+- Fail fast only after bounded retry attempts; then set extraction state to "skipped" or "partial" with explicit reason.
+- Avoid blocking calls in async paths. Do not use sync Playwright APIs in crawler runtime code.
+
+Architecture constraints:
+- Preserve modular boundaries: crawler/extractors/rules/reporters/pipeline.
+- Do not delete core logic or perform massive rewrites without explicit human approval.
+- Keep Excel output stable and client-safe: sanitize strings before writing workbook data.

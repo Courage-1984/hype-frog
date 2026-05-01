@@ -41,3 +41,6 @@ uv.lock
 uv_setup.sh
 
 .DS_Store
+
+.vscode/
+
