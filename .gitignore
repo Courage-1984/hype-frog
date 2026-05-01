@@ -44,3 +44,7 @@ uv_setup.sh
 
 .vscode/
 
+.cursor/
+.cursorrules
+
+

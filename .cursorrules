@@ -14,3 +14,8 @@ Architecture constraints:
 - Preserve modular boundaries: crawler/extractors/rules/reporters/pipeline.
 - Do not delete core logic or perform massive rewrites without explicit human approval.
 - Keep Excel output stable and client-safe: sanitize strings before writing workbook data.
+
+Vibe coding safety protocols:
+- Implementation Thoughts: before writing code, provide a one-sentence "Vibe Check" explaining how the change fits the existing architecture.
+- Data Integrity: do not rename/remove existing dictionary keys in `main_data` or pipeline objects. New fields must be additive only.
+- Atomic Changes: prefer small incremental updates; if a task requires changing more than 3 files, request explicit confirmation before proceeding.

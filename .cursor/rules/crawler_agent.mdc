@@ -18,3 +18,4 @@ alwaysApply: false
   - Playwright session semaphore cap
 - Keep retry/backoff semantics for network requests and avoid unbounded retries.
 - Preserve URL normalization consistency for all joins/lookups/formulas.
+- Skill: whenever a new extractor field is introduced, explicitly map it into the Extraction State contract and ensure it is tracked as `complete`, `partial`, or `skipped`.

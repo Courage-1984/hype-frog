@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from openpyxl.styles import Font, PatternFill
+from openpyxl.worksheet.views import Selection
 
 
 def apply_workbook_toc_and_links(
@@ -20,6 +21,12 @@ def apply_workbook_toc_and_links(
             ws.views.sheetView[0].selection = []
         except Exception:
             pass
+
+    def _set_freeze_panes_safe(ws, value: str | None) -> None:
+        view = ws.views.sheetView[0]
+        if not view.selection:
+            view.selection = [Selection(activeCell="A1", sqref="A1")]
+        ws.freeze_panes = value
 
     if debug_excel_isolation_mode:
         return
@@ -152,30 +159,28 @@ def apply_workbook_toc_and_links(
     for tab_name in wb.sheetnames:
         ws = wb[tab_name]
         if disable_non_core_freeze_panes and tab_name not in {"Main", "Dashboard"}:
-            ws.freeze_panes = None
+            _set_freeze_panes_safe(ws, None)
             _clear_orphaned_selection(ws)
             continue
         if tab_name not in {"Main", "Dashboard"} and (
             ws.max_row < 10 or ws.max_column < 5
         ):
-            ws.freeze_panes = None
+            _set_freeze_panes_safe(ws, None)
             ws.auto_filter.ref = None
             _clear_orphaned_selection(ws)
             continue
-        if tab_name == "Content Optimization Hub":
-            ws.freeze_panes = "F3" if ws.max_row >= 3 and ws.max_column >= 6 else None
-            if ws.freeze_panes is None:
-                _clear_orphaned_selection(ws)
-        elif tab_name in {
+        wide_sheets = {
             "Main",
             "Technical",
+            "Content Optimization Hub",
+            "FixPlan",
             "Content",
             "Links",
-            "AEO",
             "Schema & Metadata",
             "Indexability",
-            "Redirects",
             "Priority URLs",
+            "AEO",
+            "Redirects",
             "AIOSEO",
             "Security",
             "Summary",
@@ -190,8 +195,20 @@ def apply_workbook_toc_and_links(
             "ResolvedIssues",
             "CrawlGraph",
             "SitemapQA",
-            "FixPlan",
-        }:
-            ws.freeze_panes = "B2" if ws.max_row >= 2 and ws.max_column >= 2 else None
-            if ws.freeze_panes is None:
-                _clear_orphaned_selection(ws)
+        }
+        standard_data_sheets = {
+            "Content",
+            "Links",
+            "Schema & Metadata",
+            "Indexability",
+            "Priority URLs",
+        }
+        if tab_name == "Content Optimization Hub":
+            target_freeze = "C3" if ws.max_row >= 3 and ws.max_column >= 3 else None
+            _set_freeze_panes_safe(ws, target_freeze)
+        elif tab_name in standard_data_sheets:
+            target_freeze = "B2" if ws.max_row >= 2 and ws.max_column >= 2 else None
+            _set_freeze_panes_safe(ws, target_freeze)
+        elif tab_name in wide_sheets:
+            target_freeze = "C2" if ws.max_row >= 2 and ws.max_column >= 3 else None
+            _set_freeze_panes_safe(ws, target_freeze)
