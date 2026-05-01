@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+import logging
 from pathlib import Path
 from urllib.parse import urlparse
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+from googleapiclient.errors import HttpError
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
+logger = logging.getLogger(__name__)
 
 
 def _normalize_url(url: str) -> str:
@@ -65,7 +68,8 @@ def _resolve_site_url(service, target_url: str) -> str | None:
     for candidate in candidates:
         if candidate in available:
             return candidate
-    return candidates[0]
+    # Only query Search Console for properties visible to the authenticated user.
+    return None
 
 
 def fetch_gsc_page_metrics(
@@ -94,19 +98,23 @@ def fetch_gsc_page_metrics(
     }
 
     rows = []
-    while True:
-        response = (
-            service.searchanalytics()
-            .query(siteUrl=site_url, body=request)
-            .execute()
-        )
-        batch_rows = response.get("rows", [])
-        if not batch_rows:
-            break
-        rows.extend(batch_rows)
-        if len(batch_rows) < request["rowLimit"]:
-            break
-        request["startRow"] += request["rowLimit"]
+    try:
+        while True:
+            response = (
+                service.searchanalytics()
+                .query(siteUrl=site_url, body=request)
+                .execute()
+            )
+            batch_rows = response.get("rows", [])
+            if not batch_rows:
+                break
+            rows.extend(batch_rows)
+            if len(batch_rows) < request["rowLimit"]:
+                break
+            request["startRow"] += request["rowLimit"]
+    except HttpError as exc:
+        logger.warning("GSC query failed for %s: %s", site_url, exc)
+        return {}
 
     page_metrics: dict[str, dict[str, float]] = {}
     for row in rows:
