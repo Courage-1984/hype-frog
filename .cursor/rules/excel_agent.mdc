@@ -4,7 +4,7 @@ globs: src/hype_frog/reporter/**/*.py
 alwaysApply: false
 ---
 
-Canonical expanded rules: `excel_reporters.mdc` (keep both aligned when editing).
+Canonical expanded narrative: [`docs/excel_reporting_standards.md`](../../docs/excel_reporting_standards.md) (keep rules and docs aligned when editing reporter code).
 
 # Excel Reporter Safety Rules
 

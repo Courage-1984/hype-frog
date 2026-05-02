@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from extractors.page import extract_aeo_snippets, has_valid_hreflang_reciprocity, parse_html_signals
-from extractors.robots import resolve_indexability_directive
-from extractors.schema import parse_jsonld_summary
+from hype_frog.extractors.page import (
+    extract_aeo_snippets,
+    has_valid_hreflang_reciprocity,
+    parse_html_signals,
+)
+from hype_frog.extractors.robots import resolve_indexability_directive
+from hype_frog.extractors.schema import parse_jsonld_summary
 
 
 def test_conflicting_directives_more_restrictive_wins() -> None:

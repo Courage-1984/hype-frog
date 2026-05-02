@@ -19,7 +19,6 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-import pytest
 from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -138,9 +137,13 @@ def build_mock_audit_workbook() -> Workbook:
     headers = ["URL", "Status", "Action Required"]
     ws_data.append(headers)
     ws_data.append(["https://a.example/page1", "200", ""])  # empty → unchanged
-    ws_data.append(["https://b.example/page2", "404", "needs rewrite here"])  # → Needs Copy
+    ws_data.append(
+        ["https://b.example/page2", "404", "needs rewrite here"]
+    )  # → Needs Copy
     ws_data.append(["https://c.example/page3", "200", "   "])  # whitespace only → skip
-    ws_data.append(["https://d.example/page4", "200", "random blocker text"])  # → Needs Copy
+    ws_data.append(
+        ["https://d.example/page4", "200", "random blocker text"]
+    )  # → Needs Copy
 
     toc = wb.create_sheet("Table of Contents", 0)
     toc["A1"] = "Table of Contents"
@@ -166,7 +169,9 @@ def assert_action_required_guardrails(ws: Worksheet) -> None:
     # Row 3: had text → Needs Copy + red
     c3 = ws.cell(row=3, column=col)
     assert c3.value == "Needs Copy", f"row 3 expected Needs Copy, got {c3.value!r}"
-    assert _fill_hex_upper(c3) == "FF0000", f"row 3 fill expected FF0000, got {_fill_hex_upper(c3)!r}"
+    assert _fill_hex_upper(c3) == "FF0000", (
+        f"row 3 fill expected FF0000, got {_fill_hex_upper(c3)!r}"
+    )
 
     # Row 4: whitespace → unchanged (not forced to Needs Copy)
     c4 = ws.cell(row=4, column=col)
@@ -204,7 +209,9 @@ def test_pick_latest_returns_none_when_no_xlsx(tmp_path: Path) -> None:
 def test_pick_latest_prefers_newest(tmp_path: Path) -> None:
     a = tmp_path / "old.xlsx"
     b = tmp_path / "new.xlsx"
-    a.write_bytes(b"PK\x03\x04" + b"\x00" * 18)  # minimal zip-like garbage for mtime only
+    a.write_bytes(
+        b"PK\x03\x04" + b"\x00" * 18
+    )  # minimal zip-like garbage for mtime only
     b.write_bytes(b"PK\x03\x04" + b"\x00" * 18)
     import os
     import time
