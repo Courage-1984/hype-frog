@@ -1,3 +1,5 @@
+Extended governance lives in `.cursor/rules/` (`.mdc` modules: architecture, crawler_engine, excel_reporters, auto_documentation, vibe_coding_guardrails, plus legacy `*_agent` stubs).
+
 Tech stack: Python 3.12 with aiohttp, playwright.async_api, openpyxl, pandas.
 
 Code style:

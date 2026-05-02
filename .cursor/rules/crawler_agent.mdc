@@ -4,6 +4,8 @@ globs: "{crawler,extractors,pipeline,core}/**/*.py"
 alwaysApply: false
 ---
 
+Canonical expanded rules: `crawler_engine.mdc` (keep both aligned when editing).
+
 # Crawler Engine Rules
 
 - Use `playwright.async_api` only; do not introduce blocking sync Playwright usage.

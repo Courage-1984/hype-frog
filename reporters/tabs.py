@@ -276,6 +276,21 @@ def build_content_optimization_hub_rows(
         if url and any(tok in issues for tok in content_issue_tokens):
             manual_content_urls.add(url)
 
+    if not manual_content_urls:
+        scored_urls: list[tuple[float, str]] = []
+        for e in extra_rows:
+            raw_url = _normalize_url_for_match(e.get("URL"))
+            if not raw_url:
+                continue
+            try:
+                score = float(e.get("SEO Health Score") or 0.0)
+            except Exception:
+                score = 0.0
+            scored_urls.append((score, raw_url))
+        scored_urls.sort(key=lambda item: item[0])
+        for _score, url in scored_urls[:15]:
+            manual_content_urls.add(url)
+
     rows: list[dict[str, Any]] = []
     cluster_counts: dict[str, int] = {}
     draft_rows: list[dict[str, Any]] = []
