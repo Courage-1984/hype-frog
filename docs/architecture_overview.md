@@ -4,12 +4,12 @@ This document describes how the repository is structured and how work flows thro
 
 ## Layers
 
-1. **Entry and orchestration** — `main.py` loads configuration, builds the URL list, schedules asyncio tasks, merges results, coordinates optional metric batches, and invokes reporters. It also applies string and DataFrame sanitization paths before Excel emission.
+1. **Entry and orchestration** — `hype_frog/main.py` (CLI entry) and `hype_frog/entry_main.py` load configuration, build the URL list, schedule asyncio tasks, merge results, coordinate optional metric batches, and invoke reporters. Sanitization runs before Excel emission.
 2. **Crawler** — Session factory (`crawler/client.py`), fetch and parse pipeline (`crawler/fetcher.py` and related modules), sitemap ingestion, and optional auxiliary metric clients. Bounded concurrency and retries are configured centrally (`config.py`).
 3. **Extractors** — Pure parsing: HTML signals, JSON-LD summaries, indexability hints, snippet extraction. No workbook I/O.
 4. **Pipeline** — Shared helpers for enrichment, scoring glue, row sanitization, and Excel-safe sheet naming (`pipeline/`).
 5. **Rules** — Issue catalogs, scoring, stable identifiers, owner and workflow metadata (`rules/`).
-6. **Reporters** — Workbook assembly: tabs, conditional formats, TOC, navigation, view-state normalization (`reporters/`, including `reporters/sheets/`).
+6. **Reporters** — Workbook assembly: tabs, conditional formats, TOC, navigation, view-state normalization (`hype_frog/reporter/`, including `hype_frog/reporter/sheets/`).
 7. **Checkpoint** — Resume metadata and incremental persistence for interrupted crawls (`checkpoint/`).
 8. **Core** — Logging, CLI helpers, URL normalization (`core/`).
 

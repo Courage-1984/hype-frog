@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
-from typing import Any
 
 from hype_frog.models import CheckpointPayload, CrawlResult
 
@@ -17,7 +16,9 @@ def load_checkpoint(checkpoint_file: str) -> tuple[list[CrawlResult], set[str]]:
     completed_urls = set(checkpoint_data.get("completed_urls", []) or [])
     if not completed_urls:
         completed_urls = {
-            r.get("main", {}).get("URL") for r in resumed_results if r.get("main", {}).get("URL")
+            r.get("main", {}).get("URL")
+            for r in resumed_results
+            if r.get("main", {}).get("URL")
         }
     return resumed_results, completed_urls
 

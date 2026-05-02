@@ -4,7 +4,7 @@ globs: "{src/hype_frog/crawler,src/hype_frog/extractors,src/hype_frog/pipeline,s
 alwaysApply: false
 ---
 
-Canonical expanded rules: `crawler_engine.mdc` (keep both aligned when editing).
+Canonical expanded narrative: [`docs/crawler_engine.md`](../../docs/crawler_engine.md) (keep rules and docs aligned when editing fetch/extract/pipeline code).
 
 # Crawler Engine Rules
 
