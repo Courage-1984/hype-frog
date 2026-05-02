@@ -4,6 +4,7 @@ import asyncio
 import os
 import re
 import shutil
+import sys
 from collections import defaultdict
 from datetime import datetime
 import math
@@ -1636,6 +1637,6 @@ def _build_aioseo_rows(
 
 
 if __name__ == "__main__":
-    if os.name == "nt":
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
     asyncio.run(main())

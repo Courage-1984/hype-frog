@@ -13,6 +13,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
 logger = logging.getLogger(__name__)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _normalize_url(url: str) -> str:
@@ -45,14 +46,20 @@ def _build_candidate_site_urls(target_url: str) -> list[str]:
 def _load_credentials(credentials_path: Path, token_path: Path) -> Credentials:
     creds: Credentials | None = None
     if token_path.exists():
-        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+        try:
+            creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+        except Exception:
+            creds = None
     if not creds or not creds.valid:
+        logger.info("No valid token found, initiating browser auth.")
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(str(credentials_path), SCOPES)
             creds = flow.run_local_server(port=0)
         token_path.write_text(creds.to_json(), encoding="utf-8")
+    else:
+        logger.info("Loaded existing GSC token")
     return creds
 
 
@@ -78,10 +85,16 @@ def fetch_gsc_page_metrics(
     token_file: str = "token.json",
 ) -> dict[str, dict[str, float]]:
     credentials_path = Path(credentials_file)
+    if not credentials_path.is_absolute():
+        credentials_path = PROJECT_ROOT / credentials_path
     if not credentials_path.exists():
         return {}
 
-    creds = _load_credentials(credentials_path=credentials_path, token_path=Path(token_file))
+    token_path = Path(token_file)
+    if not token_path.is_absolute():
+        token_path = PROJECT_ROOT / token_path
+
+    creds = _load_credentials(credentials_path=credentials_path, token_path=token_path)
     service = build("searchconsole", "v1", credentials=creds, cache_discovery=False)
     site_url = _resolve_site_url(service, target_url)
     if not site_url:

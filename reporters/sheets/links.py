@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from openpyxl.styles import Alignment
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.worksheet import Worksheet
 
 from utils import normalize_url_key
 
@@ -11,12 +13,29 @@ from utils import normalize_url_key
 def is_safe_hyperlink_target(
     target: str, *, disable_external_links_and_images: bool
 ) -> bool:
+    """Validate whether a hyperlink target is safe to emit into a workbook.
+
+    Args:
+        target: Hyperlink target candidate.
+        disable_external_links_and_images: Feature flag disabling outbound links.
+
+    Returns:
+        True when the link should be written; otherwise False.
+    """
     if disable_external_links_and_images:
         return False
     return bool(target) and len(target) <= 255
 
 
 def sanitize_excel_url(url_value: Any) -> str:
+    """Strip control characters and quote marks from URL-like cell text.
+
+    Args:
+        url_value: Raw URL-like value from dataframe/worksheet content.
+
+    Returns:
+        A cleaned string safe for workbook formulas/hyperlinks.
+    """
     raw = str(url_value or "").strip()
     if not raw:
         return ""
@@ -25,18 +44,36 @@ def sanitize_excel_url(url_value: Any) -> str:
 
 
 def normalize_url_for_match(url_value: Any) -> str:
+    """Normalize a URL key for deterministic cross-sheet matching.
+
+    Args:
+        url_value: Raw URL-like value.
+
+    Returns:
+        Canonicalized key used for lookups.
+    """
     return normalize_url_key(sanitize_excel_url(url_value))
 
 
 def add_url_navigation_links(
-    writer,
-    worksheet,
+    writer: Any,
+    worksheet: Worksheet,
     sheet_name: str,
     *,
     debug_excel_isolation_mode: bool,
     disable_external_links_and_images: bool,
-    header_index_fn,
+    header_index_fn: Callable[[Worksheet], dict[str, int]],
 ) -> None:
+    """Add per-row URL hyperlinks and optional ``Open in Main`` helper links.
+
+    Args:
+        writer: Pandas ExcelWriter-like object containing ``book`` and sheets.
+        worksheet: Worksheet currently being formatted.
+        sheet_name: Name of current sheet.
+        debug_excel_isolation_mode: Flag that disables cross-sheet link creation.
+        disable_external_links_and_images: Flag that disables external hyperlinks.
+        header_index_fn: Callable returning header-to-column index mapping.
+    """
     if debug_excel_isolation_mode:
         return
     headers = header_index_fn(worksheet)
@@ -67,13 +104,22 @@ def add_url_navigation_links(
 
 
 def apply_cross_sheet_links(
-    writer,
-    worksheet,
+    writer: Any,
+    worksheet: Worksheet,
     sheet_name: str,
     *,
     debug_excel_isolation_mode: bool,
-    header_index_fn,
+    header_index_fn: Callable[[Worksheet], dict[str, int]],
 ) -> None:
+    """Attach cross-sheet helper links used for analyst navigation.
+
+    Args:
+        writer: Pandas ExcelWriter-like object containing workbook metadata.
+        worksheet: Worksheet currently being formatted.
+        sheet_name: Name of current sheet.
+        debug_excel_isolation_mode: Flag that disables cross-sheet links.
+        header_index_fn: Callable returning header-to-column index mapping.
+    """
     if debug_excel_isolation_mode:
         return
     headers = header_index_fn(worksheet)

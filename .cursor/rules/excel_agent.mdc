@@ -4,6 +4,8 @@ globs: reporters/**/*.py
 alwaysApply: false
 ---
 
+Canonical expanded rules: `excel_reporters.mdc` (keep both aligned when editing).
+
 # Excel Reporter Safety Rules
 
 - Treat workbook integrity as highest priority for client-facing exports.
