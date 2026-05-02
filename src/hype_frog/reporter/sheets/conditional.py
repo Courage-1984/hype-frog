@@ -299,20 +299,45 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
                 ),
             )
     action_required_col = headers.get("Action Required")
-    title_prop_col = headers.get("Proposed Title (50-60 Chars)")
-    desc_prop_col = headers.get("Proposed Meta Desc (120-160 Chars)")
-    if action_required_col and title_prop_col and desc_prop_col and end_row >= start_row:
-        for r in range(start_row, end_row + 1):
-            worksheet.cell(row=r, column=1).value = f'=IF(AND(LEN(J{r})>0, LEN(M{r})>0), "Ready to Publish", "Needs Copy")'
-        if not DISABLE_CONDITIONAL_FORMATTING:
-            worksheet.conditional_formatting.add(
-                f"A{start_row}:A{end_row}",
-                CellIsRule(operator="equal", formula=['"Needs Copy"'], fill=PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid"), font=Font(color="FFFFFF", bold=True)),
-            )
-            worksheet.conditional_formatting.add(
-                f"A{start_row}:A{end_row}",
-                CellIsRule(operator="equal", formula=['"Ready to Publish"'], fill=PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid"), font=Font(color="000000", bold=True)),
-            )
+    if action_required_col and end_row >= start_row and not DISABLE_CONDITIONAL_FORMATTING:
+        ar_letter = get_column_letter(action_required_col)
+        ar_range = f"{ar_letter}{start_row}:{ar_letter}{end_row}"
+        worksheet.conditional_formatting.add(
+            ar_range,
+            CellIsRule(
+                operator="equal",
+                formula=['"Needs Copy"'],
+                fill=PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid"),
+                font=Font(color="FFFFFF", bold=True),
+            ),
+        )
+        worksheet.conditional_formatting.add(
+            ar_range,
+            CellIsRule(
+                operator="equal",
+                formula=['"Needs Optimization"'],
+                fill=PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid"),
+                font=Font(color="000000", bold=True),
+            ),
+        )
+        worksheet.conditional_formatting.add(
+            ar_range,
+            CellIsRule(
+                operator="equal",
+                formula=['"Complete"'],
+                fill=PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid"),
+                font=Font(color="000000", bold=True),
+            ),
+        )
+        worksheet.conditional_formatting.add(
+            ar_range,
+            CellIsRule(
+                operator="equal",
+                formula=['"Ready to Publish"'],
+                fill=PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid"),
+                font=Font(color="000000", bold=True),
+            ),
+        )
 
     og_url_col = headers.get("Current OG-Image URL")
     og_preview_col = headers.get("OG Image Preview")
