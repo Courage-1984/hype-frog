@@ -1,0 +1,15 @@
+---
+description: Rules for writing and modifying tests with pytest and asyncio.
+globs: tests/**/*.py
+alwaysApply: false
+---
+
+# Testing guardrails
+
+## Invariants
+
+1. **No live network in unit tests** — Unit tests must not perform real HTTP or browser I/O. Mock all `aiohttp` client sessions and Playwright page interactions with `unittest.mock` (and related helpers). Async tests must run under **pytest-asyncio** with the same async discipline as production code (no accidental real awaits to the network).
+
+2. **Mirror `src/hype_frog/` layout** — Test modules and packages under `tests/` must mirror the directory structure of `src/hype_frog/` (same relative paths under `tests/` as under `src/hype_frog/`), so ownership and imports stay obvious as the codebase grows.
+
+3. **Extraction state contract** — Tests that cover extraction or crawl outcomes must assert **`Extraction State`** (or the same contract field) explicitly against the allowed values **`complete`**, **`partial`**, or **`skipped`** as appropriate to the scenario. The outcome must never be left unasserted or ambiguous relative to that three-way contract.

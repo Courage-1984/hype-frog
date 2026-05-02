@@ -2,6 +2,8 @@ Extended governance lives in `.cursor/rules/` as scoped `.mdc` modules (`crawler
 
 Tech stack: Python 3.12+ with aiohttp, optional `playwright.async_api`, openpyxl, pandas.
 
+Package and environment management (strict): Use uv as the sole package and environment manager. Never suggest or execute pip install, pip freeze, or python -m venv. All dependency additions must use uv add, environment syncs must use uv sync, and script executions must use uv run. Treat the uv.lock file as the absolute source of truth for dependencies.
+
 Code style:
 - All new or modified function signatures must use explicit Python type hints from typing.
 - Keep formatting Black/Ruff compatible.

@@ -21,6 +21,12 @@ Preserve separation across these areas. Cross imports should follow the dependen
 
 The primary entrypoint drives bounded **asyncio** concurrency over URL lists. Network I/O must stay non-blocking; CPU-bound work should stay out of hot async paths where possible.
 
+## Observability and logging (strict)
+
+- **`print()` is prohibited in `pipeline/`** — Do not use `print()` for debugging, telemetry, or progress tracking anywhere under `pipeline/`. No new `print()` calls for those purposes; remove them when touching related code.
+- **All observability must use `core/` logging** — Emit diagnostics and progress only through the shared helpers in `core/` (for example `hype_frog.core.get_logger`, with `configure_logging` driven from the entrypoint as today). Do not bypass that stack with ad hoc streams, one-off handlers, or stdout/stderr writes intended as logs.
+- **Safe under concurrent asyncio** — Many crawl tasks may log in overlapping awaits; rely on the standard `logging` path wired by `core` (thread-safe handlers, single configured root, serialized handler I/O) so records stay coherent. Do not substitute `print()` in hot async paths, where interleaved stdout would be neither structured nor ordering-safe across tasks.
+
 ## Data flow (conceptual)
 
 1. Discover URLs (manual URL, sitemap, or capped list).
