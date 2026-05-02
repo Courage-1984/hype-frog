@@ -1,6 +1,6 @@
 ---
 description: Use this when modifying fetchers, extractors, or the crawler engine.
-globs: "{crawler,extractors,pipeline,core}/**/*.py"
+globs: "{src/hype_frog/crawler,src/hype_frog/extractors,src/hype_frog/pipeline,src/hype_frog/core}/**/*.py"
 alwaysApply: false
 ---
 

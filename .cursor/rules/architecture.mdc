@@ -1,0 +1,39 @@
+---
+description: High-level layout, async concurrency, and module boundaries for this repository.
+alwaysApply: true
+---
+
+# Architecture Governance
+
+## Module boundaries
+
+Preserve separation across these areas. Cross imports should follow the dependency direction: **core** and **config** are foundations; **crawler** and **extractors** consume them; **pipeline** orchestrates enrichment and export; **rules** encodes scoring and issue logic; **reporters** builds workbook output; **checkpoint** persists resume state.
+
+- `crawler/` — HTTP session creation, fetching, optional rendered capture, sitemap and auxiliary metric integrations.
+- `extractors/` — HTML and metadata parsing; no direct workbook writing.
+- `pipeline/` — Row assembly, sanitization helpers, scoring glue, export paths shared with the CLI entrypoint.
+- `rules/` — Issue definitions, scoring, stable identifiers.
+- `src/hype_frog/reporter/` — Spreadsheet construction, tabs, conditional formats, navigation and view state.
+- `checkpoint/` — Durable crawl progress for long runs.
+- `core/` — Logging, CLI helpers, URL normalization shared across layers.
+
+## Concurrency and entrypoint
+
+The primary entrypoint drives bounded **asyncio** concurrency over URL lists. Network I/O must stay non-blocking; CPU-bound work should stay out of hot async paths where possible.
+
+## Data flow (conceptual)
+
+1. Discover URLs (manual URL, sitemap, or capped list).
+2. Fetch per URL (fast HTTP path and/or rendered path per configuration).
+3. Normalize keys and merge into structured row dictionaries.
+4. Enrich with internal-link intelligence and optional external metrics batches.
+5. Apply rules and scoring; emit **main** and **extra** row shapes.
+6. Export via sanitized DataFrames and openpyxl post-processing (freeze panes, TOC, validation).
+
+## Historical and archive material
+
+Do not treat `./archive/` as live product code unless a task explicitly says to integrate it. Never delete repository files to “clean up”; prefer additive changes or moving deprecated artifacts only when a human requests archival workflow (no destructive git or shell removal per project policy).
+
+## Excluded from automated analysis
+
+Ignore the `./.old/` directory for scans, refactors, and documentation generation.

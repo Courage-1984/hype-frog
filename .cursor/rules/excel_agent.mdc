@@ -1,6 +1,6 @@
 ---
 description: Use this when modifying Excel output, formatting, or reporters.
-globs: reporters/**/*.py
+globs: src/hype_frog/reporter/**/*.py
 alwaysApply: false
 ---
 

@@ -1,50 +1,36 @@
-output/
-client_secrets.json
+# =========================
+# Secrets & Environments
+# =========================
 .env
-
-# Local secrets and auth artifacts
+.venv/
+secrets/
+client_secrets.json
 token.json
 
-# Runtime logs
-logs/
-
-# Python bytecode/cache artifacts
+# =========================
+# Python Artifacts
+# =========================
 __pycache__/
 *.py[cod]
-
-.env
-./.env
-
-client_secrets.json
-./client_secrets.json
-
-token.json
-./token.json
-
-__pycache__/
-
-logs/
-
-output/
-
-pytest.ini
-
-tests/
-
-.venv/
-
+*$py.class
 .pytest_cache/
 
-smoke_urls_15.txt
+# =========================
+# App Data & Outputs
+# =========================
+logs/
+data/
+reports/
+output/
 
-uv.lock
-uv_setup.sh
+# Note: archive_legacy/ is NOT ignored here. 
+# It is best practice to commit it once as a historical backup, 
+# and then delete the folder in a future commit once you are 100% stable.
 
+# =========================
+# OS & IDE Files
+# =========================
 .DS_Store
-
 .vscode/
-
-.cursor/
-.cursorrules
-
+# Notice we are NOT ignoring .cursor/ or uv.lock!
 
