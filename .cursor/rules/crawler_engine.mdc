@@ -1,0 +1,44 @@
+---
+description: Crawl modes, Playwright async-only policy, retries, and extraction contracts.
+globs: "{src/hype_frog/crawler,src/hype_frog/extractors,src/hype_frog/pipeline,src/hype_frog/core}/**/*.py"
+alwaysApply: false
+---
+
+# Crawler Engine Rules
+
+## Playwright
+
+- Use **`playwright.async_api` only**. Do not use synchronous Playwright APIs in runtime crawl code.
+- Subprocess / browser lifecycle must remain compatible with **asyncio** (no blocking waits on the event loop).
+
+## Dual-mode behavior
+
+- **Fast path:** `aiohttp` + parser-driven extraction.
+- **Accurate path:** rendered page capture when available, with **graceful fallback** to HTTP when binaries, loop, or environment constraints prevent browser use.
+
+## Extraction contract
+
+Maintain these fields consistently for observability and scoring:
+
+- **Extraction State:** exactly one of `complete` | `partial` | `skipped` (lowercase values as stored in row data).
+- **Extraction Source:** `raw_http` | `rendered_browser` as implemented in fetchers.
+
+Any new extractor or fetch outcome must map into **complete** / **partial** / **skipped** with an explicit reason where applicable.
+
+## Retries and backoff
+
+- Network operations must use **bounded retries** with **exponential backoff** (and jitter where the codebase already applies it) before treating a URL or batch as failed.
+- Do not introduce unbounded retry loops; respect configured caps and retryable status codes.
+
+## Concurrency controls
+
+- Keep **`aiohttp.TCPConnector`** limits (`limit`, `limit_per_host`, `keepalive_timeout`) aligned with `config` values.
+- Cap concurrent browser sessions with the project **semaphore** pattern; do not remove backpressure without replacing equivalent limits.
+
+## URL identity
+
+- Use shared **normalization** helpers for joins, deduplication, checkpoints, and any formulas referencing URLs.
+
+## Canonical expansion
+
+This file extends the narrower `crawler_agent.mdc` glob; keep both consistent when editing either.
