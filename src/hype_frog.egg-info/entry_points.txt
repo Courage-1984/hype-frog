@@ -1,0 +1,2 @@
+[console_scripts]
+hype-frog = hype_frog.main:run

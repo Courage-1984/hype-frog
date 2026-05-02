@@ -26,17 +26,11 @@ render = ["playwright>=1.40.0"]
 hype-frog = "hype_frog.main:run"
 
 [build-system]
-requires = ["hatchling>=1.24.0"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
 
-[tool.hatch.build]
-sources = ["src"]
-
-[tool.hatch.build.targets.wheel]
-packages = ["hype_frog"]
-
-[tool.hatch.build.targets.sdist]
-include = ["src/hype_frog", "README.md", "pyproject.toml"]
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
