@@ -35,7 +35,6 @@ from hype_frog.pipeline.enrich import (
     compute_internal_link_intelligence as _compute_internal_link_intelligence_pipeline,
 )
 from hype_frog.pipeline.enrich import value_or_default as _value_or_default_pipeline
-from hype_frog.pipeline.action_required import determine_action_required
 from hype_frog.pipeline.assemble import (
     assemble_enriched_row,
     build_inlinks_map,
@@ -50,11 +49,12 @@ from hype_frog.pipeline.export import sanitize_rows, to_excel_safe
 from hype_frog.reporter import adjust_sheet_format, apply_tab_hyperlinks
 from hype_frog.reporter.excel_engine import (
     apply_workbook_export_guardrails,
-    build_content_optimization_hub_rows,
+    build_content_optimisation_hub_rows,
     build_fixplan_rows,
     load_cached_rows,
     write_dict_rows_sheet,
 )
+from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 from hype_frog.reporter.summary_builder import (
     build_issue_inventory_rows,
     build_summary_rows,
@@ -204,14 +204,10 @@ async def main(run: RunConfig | None = None) -> None:
         original_count = len(urls)
         urls = list(dict.fromkeys(urls))
         if len(urls) != original_count:
-            logger.info(
-                "Removed %s duplicate URLs.", original_count - len(urls)
-            )
+            logger.info("Removed %s duplicate URLs.", original_count - len(urls))
         if max_urls is not None and len(urls) > max_urls:
             urls = urls[:max_urls]
-            logger.info(
-                "Applied crawl cap: limiting run to first %s URLs.", len(urls)
-            )
+            logger.info("Applied crawl cap: limiting run to first %s URLs.", len(urls))
 
         if run is not None:
             workers = workers_preset if workers_preset is not None else MAX_WORKERS
@@ -223,9 +219,7 @@ async def main(run: RunConfig | None = None) -> None:
             full_suite = bool(full_suite_preset)
             previous_audit_path = (previous_audit_path_preset or "").strip()
             checkpoint_every = int(checkpoint_every_preset or 0)
-            logger.info(
-                "Crawl safety profile: preset (Faster: 4 workers, 1.5s delay)"
-            )
+            logger.info("Crawl safety profile: preset (Faster: 4 workers, 1.5s delay)")
             logger.info("Run mode: Full SEO suite (preset)")
             logger.info("Checkpoint save: disabled (preset)")
         else:
@@ -310,9 +304,7 @@ async def main(run: RunConfig | None = None) -> None:
                         len(urls),
                     )
                 except Exception as e:
-                    logger.warning(
-                        "Could not load checkpoint. Starting fresh. (%s)", e
-                    )
+                    logger.warning("Could not load checkpoint. Starting fresh. (%s)", e)
                     resumed_results = []
                     checkpoint_completed_urls = set()
 
@@ -478,7 +470,9 @@ async def main(run: RunConfig | None = None) -> None:
             )
             for r in extra_work
         ]
-        extra_rows = enrich_extra_rows_with_composite_scores(extra_work)
+        extra_rows = enrich_extra_rows_with_composite_scores(
+            extra_work, main_by_url=main_by_url_pre
+        )
         _apply_seo_health_export_defaults(extra_rows)
 
         extra_by_url = {
@@ -549,9 +543,7 @@ async def main(run: RunConfig | None = None) -> None:
                                 srow.get("Affected URL Count", 0) or 0
                             )
             except Exception as exc:
-                logger.warning(
-                    "Could not parse previous audit for compare: %s", exc
-                )
+                logger.warning("Could not parse previous audit for compare: %s", exc)
                 prev_issue_ids = set()
                 prev_counts = {}
                 prev_fixed_issue_ids = set()
@@ -573,6 +565,7 @@ async def main(run: RunConfig | None = None) -> None:
             if full_suite:
                 technical_cols = [
                     "URL",
+                    "Content Cluster ID",
                     "Extraction State",
                     "Extraction Source",
                     "Health Icon",
@@ -880,24 +873,22 @@ async def main(run: RunConfig | None = None) -> None:
                     duplicate_rows.append(
                         {
                             "URL": row.get("URL"),
-                            "Title Duplicate Count": len(title_groups.get(t_key, []))
-                            if t_key
-                            else 0,
-                            "Meta Description Duplicate Count": len(
-                                desc_groups.get(d_key, [])
-                            )
-                            if d_key
-                            else 0,
-                            "Title Duplicate URLs": " | ".join(
-                                title_groups.get(t_key, [])
-                            )
-                            if t_key and len(title_groups.get(t_key, [])) > 1
-                            else None,
-                            "Meta Duplicate URLs": " | ".join(
-                                desc_groups.get(d_key, [])
-                            )
-                            if d_key and len(desc_groups.get(d_key, [])) > 1
-                            else None,
+                            "Title Duplicate Count": (
+                                len(title_groups.get(t_key, [])) if t_key else 0
+                            ),
+                            "Meta Description Duplicate Count": (
+                                len(desc_groups.get(d_key, [])) if d_key else 0
+                            ),
+                            "Title Duplicate URLs": (
+                                " | ".join(title_groups.get(t_key, []))
+                                if t_key and len(title_groups.get(t_key, [])) > 1
+                                else None
+                            ),
+                            "Meta Duplicate URLs": (
+                                " | ".join(desc_groups.get(d_key, []))
+                                if d_key and len(desc_groups.get(d_key, [])) > 1
+                                else None
+                            ),
                         }
                     )
                 to_excel_safe(
@@ -1004,9 +995,7 @@ async def main(run: RunConfig | None = None) -> None:
                     summary_rules, extra_rows
                 )
                 issue_inventory_df = pd.DataFrame(issue_inventory_rows)
-                to_excel_safe(
-                    issue_inventory_df, writer, "IssueInventory", index=False
-                )
+                to_excel_safe(issue_inventory_df, writer, "IssueInventory", index=False)
                 fixplan_rows = build_fixplan_rows(
                     summary_rules,
                     extra_rows,
@@ -1052,9 +1041,7 @@ async def main(run: RunConfig | None = None) -> None:
                     fix_row["Estimated Traffic Impact"] = (
                         "High"
                         if max_clicks > 100
-                        else "Medium"
-                        if max_clicks > 25
-                        else "Low"
+                        else "Medium" if max_clicks > 25 else "Low"
                     )
                     fix_row["Fix Effort"] = round(est_hours, 2)
                     fix_row["ROI Score"] = round(total_clicks / max(est_hours, 1.0), 2)
@@ -1069,7 +1056,7 @@ async def main(run: RunConfig | None = None) -> None:
                     )
                 )
                 to_excel_safe(fixplan_df, writer, "FixPlan", index=False)
-                hub_base_rows = build_content_optimization_hub_rows(
+                hub_base_rows = build_content_optimisation_hub_rows(
                     main_rows, extra_rows, fixplan_rows
                 )
                 extra_by_url = {str(r.get("URL") or ""): r for r in extra_rows}
@@ -1080,20 +1067,15 @@ async def main(run: RunConfig | None = None) -> None:
                         **hub_row,
                         "SEO Score": metrics.get("SEO Score", 0.0),
                         "Technical Health": metrics.get("Technical Health", 0.0),
-                        "Copy Score": metrics.get("Copy Score", 0.0),
                     }
-                    content_hub_rows.append(
-                        {
-                            **merged,
-                            "Action Required": determine_action_required(merged),
-                        }
-                    )
+                    content_hub_rows.append(dict(merged))
                 content_hub_cols = [
                     "Action Required",
                     "Status",
                     "Assigned Owner",
-                    "Content Cluster ID",
                     "URL",
+                    "Current SEO Score",
+                    "Projected SEO Score",
                     "Elementor Builder Link",
                     "Target Keywords",
                     "Current Page Copy Snippet",
@@ -1113,10 +1095,11 @@ async def main(run: RunConfig | None = None) -> None:
                     "SEO Score",
                     "Technical Health",
                     "Copy Score",
+                    "Open in Main",
                 ]
                 write_dict_rows_sheet(
                     writer,
-                    "Content Optimization Hub",
+                    CONTENT_OPTIMISATION_HUB_SHEET,
                     content_hub_cols,
                     content_hub_rows,
                 )
@@ -1178,7 +1161,7 @@ async def main(run: RunConfig | None = None) -> None:
                     },
                     {"Section": "", "Item": "", "Guideline": "", "Why It Matters": ""},
                     {
-                        "Section": "[AEO (Answer Engine Optimization) & Content]",
+                        "Section": "[AEO (Answer Engine Optimisation) & Content]",
                         "Item": "",
                         "Guideline": "",
                         "Why It Matters": "",
@@ -1187,7 +1170,7 @@ async def main(run: RunConfig | None = None) -> None:
                         "Section": "",
                         "Item": "AEO Answer Blocks",
                         "Guideline": "40-60 words. Placed directly beneath an H2 question. Must be factual, objective, and devoid of marketing fluff (e.g., 'The best way to...').",
-                        "Why It Matters": "Optimizes direct extraction for answer engines and voice search.",
+                        "Why It Matters": "Optimises direct extraction for answer engines and voice search.",
                     },
                     {
                         "Section": "",
@@ -1246,11 +1229,16 @@ async def main(run: RunConfig | None = None) -> None:
                     owner_seed_issue = (
                         "Broken Internal Links"
                         if (row.get("Broken Internal Links Count") or 0) > 0
-                        else "Canonical Points Elsewhere"
-                        if row.get("Canonical Type") == "cross-canonical"
-                        else "Noindex Directive"
-                        if "noindex" in str(row.get("Indexability Reason", "")).lower()
-                        else ""
+                        else (
+                            "Canonical Points Elsewhere"
+                            if row.get("Canonical Type") == "cross-canonical"
+                            else (
+                                "Noindex Directive"
+                                if "noindex"
+                                in str(row.get("Indexability Reason", "")).lower()
+                                else ""
+                            )
+                        )
                     )
                     url_value = str(row.get("URL") or "")
                     revenue_intent = (
@@ -1274,9 +1262,9 @@ async def main(run: RunConfig | None = None) -> None:
                             "GSC Impressions": row.get("GSC Impressions", 0.0),
                             "GSC CTR": row.get("GSC CTR", 0.0),
                             "Revenue Intent": revenue_intent,
-                            "Why Prioritized": " | ".join(reasons)
-                            if reasons
-                            else "Monitor",
+                            "Why Prioritized": (
+                                " | ".join(reasons) if reasons else "Monitor"
+                            ),
                             "Action Needed": "Yes" if risk_score >= 30 else "No",
                             "Owner": owner_for_issue(
                                 owner_seed_issue, str(row.get("Severity Badge") or "")
@@ -1296,7 +1284,9 @@ async def main(run: RunConfig | None = None) -> None:
                 total_urls = len(extra_rows)
                 # Pass rate from Technical (extra_rows) Severity Badge distribution only.
                 pass_count = sum(
-                    1 for r in extra_rows if str(r.get("Severity Badge") or "") == "Pass"
+                    1
+                    for r in extra_rows
+                    if str(r.get("Severity Badge") or "") == "Pass"
                 )
                 critical_count = sum(
                     1
@@ -1325,9 +1315,7 @@ async def main(run: RunConfig | None = None) -> None:
                     if seo_health_values
                     else 0.0
                 )
-                seo_pass_pct = round(
-                    (pass_count / max(1, total_urls)) * 100.0, 2
-                )
+                seo_pass_pct = round((pass_count / max(1, total_urls)) * 100.0, 2)
                 to_do_share = (critical_count + warning_count) / max(1, total_urls)
                 projected_health_pct = min(
                     100.0,
@@ -1534,9 +1522,7 @@ async def main(run: RunConfig | None = None) -> None:
                             }
                         ]
                     )
-                to_excel_safe(
-                    resolved_issues_df, writer, "ResolvedIssues", index=False
-                )
+                to_excel_safe(resolved_issues_df, writer, "ResolvedIssues", index=False)
                 legend_rows = [
                     {
                         "Section": "How To Use",
@@ -1590,7 +1576,7 @@ async def main(run: RunConfig | None = None) -> None:
                     {
                         "Section": "Severity",
                         "Term": "Observation",
-                        "Meaning": "Optimization opportunity or context signal.",
+                        "Meaning": "Optimisation opportunity or context signal.",
                         "Values/Threshold": "Backlog/monitor",
                         "Related Tabs": "Summary, Technical",
                     },
@@ -1604,7 +1590,7 @@ async def main(run: RunConfig | None = None) -> None:
                     {
                         "Section": "Scoring",
                         "Term": "AEO Readiness Score",
-                        "Meaning": "Answer Engine Optimization readiness score per URL.",
+                        "Meaning": "Answer Engine Optimisation readiness score per URL.",
                         "Values/Threshold": ">=80 strong, 60-79 good, 40-59 fair",
                         "Related Tabs": "AEO",
                     },
@@ -1638,10 +1624,10 @@ async def main(run: RunConfig | None = None) -> None:
                     },
                     {
                         "Section": "AEO & Generative Search Terms",
-                        "Term": "Answer Engine Optimization",
+                        "Term": "Answer Engine Optimisation",
                         "Meaning": "The practice of structuring content so AI answer engines can reliably extract and cite direct answers.",
                         "Values/Threshold": "Answer-first formatting",
-                        "Related Tabs": "AEO, Content Optimization Hub",
+                        "Related Tabs": f"AEO, {CONTENT_OPTIMISATION_HUB_SHEET}",
                     },
                     {
                         "Section": "AEO & Generative Search Terms",
@@ -1801,7 +1787,7 @@ async def main(run: RunConfig | None = None) -> None:
                 apply_tab_hyperlinks(writer)
                 for sname in (
                     "Dashboard",
-                    "Content Optimization Hub",
+                    CONTENT_OPTIMISATION_HUB_SHEET,
                     "Quick Reference Guide",
                     "Summary",
                     "FixPlan",
@@ -2014,9 +2000,9 @@ def _build_aioseo_rows(
             add_issue(
                 url=url,
                 issue="Canonical configuration issue",
-                severity="Critical"
-                if canonical_type == "cross-canonical"
-                else "Warning",
+                severity=(
+                    "Critical" if canonical_type == "cross-canonical" else "Warning"
+                ),
                 panel="Advanced SEO",
                 current_value=canonical_type,
                 recommended_target="self",

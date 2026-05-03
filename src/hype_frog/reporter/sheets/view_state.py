@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from openpyxl.utils.cell import coordinate_to_tuple
 from openpyxl.worksheet.cell_range import CellRange
 from openpyxl.worksheet.views import Selection
 from openpyxl.worksheet.worksheet import Worksheet
-from openpyxl.utils.cell import coordinate_to_tuple
+
+from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 
 
 def ranges_overlap(range_a: CellRange, range_b: CellRange) -> bool:
@@ -68,7 +70,9 @@ def sanitize_sheet_view_selection(worksheet: Worksheet) -> None:
     elif x_split == 0 and y_split > 0:
         valid_panes.add("bottomLeft")
 
-    sanitized = [sel for sel in view.selection if getattr(sel, "pane", None) in valid_panes]
+    sanitized = [
+        sel for sel in view.selection if getattr(sel, "pane", None) in valid_panes
+    ]
     if not sanitized:
         sanitized = [Selection(activeCell="A1", sqref="A1")]
     view.selection = sanitized
@@ -82,13 +86,17 @@ def apply_optimal_view_state(worksheet: Worksheet, sheet_name: str) -> None:
         sheet_name: Canonical sheet name for rule selection.
     """
     two_dimensional_freeze_sheets: set[str] = {"Main", "Content", "Technical"}
-    should_clear_freeze = (
-        sheet_name not in {"Main", "Dashboard"}
-        and (worksheet.max_row < 10 or worksheet.max_column < 5)
+    should_clear_freeze = sheet_name not in {"Main", "Dashboard"} and (
+        worksheet.max_row < 10 or worksheet.max_column < 5
     )
 
     if should_clear_freeze:
         set_freeze_panes_safe(worksheet, None)
+        sanitize_sheet_view_selection(worksheet)
+        return
+
+    if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
+        set_freeze_panes_safe(worksheet, "F3")
         sanitize_sheet_view_selection(worksheet)
         return
 

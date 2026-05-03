@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 from hype_frog.models import harden_page_row_metrics
 from hype_frog.pipeline.enrich import value_or_default
+from hype_frog.reporter.excel_engine import compute_content_cluster_id
 from hype_frog.rules import (
     get_summary_rules,
     owner_for_issue,
@@ -346,18 +347,28 @@ def row_with_seo_health_enrichment(
 
 def enrich_extra_rows_with_composite_scores(
     rows: list[dict[str, object]],
+    *,
+    main_by_url: Mapping[str, dict[str, object]] | None = None,
 ) -> list[dict[str, object]]:
     out: list[dict[str, object]] = []
     for r in rows:
         th, cs, seo = compute_seo_technical_copy_scores(r)
-        out.append(
-            {
-                **r,
-                "Technical Health": round(th, 2),
-                "Copy Score": round(cs, 2),
-                "SEO Score": round(seo, 2),
-            }
-        )
+        merged: dict[str, object] = {
+            **r,
+            "Technical Health": round(th, 2),
+            "Copy Score": round(cs, 2),
+            "SEO Score": round(seo, 2),
+        }
+        if main_by_url is not None:
+            m = main_by_url.get(str(r.get("URL") or "").strip(), {})
+            tit = str(m.get("Title") or "").strip()
+            h1ish = str(
+                m.get("H1 Content") or r.get("Current H-Tag Structure") or ""
+            ).strip()
+            merged["Content Cluster ID"] = compute_content_cluster_id(
+                r.get("URL"), title=tit, h1_or_structure=h1ish
+            )
+        out.append(merged)
     return out
 
 

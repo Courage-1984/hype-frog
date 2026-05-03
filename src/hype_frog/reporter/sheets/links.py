@@ -7,6 +7,7 @@ from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
+from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 from hype_frog.utils import normalize_url_key
 
 
@@ -76,6 +77,27 @@ def add_url_navigation_links(
     """
     if debug_excel_isolation_mode:
         return
+    if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
+        headers_r2: dict[str, int] = {}
+        for c in range(1, worksheet.max_column + 1):
+            raw = worksheet.cell(row=2, column=c).value
+            if raw is not None and str(raw).strip():
+                headers_r2[str(raw).strip()] = c
+        url_col = headers_r2.get("URL")
+        if not url_col or worksheet.max_row < 3:
+            return
+        for r in range(3, worksheet.max_row + 1):
+            url_cell = worksheet.cell(row=r, column=url_col)
+            url_val = str(url_cell.value or "").strip()
+            if url_val.startswith(("http://", "https://")) and is_safe_hyperlink_target(
+                url_val,
+                disable_external_links_and_images=disable_external_links_and_images,
+            ):
+                url_cell.hyperlink = url_val
+                url_cell.style = "Hyperlink"
+                url_cell.alignment = Alignment(wrap_text=True, vertical="top")
+        return
+
     headers = header_index_fn(worksheet)
     url_col = headers.get("URL")
     if not url_col or worksheet.max_row <= 1:
@@ -131,7 +153,9 @@ def apply_cross_sheet_links(
         fix_issue_to_row: dict[str, int] = {}
         if fix_ws and fix_issue_col:
             for r in range(2, fix_ws.max_row + 1):
-                issue_name = str(fix_ws.cell(row=r, column=fix_issue_col).value or "").strip()
+                issue_name = str(
+                    fix_ws.cell(row=r, column=fix_issue_col).value or ""
+                ).strip()
                 if issue_name and issue_name not in fix_issue_to_row:
                     fix_issue_to_row[issue_name] = r
         if issue_col:
@@ -205,11 +229,15 @@ def apply_cross_sheet_links(
             fix_issue_rows: dict[str, int] = {}
             if fix_issue_col:
                 for r in range(2, fix_ws.max_row + 1):
-                    key = str(fix_ws.cell(row=r, column=fix_issue_col).value or "").strip()
+                    key = str(
+                        fix_ws.cell(row=r, column=fix_issue_col).value or ""
+                    ).strip()
                     if key and key not in fix_issue_rows:
                         fix_issue_rows[key] = r
                 for r in range(2, worksheet.max_row + 1):
-                    issue = str(worksheet.cell(row=r, column=issue_col).value or "").strip()
+                    issue = str(
+                        worksheet.cell(row=r, column=issue_col).value or ""
+                    ).strip()
                     target_row = fix_issue_rows.get(issue)
                     if target_row:
                         cell = worksheet.cell(row=r, column=issue_col)
@@ -229,20 +257,26 @@ def apply_cross_sheet_links(
                     column=technical_col,
                     value=f'=IFERROR(HYPERLINK("#Technical!A"&MATCH({url_letter}{r},Technical!A:A,0),"Open"),HYPERLINK("#Technical!A1","Open"))',
                 )
-    if sheet_name == "FixPlan" and "Content Optimization Hub" in writer.book.sheetnames:
+    if sheet_name == "FixPlan" and CONTENT_OPTIMISATION_HUB_SHEET in writer.book.sheetnames:
         headers = header_index_fn(worksheet)
         url_col = headers.get("URL")
         hub_status_col = headers.get("Hub Status (Content Hub)")
         if not hub_status_col:
             hub_status_col = worksheet.max_column + 1
-            worksheet.cell(row=1, column=hub_status_col, value="Hub Status (Content Hub)")
+            worksheet.cell(
+                row=1, column=hub_status_col, value="Hub Status (Content Hub)"
+            )
         if url_col:
             u_letter = get_column_letter(url_col)
             for r in range(2, worksheet.max_row + 1):
                 worksheet.cell(
                     row=r,
                     column=hub_status_col,
-                    value=f"=IFERROR(INDEX('Content Optimization Hub'!A:A,MATCH({u_letter}{r},'Content Optimization Hub'!C:C,0)),\"Not in Hub\")",
+                    value=(
+                        f"=IFERROR(INDEX('{CONTENT_OPTIMISATION_HUB_SHEET}'!A:A,"
+                        f"MATCH({u_letter}{r},'{CONTENT_OPTIMISATION_HUB_SHEET}'!D:D,0)),"
+                        '"Not in Hub")'
+                    ),
                 )
 
 
@@ -253,7 +287,7 @@ def apply_editor_url_column_hyperlinks(
     disable_external_links_and_images: bool,
 ) -> None:
     """Turn Elementor / AIOSEO edit URLs into real outbound hyperlinks (when enabled)."""
-    if sheet_name == "Content Optimization Hub":
+    if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
         header_row, first_data_row, column_name = 2, 3, "Elementor Builder Link"
     elif sheet_name == "AIOSEO":
         header_row, first_data_row, column_name = 1, 2, "Direct Edit Link"
@@ -272,7 +306,14 @@ def apply_editor_url_column_hyperlinks(
     link_font = Font(color="0563C1", underline="single")
     for row_idx in range(first_data_row, worksheet.max_row + 1):
         cell = worksheet.cell(row=row_idx, column=col_idx)
-        val = sanitize_excel_url(cell.value)
+        raw_val = cell.value
+        if isinstance(raw_val, str) and raw_val.strip().upper().startswith(
+            "=HYPERLINK("
+        ):
+            cell.font = link_font
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+            continue
+        val = sanitize_excel_url(raw_val)
         if val.startswith(("http://", "https://")) and is_safe_hyperlink_target(
             val, disable_external_links_and_images=disable_external_links_and_images
         ):

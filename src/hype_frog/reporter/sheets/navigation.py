@@ -7,6 +7,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.reporter.sheets.config import (
+    CONTENT_OPTIMISATION_HUB_SHEET,
     DEBUG_EXCEL_ISOLATION_MODE,
     DISABLE_EXTERNAL_LINKS_AND_IMAGES,
     STD_BLUE,
@@ -28,6 +29,8 @@ def add_back_to_dashboard_link(worksheet: Worksheet, sheet_name: str) -> None:
     if DEBUG_EXCEL_ISOLATION_MODE:
         return
     if sheet_name == "Dashboard":
+        return
+    if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
         return
     target_col = worksheet.max_column + 1
     target_ref = f"{get_column_letter(target_col)}1"
@@ -58,9 +61,7 @@ def add_url_navigation_links(
     )
 
 
-def apply_cross_sheet_links(
-    writer: Any, worksheet: Worksheet, sheet_name: str
-) -> None:
+def apply_cross_sheet_links(writer: Any, worksheet: Worksheet, sheet_name: str) -> None:
     """Delegate cross-sheet link generation with project defaults.
 
     Args:
