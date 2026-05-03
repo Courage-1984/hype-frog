@@ -6,6 +6,9 @@ STD_NAVY: str = "2F3A4A"
 STD_WHITE: str = "FFFFFF"
 STD_BLUE: str = "2F6FA3"
 
+# Canonical UK spelling for the Content Hub worksheet title (must match workbook-wide).
+CONTENT_OPTIMISATION_HUB_SHEET: str = "Content Optimisation Hub"
+
 DATA_HEAVY_TABS: set[str] = {
     "Main",
     "Technical",
@@ -14,7 +17,7 @@ DATA_HEAVY_TABS: set[str] = {
     "FixPlan",
     "Summary",
     "Schema & Metadata",
-    "Content Optimization Hub",
+    CONTENT_OPTIMISATION_HUB_SHEET,
 }
 
 
@@ -38,6 +41,7 @@ __all__ = [
     "STD_NAVY",
     "STD_WHITE",
     "STD_BLUE",
+    "CONTENT_OPTIMISATION_HUB_SHEET",
     "DATA_HEAVY_TABS",
     "env_bool",
     "DEBUG_EXCEL_ISOLATION_MODE",

@@ -11,6 +11,7 @@ from openpyxl.formatting.rule import CellIsRule, ColorScaleRule, FormulaRule
 
 from hype_frog.reporter.excel_engine import apply_global_conditional_formatting
 from hype_frog.reporter.sheets.config import (
+    CONTENT_OPTIMISATION_HUB_SHEET,
     DEBUG_EXCEL_ISOLATION_MODE,
     DISABLE_CONDITIONAL_FORMATTING,
     DISABLE_DATA_VALIDATION,
@@ -67,14 +68,6 @@ def apply_wrapped_row_heights(worksheet: Worksheet) -> None:
 
 
 _SHEET_WRAP_TARGETS: dict[str, tuple[int, tuple[str, ...]]] = {
-    "Content Optimization Hub": (
-        2,
-        (
-            "Current Page Copy Snippet",
-            "Proposed H-Tag Fixes",
-            "AEO Answer Block Draft",
-        ),
-    ),
     "Technical": (1, ("Redirect Hops", "X-Robots-Tag", "Content-Security-Policy")),
     "AEO": (1, ("Why It Matters", "Snippet Preview Mockup")),
 }
@@ -82,6 +75,26 @@ _SHEET_WRAP_TARGETS: dict[str, tuple[int, tuple[str, ...]]] = {
 
 def apply_sheet_text_wrap_columns(worksheet: Worksheet, sheet_name: str) -> None:
     """Wrap and cap row heights for high-volume narrative / policy columns."""
+    if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
+        if worksheet.max_row <= 2:
+            return
+        headers: dict[str, int] = {}
+        for c in range(1, worksheet.max_column + 1):
+            v = worksheet.cell(row=2, column=c).value
+            if v is not None and str(v).strip():
+                headers[str(v).strip()] = c
+        for _name, col_idx in headers.items():
+            if "proposed" not in str(_name).lower():
+                continue
+            for row_idx in range(3, worksheet.max_row + 1):
+                cell = worksheet.cell(row=row_idx, column=col_idx)
+                prev = cell.alignment
+                cell.alignment = Alignment(
+                    horizontal=prev.horizontal if prev else "left",
+                    vertical="top",
+                    wrap_text=True,
+                )
+        return
     spec = _SHEET_WRAP_TARGETS.get(sheet_name)
     if not spec:
         return
@@ -127,9 +140,13 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
     bad_fill = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
     warn_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
     good_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-    traffic_warn_fill = PatternFill(start_color="F4B183", end_color="F4B183", fill_type="solid")
+    traffic_warn_fill = PatternFill(
+        start_color="F4B183", end_color="F4B183", fill_type="solid"
+    )
     edge_fill = PatternFill(start_color="D9D2E9", end_color="D9D2E9", fill_type="solid")
-    zebra_fill = PatternFill(start_color="F7F7F7", end_color="F7F7F7", fill_type="solid")
+    zebra_fill = PatternFill(
+        start_color="F7F7F7", end_color="F7F7F7", fill_type="solid"
+    )
     headers = [cell.value for cell in worksheet[1]]
     is_wide_sheet = worksheet.max_column >= 30
 
@@ -162,13 +179,23 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
 
     def is_edge_header(header_name: str) -> bool:
         h = (header_name or "").lower()
-        return any(t in h for t in ["redirect chain", "param url", "edge", "unresolved"])
+        return any(
+            t in h for t in ["redirect chain", "param url", "edge", "unresolved"]
+        )
 
     def is_good_header(header_name: str) -> bool:
         h = (header_name or "").lower()
         return any(
             t in h
-            for t in ["accessible", "match", "enabled", "complete", "present", "indexable", "coverage (%)"]
+            for t in [
+                "accessible",
+                "match",
+                "enabled",
+                "complete",
+                "present",
+                "indexable",
+                "coverage (%)",
+            ]
         )
 
     for row_idx in range(2, worksheet.max_row + 1):
@@ -177,9 +204,15 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
             cell = worksheet.cell(row=row_idx, column=col_idx)
             val = cell.value
             h = str(header) if header is not None else ""
-            is_url_like = "url" in h.lower() or h.lower().endswith("urls") or h.lower() in {"final url", "canonical url"}
+            is_url_like = (
+                "url" in h.lower()
+                or h.lower().endswith("urls")
+                or h.lower() in {"final url", "canonical url"}
+            )
             if is_wide_sheet and is_url_like:
-                cell.alignment = Alignment(wrap_text=False, shrink_to_fit=True, vertical="top")
+                cell.alignment = Alignment(
+                    wrap_text=False, shrink_to_fit=True, vertical="top"
+                )
             elif "url" in h.lower() or "hops" in h.lower() or "images" == h.lower():
                 cell.alignment = Alignment(wrap_text=True, vertical="top")
             else:
@@ -197,7 +230,9 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
                         cell.fill = warn_fill
                 except Exception:
                     pass
-            if h in {"Status Code", "Target Status (if crawled)"} and isinstance(val, int):
+            if h in {"Status Code", "Target Status (if crawled)"} and isinstance(
+                val, int
+            ):
                 if val >= 400:
                     cell.fill = bad_fill
                     row_has_issue = True
@@ -205,7 +240,9 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
                     cell.fill = warn_fill
                 elif 200 <= val < 300:
                     cell.fill = good_fill
-            if isinstance(val, bool) or (isinstance(val, str) and val.strip().lower() in {"true", "false"}):
+            if isinstance(val, bool) or (
+                isinstance(val, str) and val.strip().lower() in {"true", "false"}
+            ):
                 flag = parse_bool(val)
                 if is_bad_header(h):
                     cell.fill = bad_fill if flag else good_fill
@@ -215,7 +252,11 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
                     row_has_issue = row_has_issue or (not flag)
                 elif is_edge_header(h) and flag:
                     cell.fill = edge_fill
-            if h in {"Broken Internal Links Count", "Image Filename Quality Issues", "Generic Anchor Text Count"}:
+            if h in {
+                "Broken Internal Links Count",
+                "Image Filename Quality Issues",
+                "Generic Anchor Text Count",
+            }:
                 try:
                     if int(val or 0) > 0:
                         cell.fill = bad_fill
@@ -274,11 +315,20 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
                     row_has_issue = True
                 elif st in {"fixed", "done", "closed"}:
                     cell.fill = good_fill
-            if h == "Direct Edit Link" and isinstance(val, str) and val.startswith(("http://", "https://")):
-                if is_safe_hyperlink_target(val, disable_external_links_and_images=DISABLE_EXTERNAL_LINKS_AND_IMAGES):
+            if (
+                h == "Direct Edit Link"
+                and isinstance(val, str)
+                and val.startswith(("http://", "https://"))
+            ):
+                if is_safe_hyperlink_target(
+                    val,
+                    disable_external_links_and_images=DISABLE_EXTERNAL_LINKS_AND_IMAGES,
+                ):
                     cell.hyperlink = val
                     cell.style = "Hyperlink"
-                    cell.fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+                    cell.fill = PatternFill(
+                        start_color="1F4E78", end_color="1F4E78", fill_type="solid"
+                    )
                     cell.font = Font(color="FFFFFF", bold=True, underline="single")
                     cell.alignment = Alignment(horizontal="center", vertical="center")
 
@@ -298,37 +348,61 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
     """Apply Content Hub-specific validations, formulas, and conditional rules.
 
     Args:
-        worksheet: Content Optimization Hub worksheet.
+        worksheet: Content Optimisation Hub worksheet.
         writer: Pandas ExcelWriter-like object.
     """
     if worksheet.max_row < 2:
         return
 
     worksheet.insert_rows(1)
-    max_col_letter = get_column_letter(worksheet.max_column)
-    worksheet.merge_cells(f"A1:{max_col_letter}1")
-    worksheet["A1"] = (
+    max_col = worksheet.max_column
+    instruction = (
         "CONTENT HUB INSTRUCTIONS: 1. Draft in 'Proposed' columns. | "
         "2. Watch 'Count' for Green. | "
         "3. Click 'Elementor' link. | "
         "4. Mark 'Status' as 'Completed'. | "
         "NOTE: If images show '#BLOCKED!', click the 'Security Warning' bar at the top of Excel and select 'Enable Content'."
     )
-    worksheet["A1"].hyperlink = None
-    worksheet["A1"].fill = PatternFill(start_color="BFE9E4", end_color="BFE9E4", fill_type="solid")
+    if max_col > 1:
+        inner_end = get_column_letter(max_col - 1)
+        worksheet.merge_cells(f"A1:{inner_end}1")
+        worksheet["A1"] = instruction
+        back_cell = worksheet.cell(row=1, column=max_col)
+        back_cell.value = "BACK TO DASHBOARD"
+        back_cell.hyperlink = "#'Dashboard'!A1"
+        back_cell.style = "Hyperlink"
+        back_cell.font = Font(color="0563C1", underline="single", bold=True)
+        back_cell.alignment = Alignment(horizontal="center", vertical="center")
+        worksheet["A1"].hyperlink = None
+    else:
+        worksheet["A1"] = instruction
+        worksheet["A1"].hyperlink = None
+    worksheet["A1"].fill = PatternFill(
+        start_color="BFE9E4", end_color="BFE9E4", fill_type="solid"
+    )
     worksheet["A1"].font = Font(color=STD_NAVY, bold=True)
     worksheet["A1"].alignment = Alignment(horizontal="left", vertical="center")
     worksheet.row_dimensions[1].height = 28
     set_freeze_panes_safe(worksheet, "F3")
-    headers = {str(cell.value): idx for idx, cell in enumerate(worksheet[2], start=1) if cell.value}
+    headers = {
+        str(cell.value): idx
+        for idx, cell in enumerate(worksheet[2], start=1)
+        if cell.value
+    }
     status_col = headers.get("Status")
     start_row = 3
     end_row = worksheet.max_row
 
     if status_col and not DISABLE_DATA_VALIDATION and end_row >= start_row:
-        dv = DataValidation(type="list", formula1='"To Do,In Progress,Review,Completed"', allow_blank=True)
+        dv = DataValidation(
+            type="list",
+            formula1='"To Do,In Progress,Review,Completed"',
+            allow_blank=True,
+        )
         worksheet.add_data_validation(dv)
-        dv.add(f"{get_column_letter(status_col)}{start_row}:{get_column_letter(status_col)}{end_row}")
+        dv.add(
+            f"{get_column_letter(status_col)}{start_row}:{get_column_letter(status_col)}{end_row}"
+        )
     if status_col and end_row >= start_row and not DISABLE_CONDITIONAL_FORMATTING:
         status_letter = get_column_letter(status_col)
         for label, color, font_color in (
@@ -340,14 +414,18 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
             worksheet.conditional_formatting.add(
                 f"{status_letter}{start_row}:{status_letter}{end_row}",
                 FormulaRule(
-                    formula=[f'LOWER({status_letter}3)="{label}"'],
+                    formula=[f'LOWER({status_letter}{start_row})="{label}"'],
                     stopIfTrue=True,
                     fill=PatternFill("solid", fgColor=color),
                     font=Font(color=font_color),
                 ),
             )
     action_required_col = headers.get("Action Required")
-    if action_required_col and end_row >= start_row and not DISABLE_CONDITIONAL_FORMATTING:
+    if (
+        action_required_col
+        and end_row >= start_row
+        and not DISABLE_CONDITIONAL_FORMATTING
+    ):
         ar_letter = get_column_letter(action_required_col)
         ar_range = f"{ar_letter}{start_row}:{ar_letter}{end_row}"
         worksheet.conditional_formatting.add(
@@ -355,7 +433,9 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
             CellIsRule(
                 operator="equal",
                 formula=['"Needs Copy"'],
-                fill=PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid"),
+                fill=PatternFill(
+                    start_color="FF0000", end_color="FF0000", fill_type="solid"
+                ),
                 font=Font(color="FFFFFF", bold=True),
             ),
         )
@@ -363,8 +443,21 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
             ar_range,
             CellIsRule(
                 operator="equal",
+                formula=['"Needs Optimisation"'],
+                fill=PatternFill(
+                    start_color="FFC000", end_color="FFC000", fill_type="solid"
+                ),
+                font=Font(color="000000", bold=True),
+            ),
+        )
+        worksheet.conditional_formatting.add(
+            ar_range,
+            CellIsRule(
+                operator="equal",
                 formula=['"Needs Optimization"'],
-                fill=PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid"),
+                fill=PatternFill(
+                    start_color="FFC000", end_color="FFC000", fill_type="solid"
+                ),
                 font=Font(color="000000", bold=True),
             ),
         )
@@ -373,7 +466,9 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
             CellIsRule(
                 operator="equal",
                 formula=['"Complete"'],
-                fill=PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid"),
+                fill=PatternFill(
+                    start_color="00FF00", end_color="00FF00", fill_type="solid"
+                ),
                 font=Font(color="000000", bold=True),
             ),
         )
@@ -382,7 +477,9 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
             CellIsRule(
                 operator="equal",
                 formula=['"Ready to Publish"'],
-                fill=PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid"),
+                fill=PatternFill(
+                    start_color="00FF00", end_color="00FF00", fill_type="solid"
+                ),
                 font=Font(color="000000", bold=True),
             ),
         )
@@ -404,6 +501,20 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
                 ),
             )
     worksheet["A1"].hyperlink = None
+
+
+def finalize_content_hub_after_normalized_headers(worksheet: Worksheet) -> None:
+    """Strip stray header hyperlinks after mock table (hub formulas live in row data)."""
+    if worksheet.title != CONTENT_OPTIMISATION_HUB_SHEET or worksheet.max_row < 3:
+        return
+    for col_idx in range(1, worksheet.max_column + 1):
+        hdr = worksheet.cell(row=2, column=col_idx)
+        hdr.hyperlink = None
+        try:
+            if hdr.style and str(hdr.style) == "Hyperlink":
+                hdr.style = "Normal"
+        except (AttributeError, TypeError):
+            pass
 
 
 def apply_psi_conditional_rules(worksheet: Worksheet) -> None:
@@ -428,24 +539,65 @@ def apply_psi_conditional_rules(worksheet: Worksheet) -> None:
     }.items():
         cidx = headers.get(header_name)
         if cidx:
-            worksheet.cell(row=1, column=cidx).comment = Comment(tooltip, "SEO Audit Bot")
+            worksheet.cell(row=1, column=cidx).comment = Comment(
+                tooltip, "SEO Audit Bot"
+            )
     score_cols = [
         cidx
         for h, cidx in headers.items()
-        if ("score" in str(h).lower()) and ("desktop" in str(h).lower() or "mobile" in str(h).lower())
+        if ("score" in str(h).lower())
+        and ("desktop" in str(h).lower() or "mobile" in str(h).lower())
     ]
     for cidx in score_cols:
         col = get_column_letter(cidx)
         rng = f"{col}{start_row}:{col}{end_row}"
         if not DISABLE_CONDITIONAL_FORMATTING:
-            worksheet.conditional_formatting.add(rng, FormulaRule(formula=[f"{col}{start_row}>=90"], stopIfTrue=True, fill=PatternFill("solid", fgColor="C6EFCE"), font=Font(color="006100")))
-            worksheet.conditional_formatting.add(rng, FormulaRule(formula=[f"AND({col}{start_row}>=50,{col}{start_row}<90)"], stopIfTrue=True, fill=PatternFill("solid", fgColor="FFEB9C"), font=Font(color="9C6500")))
-            worksheet.conditional_formatting.add(rng, FormulaRule(formula=[f"{col}{start_row}<50"], stopIfTrue=True, fill=PatternFill("solid", fgColor="FFC7CE"), font=Font(color="9C0006")))
+            worksheet.conditional_formatting.add(
+                rng,
+                FormulaRule(
+                    formula=[f"{col}{start_row}>=90"],
+                    stopIfTrue=True,
+                    fill=PatternFill("solid", fgColor="C6EFCE"),
+                    font=Font(color="006100"),
+                ),
+            )
+            worksheet.conditional_formatting.add(
+                rng,
+                FormulaRule(
+                    formula=[f"AND({col}{start_row}>=50,{col}{start_row}<90)"],
+                    stopIfTrue=True,
+                    fill=PatternFill("solid", fgColor="FFEB9C"),
+                    font=Font(color="9C6500"),
+                ),
+            )
+            worksheet.conditional_formatting.add(
+                rng,
+                FormulaRule(
+                    formula=[f"{col}{start_row}<50"],
+                    stopIfTrue=True,
+                    fill=PatternFill("solid", fgColor="FFC7CE"),
+                    font=Font(color="9C0006"),
+                ),
+            )
     if mobile_lcp_col and not DISABLE_CONDITIONAL_FORMATTING:
         col = get_column_letter(mobile_lcp_col)
         rng = f"{col}{start_row}:{col}{end_row}"
-        worksheet.conditional_formatting.add(rng, FormulaRule(formula=[f"{col}{start_row}<=2.5"], stopIfTrue=True, fill=PatternFill("solid", fgColor="C6EFCE")))
-        worksheet.conditional_formatting.add(rng, FormulaRule(formula=[f"{col}{start_row}>4.0"], stopIfTrue=True, fill=PatternFill("solid", fgColor="FFC7CE")))
+        worksheet.conditional_formatting.add(
+            rng,
+            FormulaRule(
+                formula=[f"{col}{start_row}<=2.5"],
+                stopIfTrue=True,
+                fill=PatternFill("solid", fgColor="C6EFCE"),
+            ),
+        )
+        worksheet.conditional_formatting.add(
+            rng,
+            FormulaRule(
+                formula=[f"{col}{start_row}>4.0"],
+                stopIfTrue=True,
+                fill=PatternFill("solid", fgColor="FFC7CE"),
+            ),
+        )
 
 
 def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
@@ -513,7 +665,9 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
             CellIsRule(
                 operator="greaterThan",
                 formula=["160"],
-                fill=PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+                fill=PatternFill(
+                    start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"
+                ),
                 font=Font(color="9C0006"),
             ),
         )
@@ -524,6 +678,7 @@ __all__ = [
     "apply_sheet_text_wrap_columns",
     "apply_generic_sheet_coloring",
     "apply_content_hub_conditional_rules",
+    "finalize_content_hub_after_normalized_headers",
     "apply_psi_conditional_rules",
     "apply_main_sheet_heatmaps",
 ]

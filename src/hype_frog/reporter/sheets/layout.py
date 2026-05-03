@@ -6,6 +6,7 @@ from typing import Any
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
+from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 from hype_frog.reporter.sheets.utils import header_index, to_int
 
 MAIN_COLUMN_GROUP_DEFINITIONS: dict[str, list[str]] = {
@@ -173,7 +174,9 @@ def hide_noisy_columns(worksheet: Worksheet, sheet_name: str) -> None:
     for idx, cell in enumerate(worksheet[1], start=1):
         header = str(cell.value or "").lower()
         if any(tok in header for tok in tokens):
-            worksheet.column_dimensions[worksheet.cell(row=1, column=idx).column_letter].hidden = True
+            worksheet.column_dimensions[
+                worksheet.cell(row=1, column=idx).column_letter
+            ].hidden = True
 
 
 def reorder_columns(worksheet: Worksheet, sheet_name: str) -> None:
@@ -202,6 +205,7 @@ def reorder_columns(worksheet: Worksheet, sheet_name: str) -> None:
         ],
         "Technical": [
             "URL",
+            "Content Cluster ID",
             "Status Code",
             "Status Class",
             "SEO Health Score",
@@ -310,11 +314,10 @@ def reorder_columns(worksheet: Worksheet, sheet_name: str) -> None:
             "Est. Hours",
             "Stable Issue ID",
         ],
-        "Content Optimization Hub": [
+        CONTENT_OPTIMISATION_HUB_SHEET: [
             "Action Required",
             "Status",
             "Assigned Owner",
-            "Content Cluster ID",
             "URL",
             "Current SEO Score",
             "Projected SEO Score",
@@ -334,6 +337,10 @@ def reorder_columns(worksheet: Worksheet, sheet_name: str) -> None:
             "Current OG-Image URL",
             "OG Image Preview",
             "Social Share Note",
+            "SEO Score",
+            "Technical Health",
+            "Copy Score",
+            "Open in Main",
         ],
         "AEO": [
             "URL",
@@ -379,7 +386,8 @@ def reorder_columns(worksheet: Worksheet, sheet_name: str) -> None:
     if not preferred or worksheet.max_row < 1:
         return
     current_headers = [
-        worksheet.cell(row=1, column=i).value for i in range(1, worksheet.max_column + 1)
+        worksheet.cell(row=1, column=i).value
+        for i in range(1, worksheet.max_column + 1)
     ]
     if not any(h in current_headers for h in preferred):
         return

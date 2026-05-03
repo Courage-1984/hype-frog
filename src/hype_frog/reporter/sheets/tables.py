@@ -6,7 +6,11 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
-from hype_frog.reporter.sheets.config import STD_NAVY, STD_WHITE
+from hype_frog.reporter.sheets.config import (
+    CONTENT_OPTIMISATION_HUB_SHEET,
+    STD_NAVY,
+    STD_WHITE,
+)
 from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
 
 
@@ -82,13 +86,17 @@ def apply_mock_table_styling(
         ref = f"{get_column_letter(min_col)}{min_row}:{get_column_letter(max_col)}{max_row}"
         worksheet.auto_filter.ref = ref
 
-    header_fill = PatternFill(start_color=STD_NAVY, end_color=STD_NAVY, fill_type="solid")
+    header_fill = PatternFill(
+        start_color=STD_NAVY, end_color=STD_NAVY, fill_type="solid"
+    )
     header_font = Font(color=STD_WHITE, bold=True)
     for col_idx in range(min_col, max_col + 1):
         cell = worksheet.cell(row=min_row, column=col_idx)
         cell.fill = header_fill
         cell.font = header_font
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.alignment = Alignment(
+            horizontal="center", vertical="center", wrap_text=True
+        )
 
     band_fill = PatternFill(start_color="F7F7F7", end_color="F7F7F7", fill_type="solid")
     for row_idx in range(min_row + 1, max_row + 1):
@@ -99,8 +107,8 @@ def apply_mock_table_styling(
                     cell.fill = band_fill
 
     if max_row >= min_row:
-        if worksheet.title == "Content Optimization Hub":
-            set_freeze_panes_safe(worksheet, "D3")
+        if worksheet.title == CONTENT_OPTIMISATION_HUB_SHEET:
+            set_freeze_panes_safe(worksheet, "F3")
         else:
             set_freeze_panes_safe(worksheet, "A2")
 

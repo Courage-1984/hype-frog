@@ -4,12 +4,13 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.views import Selection
 
 from hype_frog.reporter.excel_engine import friendly_toc_description
+from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 
 # Canonical left-to-right workbook tab order (move_sheet targets).
 PREFERRED_WORKBOOK_TAB_ORDER: tuple[str, ...] = (
     "Table of Contents",
     "Dashboard",
-    "Content Optimization Hub",
+    CONTENT_OPTIMISATION_HUB_SHEET,
     "Quick Reference Guide",
     "Summary",
     "FixPlan",
@@ -83,7 +84,9 @@ def apply_workbook_toc_and_links(
             b_cell = toc_ws.cell(row=row_ptr, column=2)
             b_cell.value = f'=HYPERLINK("#\'{safe}\'!A1","Open")'
             b_cell.font = Font(color=std_blue, underline="single", bold=True)
-            toc_ws.cell(row=row_ptr, column=3, value=friendly_toc_description(sheet_name))
+            toc_ws.cell(
+                row=row_ptr, column=3, value=friendly_toc_description(sheet_name)
+            )
             row_ptr += 1
         for sheet_name in wb_ref.sheetnames:
             if sheet_name == "Table of Contents" or sheet_name in _PREFERRED_TAB_SET:
@@ -96,7 +99,9 @@ def apply_workbook_toc_and_links(
             b_cell = toc_ws.cell(row=row_ptr, column=2)
             b_cell.value = f'=HYPERLINK("#\'{safe}\'!A1","Open")'
             b_cell.font = Font(color=std_blue, underline="single", bold=True)
-            toc_ws.cell(row=row_ptr, column=3, value=friendly_toc_description(sheet_name))
+            toc_ws.cell(
+                row=row_ptr, column=3, value=friendly_toc_description(sheet_name)
+            )
             row_ptr += 1
 
     if debug_excel_isolation_mode:
@@ -168,7 +173,7 @@ def apply_workbook_toc_and_links(
         wide_sheets = {
             "Main",
             "Technical",
-            "Content Optimization Hub",
+            CONTENT_OPTIMISATION_HUB_SHEET,
             "FixPlan",
             "Content",
             "Links",
@@ -200,8 +205,8 @@ def apply_workbook_toc_and_links(
             "Indexability",
             "Priority URLs",
         }
-        if tab_name == "Content Optimization Hub":
-            target_freeze = "C3" if ws.max_row >= 3 and ws.max_column >= 3 else None
+        if tab_name == CONTENT_OPTIMISATION_HUB_SHEET:
+            target_freeze = "F3" if ws.max_row >= 3 and ws.max_column >= 5 else None
             _set_freeze_panes_safe(ws, target_freeze)
         elif tab_name in standard_data_sheets:
             target_freeze = "B2" if ws.max_row >= 2 and ws.max_column >= 2 else None

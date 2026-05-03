@@ -34,3 +34,8 @@ output/
 .vscode/
 # Notice we are NOT ignoring .cursor/ or uv.lock!
 
+scripts/
+quick_docs/
+tests/
+.cursor/
+.cursorrules

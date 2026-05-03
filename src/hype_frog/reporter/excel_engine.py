@@ -11,13 +11,19 @@ from urllib.parse import quote, unquote, urlparse, urlsplit, urlunsplit
 
 import pandas as pd
 from openpyxl.comments import Comment
-from openpyxl.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule, FormulaRule
+from openpyxl.formatting.rule import (
+    CellIsRule,
+    ColorScaleRule,
+    DataBarRule,
+    FormulaRule,
+)
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.checkpoint.cache import AuditCache
+from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 from hype_frog.rules import owner_for_issue, workflow_metrics_for_issue
 from hype_frog.utils import normalize_url_key
 
@@ -32,8 +38,12 @@ def apply_fixplan_workflow_formatting(worksheet: Worksheet) -> None:
     priority_col = header_to_col.get("Priority Score")
     points_col = header_to_col.get("Est. Sprint Points")
     aging_col = header_to_col.get("Aging/Priority")
-    critical_fill = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
-    warning_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    critical_fill = PatternFill(
+        start_color="F4CCCC", end_color="F4CCCC", fill_type="solid"
+    )
+    warning_fill = PatternFill(
+        start_color="FFF2CC", end_color="FFF2CC", fill_type="solid"
+    )
     good_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
     edge_fill = PatternFill(start_color="D9D2E9", end_color="D9D2E9", fill_type="solid")
     for row_idx in range(2, worksheet.max_row + 1):
@@ -73,7 +83,11 @@ def apply_fixplan_workflow_formatting(worksheet: Worksheet) -> None:
 
 
 def _legacy_sheet_header_index(worksheet: Worksheet) -> dict[str, int]:
-    return {str(cell.value): idx for idx, cell in enumerate(worksheet[1], start=1) if cell.value}
+    return {
+        str(cell.value): idx
+        for idx, cell in enumerate(worksheet[1], start=1)
+        if cell.value
+    }
 
 
 def ensure_auto_filter(worksheet: Worksheet) -> None:
@@ -83,11 +97,9 @@ def ensure_auto_filter(worksheet: Worksheet) -> None:
         worksheet.auto_filter.ref = None
         return
 
-    header_row = 2 if worksheet.title == "Content Optimization Hub" else 1
+    header_row = 2 if worksheet.title == CONTENT_OPTIMISATION_HUB_SHEET else 1
     if worksheet.max_row >= header_row + 1 and worksheet.max_column >= 1:
-        worksheet.auto_filter.ref = (
-            f"A{header_row}:{get_column_letter(worksheet.max_column)}{worksheet.max_row}"
-        )
+        worksheet.auto_filter.ref = f"A{header_row}:{get_column_letter(worksheet.max_column)}{worksheet.max_row}"
     else:
         worksheet.auto_filter.ref = None
 
@@ -100,6 +112,8 @@ def _clear_orphaned_selection(worksheet: Worksheet) -> None:
 
 
 def ensure_freeze_header(worksheet: Worksheet) -> None:
+    if worksheet.title == CONTENT_OPTIMISATION_HUB_SHEET:
+        return
     if worksheet.title not in {"Main", "Dashboard"} and (
         worksheet.max_row < 10 or worksheet.max_column < 5
     ):
@@ -124,15 +138,27 @@ def apply_global_conditional_formatting(worksheet: Worksheet) -> None:
         rng = f"{col}2:{col}{last_row}"
         worksheet.conditional_formatting.add(
             rng,
-            CellIsRule(operator="equal", formula=["200"], fill=PatternFill("solid", fgColor="C6EFCE")),
+            CellIsRule(
+                operator="equal",
+                formula=["200"],
+                fill=PatternFill("solid", fgColor="C6EFCE"),
+            ),
         )
         worksheet.conditional_formatting.add(
             rng,
-            CellIsRule(operator="between", formula=["300", "399"], fill=PatternFill("solid", fgColor="FFEB9C")),
+            CellIsRule(
+                operator="between",
+                formula=["300", "399"],
+                fill=PatternFill("solid", fgColor="FFEB9C"),
+            ),
         )
         worksheet.conditional_formatting.add(
             rng,
-            CellIsRule(operator="greaterThanOrEqual", formula=["400"], fill=PatternFill("solid", fgColor="FFC7CE")),
+            CellIsRule(
+                operator="greaterThanOrEqual",
+                formula=["400"],
+                fill=PatternFill("solid", fgColor="FFC7CE"),
+            ),
         )
 
     for load_header in ("Load Time (s)", "Load Time", "TTFB (ms)"):
@@ -253,15 +279,27 @@ def apply_global_conditional_formatting(worksheet: Worksheet) -> None:
             rng = f"{col}2:{col}{last_row}"
             worksheet.conditional_formatting.add(
                 rng,
-                CellIsRule(operator="between", formula=["90", "100"], fill=PatternFill("solid", fgColor="C6EFCE")),
+                CellIsRule(
+                    operator="between",
+                    formula=["90", "100"],
+                    fill=PatternFill("solid", fgColor="C6EFCE"),
+                ),
             )
             worksheet.conditional_formatting.add(
                 rng,
-                CellIsRule(operator="between", formula=["50", "89"], fill=PatternFill("solid", fgColor="FFEB9C")),
+                CellIsRule(
+                    operator="between",
+                    formula=["50", "89"],
+                    fill=PatternFill("solid", fgColor="FFEB9C"),
+                ),
             )
             worksheet.conditional_formatting.add(
                 rng,
-                CellIsRule(operator="between", formula=["0", "49"], fill=PatternFill("solid", fgColor="FFC7CE")),
+                CellIsRule(
+                    operator="between",
+                    formula=["0", "49"],
+                    fill=PatternFill("solid", fgColor="FFC7CE"),
+                ),
             )
 
     lcp_col = headers.get("Mobile LCP")
@@ -270,11 +308,19 @@ def apply_global_conditional_formatting(worksheet: Worksheet) -> None:
         rng = f"{col}2:{col}{last_row}"
         worksheet.conditional_formatting.add(
             rng,
-            CellIsRule(operator="lessThan", formula=["2.5"], fill=PatternFill("solid", fgColor="C6EFCE")),
+            CellIsRule(
+                operator="lessThan",
+                formula=["2.5"],
+                fill=PatternFill("solid", fgColor="C6EFCE"),
+            ),
         )
         worksheet.conditional_formatting.add(
             rng,
-            CellIsRule(operator="greaterThan", formula=["4.0"], fill=PatternFill("solid", fgColor="FFC7CE")),
+            CellIsRule(
+                operator="greaterThan",
+                formula=["4.0"],
+                fill=PatternFill("solid", fgColor="FFC7CE"),
+            ),
         )
 
     answer_para_col = headers.get("Paragraphs 40-60 Words Count")
@@ -283,15 +329,27 @@ def apply_global_conditional_formatting(worksheet: Worksheet) -> None:
         rng = f"{col}2:{col}{last_row}"
         worksheet.conditional_formatting.add(
             rng,
-            CellIsRule(operator="equal", formula=["0"], fill=PatternFill("solid", fgColor="FFC7CE")),
+            CellIsRule(
+                operator="equal",
+                formula=["0"],
+                fill=PatternFill("solid", fgColor="FFC7CE"),
+            ),
         )
         worksheet.conditional_formatting.add(
             rng,
-            CellIsRule(operator="between", formula=["1", "2"], fill=PatternFill("solid", fgColor="FFEB9C")),
+            CellIsRule(
+                operator="between",
+                formula=["1", "2"],
+                fill=PatternFill("solid", fgColor="FFEB9C"),
+            ),
         )
         worksheet.conditional_formatting.add(
             rng,
-            CellIsRule(operator="greaterThanOrEqual", formula=["3"], fill=PatternFill("solid", fgColor="C6EFCE")),
+            CellIsRule(
+                operator="greaterThanOrEqual",
+                formula=["3"],
+                fill=PatternFill("solid", fgColor="C6EFCE"),
+            ),
         )
 
     action_col = headers.get("Action Needed")
@@ -300,11 +358,19 @@ def apply_global_conditional_formatting(worksheet: Worksheet) -> None:
         rng = f"{col}2:{col}{last_row}"
         worksheet.conditional_formatting.add(
             rng,
-            FormulaRule(formula=[f'LOWER({col}2)="yes"'], stopIfTrue=True, fill=PatternFill("solid", fgColor="FFC7CE")),
+            FormulaRule(
+                formula=[f'LOWER({col}2)="yes"'],
+                stopIfTrue=True,
+                fill=PatternFill("solid", fgColor="FFC7CE"),
+            ),
         )
         worksheet.conditional_formatting.add(
             rng,
-            FormulaRule(formula=[f'LOWER({col}2)="no"'], stopIfTrue=True, fill=PatternFill("solid", fgColor="C6EFCE")),
+            FormulaRule(
+                formula=[f'LOWER({col}2)="no"'],
+                stopIfTrue=True,
+                fill=PatternFill("solid", fgColor="C6EFCE"),
+            ),
         )
 
     severity_badge_col = headers.get("Severity Badge")
@@ -313,15 +379,27 @@ def apply_global_conditional_formatting(worksheet: Worksheet) -> None:
         rng = f"{col}2:{col}{last_row}"
         worksheet.conditional_formatting.add(
             rng,
-            FormulaRule(formula=[f'LOWER({col}2)="critical"'], stopIfTrue=True, fill=PatternFill("solid", fgColor="FFC7CE")),
+            FormulaRule(
+                formula=[f'LOWER({col}2)="critical"'],
+                stopIfTrue=True,
+                fill=PatternFill("solid", fgColor="FFC7CE"),
+            ),
         )
         worksheet.conditional_formatting.add(
             rng,
-            FormulaRule(formula=[f'LOWER({col}2)="warning"'], stopIfTrue=True, fill=PatternFill("solid", fgColor="FFCC99")),
+            FormulaRule(
+                formula=[f'LOWER({col}2)="warning"'],
+                stopIfTrue=True,
+                fill=PatternFill("solid", fgColor="FFCC99"),
+            ),
         )
         worksheet.conditional_formatting.add(
             rng,
-            FormulaRule(formula=[f'OR(LOWER({col}2)="pass",LOWER({col}2)="observation")'], stopIfTrue=True, fill=PatternFill("solid", fgColor="C6EFCE")),
+            FormulaRule(
+                formula=[f'OR(LOWER({col}2)="pass",LOWER({col}2)="observation")'],
+                stopIfTrue=True,
+                fill=PatternFill("solid", fgColor="C6EFCE"),
+            ),
         )
 
     status_text_col = headers.get("Status")
@@ -330,12 +408,18 @@ def apply_global_conditional_formatting(worksheet: Worksheet) -> None:
         rng = f"{col}2:{col}{last_row}"
         worksheet.conditional_formatting.add(
             rng,
-            FormulaRule(formula=[f'LOWER({col}2)="done"'], stopIfTrue=True, fill=PatternFill("solid", fgColor="D9EAD3")),
+            FormulaRule(
+                formula=[f'LOWER({col}2)="done"'],
+                stopIfTrue=True,
+                fill=PatternFill("solid", fgColor="D9EAD3"),
+            ),
         )
         worksheet.conditional_formatting.add(
             rng,
             FormulaRule(
-                formula=[f'OR(LOWER({col}2)="to do",LOWER({col}2)="in progress",LOWER({col}2)="in review")'],
+                formula=[
+                    f'OR(LOWER({col}2)="to do",LOWER({col}2)="in progress",LOWER({col}2)="in review")'
+                ],
                 stopIfTrue=True,
                 fill=PatternFill("solid", fgColor="FFF2CC"),
             ),
@@ -423,6 +507,20 @@ def _fallback_keyword(url: str, h1_text: str) -> str:
         if slug:
             return slug.title()
     return ""
+
+
+def compute_content_cluster_id(
+    url: Any, *, title: str = "", h1_or_structure: str = ""
+) -> str:
+    """Derive a stable topical cluster label for Technical inventory and grouping."""
+    raw_title = str(title or "").strip().lower()
+    if not raw_title:
+        raw_title = _fallback_keyword(
+            str(url or ""), str(h1_or_structure or "")
+        ).lower()
+    title_pattern = re.sub(r"\d+", "{n}", raw_title)[:24] if raw_title else "untitled"
+    seg = [s for s in urlparse(str(url or "")).path.strip("/").split("/") if s]
+    return f"{(seg[0] if seg else 'home')}-{title_pattern}".replace(" ", "-")
 
 
 def write_cached_sheet_chunked(
@@ -577,7 +675,7 @@ def write_snippet_candidates_chunked(
         ws.append(["", "", "", 0, ""])
 
 
-def build_content_optimization_hub_rows(
+def build_content_optimisation_hub_rows(
     main_rows: list[dict[str, Any]],
     extra_rows: list[dict[str, Any]],
     fixplan_rows: list[dict[str, Any]],
@@ -626,14 +724,17 @@ def build_content_optimization_hub_rows(
         for _score, url in scored_urls[:15]:
             manual_content_urls.add(url)
 
+    pt_l = _content_hub_column_letter("Proposed Title (50-60 Chars)")
+    pmd_l = _content_hub_column_letter("Proposed Meta Desc (120-160 Chars)")
+    th_l = _content_hub_column_letter("Technical Health")
+    copy_l = _content_hub_column_letter("Copy Score")
+
     rows: list[dict[str, Any]] = []
-    cluster_counts: dict[str, int] = {}
-    draft_rows: list[dict[str, Any]] = []
-    for url in sorted(manual_content_urls):
+    # Row 1 = instruction banner, row 2 = headers (after apply_content_hub_conditional_rules); data begins row 3.
+    for excel_row, url in enumerate(sorted(manual_content_urls), start=3):
         m = main_by_url.get(url, {})
         e = extra_by_url.get(url, {})
         score = float(e.get("SEO Health Score") or 0)
-        priority = "High" if score < 60 else "Med" if score < 80 else "Low"
         post_id = e.get("WordPress Post ID")
         try:
             post_id = int(post_id) if post_id is not None else None
@@ -644,6 +745,10 @@ def build_content_optimization_hub_rows(
             parsed = urlparse(url)
             if parsed.scheme and parsed.netloc:
                 elementor_link = f"{parsed.scheme}://{parsed.netloc}/wp-admin/post.php?post={post_id}&action=elementor"
+        elementor_cell = ""
+        if elementor_link:
+            safe_url = str(elementor_link).replace('"', '""')
+            elementor_cell = f'=HYPERLINK("{safe_url}","Open in Elementor")'
         target_keywords = str(
             e.get("Meta Keywords") or m.get("Meta Keywords") or ""
         ).strip()
@@ -651,55 +756,61 @@ def build_content_optimization_hub_rows(
             target_keywords = _fallback_keyword(
                 url, str(e.get("Current H-Tag Structure") or m.get("H1 Content") or "")
             )
-        raw_title = str(m.get("Title") or "").strip().lower()
-        title_pattern = (
-            re.sub(r"\d+", "{n}", raw_title)[:24] if raw_title else "untitled"
+        copy_formula = (
+            f"=IF(AND(LEN({pt_l}{excel_row})>=50,LEN({pt_l}{excel_row})<=60),50,20)"
+            f"+IF(AND(LEN({pmd_l}{excel_row})>=120,LEN({pmd_l}{excel_row})<=160),50,20)"
         )
-        seg = [s for s in urlparse(url).path.strip("/").split("/") if s]
-        cluster_id = f"{(seg[0] if seg else 'home')}-{title_pattern}".replace(" ", "-")
-        cluster_counts[cluster_id] = cluster_counts.get(cluster_id, 0) + 1
-        draft_rows.append(
+        projected_formula = f"=(0.7*{th_l}{excel_row})+(0.3*{copy_l}{excel_row})"
+        action_formula = (
+            f'=IF(AND(F{excel_row}>=90,Y{excel_row}>=90),"Complete","Needs Copy")'
+        )
+        open_main_formula = (
+            f'=IFERROR(HYPERLINK("#\'Main\'!A"&MATCH(D{excel_row},\'Main\'!A:A,0),'
+            f'"Open"),"Not Found")'
+        )
+        rows.append(
             {
-                "Action Required": "Needs Copy",
+                "Action Required": action_formula,
                 "Status": "To Do",
-                "Assigned Owner": "Unassigned",
+                "Assigned Owner": "Copy Writer",
                 "URL": url,
                 "Current SEO Score": score,
-                "Projected SEO Score": "",
-                "Elementor Builder Link": elementor_link,
-                "Current Title": str(m.get("Title") or "").strip() or "MISSING TITLE",
-                "Proposed Title (50-60 Chars)": "",
-                "Title Count": "",
-                "Current Meta Desc": str(m.get("Meta Description") or "").strip()
-                or "MISSING DESCRIPTION",
-                "Proposed Meta Desc (120-160 Chars)": "",
-                "Desc Count": "",
-                "Current H-Tag Structure": str(
-                    e.get("Current H-Tag Structure") or m.get("H1 Content") or ""
-                ).strip(),
-                "Current OG-Image URL": _sanitize_excel_url(e.get("OG Image")),
-                "OG Image Preview": "",
+                "Projected SEO Score": projected_formula,
+                "Elementor Builder Link": elementor_cell,
+                "Target Keywords": target_keywords,
                 "Current Page Copy Snippet": str(
                     e.get("Current Page Copy Snippet") or ""
                 ).strip(),
-                "Social Share Note": "",
+                "Current Title": str(m.get("Title") or "").strip() or "MISSING TITLE",
+                "Proposed Title (50-60 Chars)": "",
+                "Title Count": f"=LEN(K{excel_row})",
+                "Current Meta Desc": str(m.get("Meta Description") or "").strip()
+                or "MISSING DESCRIPTION",
+                "Proposed Meta Desc (120-160 Chars)": "",
+                "Desc Count": f"=LEN(N{excel_row})",
+                "Current H-Tag Structure": str(
+                    e.get("Current H-Tag Structure") or m.get("H1 Content") or ""
+                ).strip(),
                 "Proposed H-Tag Fixes": "",
                 "AEO Answer Block Draft": "",
                 "FAQ/QA Draft": "",
-                "Content Cluster ID": cluster_id,
-                "Priority": priority,
-                "Target Keywords": target_keywords,
+                "Current OG-Image URL": _sanitize_excel_url(e.get("OG Image")),
+                "OG Image Preview": "",
+                "Social Share Note": "",
+                "Copy Score": copy_formula,
+                "Open in Main": open_main_formula,
             }
         )
-    for row in draft_rows:
-        row["Assigned Owner"] = "Unassigned"
-        row["Batch Ready"] = (
-            "Yes"
-            if cluster_counts.get(str(row.get("Content Cluster ID") or ""), 0) >= 5
-            else "No"
-        )
-        rows.append(row)
     return rows
+
+
+def build_content_optimization_hub_rows(
+    main_rows: list[dict[str, Any]],
+    extra_rows: list[dict[str, Any]],
+    fixplan_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Backward-compatible alias (US spelling) for :func:`build_content_optimisation_hub_rows`."""
+    return build_content_optimisation_hub_rows(main_rows, extra_rows, fixplan_rows)
 
 
 # ---------------------------------------------------------------------------
@@ -713,7 +824,7 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "Dashboard": (
         "Executive overview of site-wide SEO performance and critical alerts."
     ),
-    "Content Optimization Hub": (
+    CONTENT_OPTIMISATION_HUB_SHEET: (
         "Interactive workspace for drafting SEO titles, descriptions, and AEO content."
     ),
     "FixPlan": (
@@ -723,7 +834,7 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
         "Deep-dive diagnostic data for every crawled URL (Status, Load Time, etc.)."
     ),
     "AEO": (
-        "Answer Engine Optimization readiness scores and answer-block candidates."
+        "Answer Engine Optimisation readiness scores and answer-block candidates."
     ),
     "Priority URLs": (
         "High-value pages requiring immediate attention based on business risk."
@@ -770,12 +881,8 @@ def friendly_toc_description(sheet_name: str) -> str:
 _HEADER_TOOLTIP_MESSAGES: dict[str, str] = {
     "TTFB (ms)": "Time to First Byte: Measures server responsiveness.",
     "LCP (s)": "Largest Contentful Paint: Measures perceived load speed.",
-    "Internal PageRank": (
-        "Authority score based on internal linking structure."
-    ),
-    "Click Depth": (
-        "Number of clicks required to reach this URL from the homepage."
-    ),
+    "Internal PageRank": ("Authority score based on internal linking structure."),
+    "Click Depth": ("Number of clicks required to reach this URL from the homepage."),
     "AEO Readiness Score": (
         "Proprietary score (0-100) measuring how likely an AI engine is to extract "
         "a direct answer from this URL."
@@ -788,12 +895,125 @@ _HEADER_TOOLTIP_MESSAGES: dict[str, str] = {
         "Self: URL points to itself. Cross: URL points to another page. "
         "Missing: No canonical tag found."
     ),
+    "Content Cluster ID": (
+        "Groups pages by topical relevance (e.g. /about-us/) for bulk template editing."
+    ),
+    "Action Required": (
+        "Automation: Flips to 'Complete' once projected SEO and copy scores reach "
+        "90 or above."
+    ),
+    "Assigned Owner": (
+        "Select from dropdown: Copy Writer (Content), Developer (Technical), or "
+        "Server/Host (Infrastructure)."
+    ),
+    "Current SEO Score": ("Baseline score from the initial crawl. Does not change."),
+    "Projected SEO Score": (
+        "Live Score: Updates as you type. Reaches 100% when your Title, Description, "
+        "and AEO drafts meet guidelines."
+    ),
+    "Elementor Builder Link": (
+        "One-click access to the page editor. Requires active WP login."
+    ),
+    "Proposed Title (50-60 Chars)": (
+        "Draft your optimised SEO title here. Keyword should be front-loaded."
+    ),
+    "Proposed Meta Desc (120-160 Chars)": (
+        "Draft your optimised meta description here. Include a clear call-to-action."
+    ),
+    "AEO Answer Block Draft": (
+        "A concise 40-60 word factual answer to the primary page question."
+    ),
+    "Status": (
+        "Workflow state for this URL row. Use the list to move through To Do, "
+        "In Progress, Review, and Completed."
+    ),
+    "URL": ("Canonical audited URL. Use links to open the live page or related tabs."),
+    "Target Keywords": (
+        "Primary and supporting phrases to align title, meta, and body copy with intent."
+    ),
+    "Current Page Copy Snippet": (
+        "Extracted body preview from the crawl. Reference when drafting changes."
+    ),
+    "Current Title": (
+        "Title captured during the crawl. Compare with your proposed title."
+    ),
+    "Title Count": (
+        "Character count of the proposed title (LEN). Target band 50-60 characters."
+    ),
+    "Current Meta Desc": (
+        "Meta description from the crawl. Compare with your proposed description."
+    ),
+    "Desc Count": (
+        "Character count of the proposed meta description (LEN). Target band 120-160."
+    ),
+    "Current H-Tag Structure": (
+        "Heading outline from the crawl. Use when planning H-tag fixes."
+    ),
+    "Proposed H-Tag Fixes": (
+        "Draft heading hierarchy or fixes before publishing in the CMS."
+    ),
+    "FAQ/QA Draft": ("Draft FAQ or Q&A pairs for structured answers and AEO coverage."),
+    "Current OG-Image URL": (
+        "Open Graph image URL detected on the page. Used for preview and sharing QA."
+    ),
+    "OG Image Preview": (
+        "In-workbook image preview when external content is enabled in Excel."
+    ),
+    "Social Share Note": ("Optional note for social snippets or share messaging."),
+    "SEO Score": (
+        "Composite SEO score from the crawl-era model. Shown for reference next to "
+        "live projected SEO."
+    ),
+    "Technical Health": (
+        "Technical-health subscore from the crawl. Used as a static input to "
+        "projected SEO."
+    ),
+    "Copy Score": (
+        "Live copy readiness from proposed title and meta description length checks."
+    ),
+    "Open in Main": (
+        "Jumps to the full diagnostic record for this URL on the Main tab."
+    ),
 }
 
 
-def apply_header_tooltips(
-    worksheet: Worksheet, *, header_row: int = 1
-) -> None:
+_CONTENT_HUB_COLUMN_ORDER: tuple[str, ...] = (
+    "Action Required",
+    "Status",
+    "Assigned Owner",
+    "URL",
+    "Current SEO Score",
+    "Projected SEO Score",
+    "Elementor Builder Link",
+    "Target Keywords",
+    "Current Page Copy Snippet",
+    "Current Title",
+    "Proposed Title (50-60 Chars)",
+    "Title Count",
+    "Current Meta Desc",
+    "Proposed Meta Desc (120-160 Chars)",
+    "Desc Count",
+    "Current H-Tag Structure",
+    "Proposed H-Tag Fixes",
+    "AEO Answer Block Draft",
+    "FAQ/QA Draft",
+    "Current OG-Image URL",
+    "OG Image Preview",
+    "Social Share Note",
+    "SEO Score",
+    "Technical Health",
+    "Copy Score",
+    "Open in Main",
+)
+
+
+def _content_hub_column_letter(header: str) -> str:
+    """Stable A1 letter for Hub columns matching ``_CONTENT_HUB_COLUMN_ORDER``."""
+    pos = _CONTENT_HUB_COLUMN_ORDER.index(header) + 1
+    return get_column_letter(pos)
+
+
+def apply_header_tooltips(worksheet: Worksheet, *, header_row: int = 1) -> None:
     """Attach Excel cell comments to selected metric headers (UX guidance)."""
     lcp_body = _HEADER_TOOLTIP_MESSAGES["LCP (s)"]
     for col_idx in range(1, worksheet.max_column + 1):
@@ -829,9 +1049,9 @@ def _action_header_map(ws: Worksheet, header_row: int = 1) -> dict[str, int]:
 
 
 _ACTION_REQUIRED_ALLOWED: frozenset[str] = frozenset(
-    {"Needs Copy", "Needs Optimization", "Complete"}
+    {"Needs Copy", "Needs Optimisation", "Complete"}
 )
-_OPTIMIZATION_FILL = PatternFill(
+_OPTIMISATION_FILL = PatternFill(
     start_color="FFC000", end_color="FFC000", fill_type="solid"
 )
 _COMPLETE_FILL = PatternFill(
@@ -859,12 +1079,16 @@ def _normalize_action_required_cell_value(raw: object) -> str:
     lowered = s.lower()
     if lowered in {"ready to publish", "completed", "complete."}:
         return "Complete"
+    if lowered in {"needs optimization", "needs optimisation"}:
+        return "Needs Optimisation"
     # Legacy free-text or unknown labels still imply open work; default to copy track.
     return "Needs Copy"
 
 
 def apply_action_required_guardrails(ws: Worksheet, *, header_row: int = 1) -> None:
     """Normalize **Action Required** to strict literals and apply fills (red only for ``Needs Copy``)."""
+    if ws.title == CONTENT_OPTIMISATION_HUB_SHEET:
+        return
     headers = _action_header_map(ws, header_row)
     col = headers.get("Action Required")
     if not col:
@@ -876,9 +1100,9 @@ def apply_action_required_guardrails(ws: Worksheet, *, header_row: int = 1) -> N
         if literal == "Needs Copy":
             cell.font = _ACTION_REQUIRED_FONT
             cell.fill = _ACTION_REQUIRED_FILL
-        elif literal == "Needs Optimization":
+        elif literal == "Needs Optimisation":
             cell.font = Font(bold=True, color="000000")
-            cell.fill = _OPTIMIZATION_FILL
+            cell.fill = _OPTIMISATION_FILL
         else:
             cell.font = Font(bold=True, color="000000")
             cell.fill = _COMPLETE_FILL
@@ -908,9 +1132,13 @@ def refresh_toc_descriptions_dynamic(wb: Workbook) -> None:
         row += 1
 
 
-def apply_freeze_c2_data_sheets(wb: Workbook, *, skip_names: frozenset[str] | None = None) -> None:
-    """``freeze_panes = 'C2'`` on every sheet except skips (default: TOC only)."""
-    skip = skip_names or frozenset({"Table of Contents"})
+def apply_freeze_c2_data_sheets(
+    wb: Workbook, *, skip_names: frozenset[str] | None = None
+) -> None:
+    """``freeze_panes = 'C2'`` on every sheet except skips (default: TOC and Content Hub)."""
+    skip = skip_names or frozenset(
+        {"Table of Contents", CONTENT_OPTIMISATION_HUB_SHEET}
+    )
     for name in wb.sheetnames:
         if name in skip:
             continue
@@ -957,7 +1185,9 @@ __all__ = [
     "write_cached_sheet_chunked",
     "build_fixplan_rows",
     "write_snippet_candidates_chunked",
+    "build_content_optimisation_hub_rows",
     "build_content_optimization_hub_rows",
+    "compute_content_cluster_id",
     "apply_action_required_guardrails",
     "apply_freeze_c2_data_sheets",
     "apply_workbook_export_guardrails",

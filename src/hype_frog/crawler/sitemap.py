@@ -6,6 +6,10 @@ from typing import Any
 
 import aiohttp
 
+from hype_frog.core import get_logger
+
+logger = get_logger(__name__)
+
 
 MAX_SITEMAP_RECURSION_DEPTH = 3
 
@@ -23,7 +27,7 @@ def _strip_default_namespace(xml_data: str) -> ET.Element:
 
 
 async def parse_sitemap(url: str, session: aiohttp.ClientSession) -> tuple[list[str], dict[str, dict[str, Any]]]:
-    print(f"Fetching sitemap from: {url}")
+    logger.info("Fetching sitemap from: %s", url)
     visited_sitemaps: set[str] = set()
     discovered_urls: set[str] = set()
     sitemap_meta: dict[str, dict[str, Any]] = {}
@@ -40,7 +44,7 @@ async def parse_sitemap(url: str, session: aiohttp.ClientSession) -> tuple[list[
             xml_data = await _fetch_sitemap_xml(sitemap_key, session)
             root = _strip_default_namespace(xml_data)
         except Exception as exc:
-            print(f"Skipping sitemap {sitemap_key} ({exc})")
+            logger.warning("Skipping sitemap %s (%s)", sitemap_key, exc)
             return
 
         # Nested sitemap index: recurse into child sitemaps.
@@ -71,10 +75,12 @@ async def parse_sitemap(url: str, session: aiohttp.ClientSession) -> tuple[list[
     try:
         await _walk(url, depth=0)
         urls = sorted(discovered_urls)
-        print(
-            f"Found {len(urls)} URLs across {len(visited_sitemaps)} sitemap file(s)."
+        logger.info(
+            "Found %s URLs across %s sitemap file(s).",
+            len(urls),
+            len(visited_sitemaps),
         )
         return urls, sitemap_meta
     except Exception as e:
-        print(f"Error parsing sitemap: {e}")
+        logger.warning("Error parsing sitemap: %s", e)
         return [], {}

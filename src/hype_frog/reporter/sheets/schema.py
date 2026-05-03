@@ -10,8 +10,8 @@ def add_schema_header_tooltips(
     if disable_data_validation:
         return
     tooltip_messages = {
-        "TTFB (ms)": "Time to First Byte. Measures server responsiveness. Fix: Optimize server-side code or use a CDN.",
-        "AEO Readiness Score": "Composite Answer Engine Optimization quality score. Fix: Add concise answer sections, FAQ schema, and clear question headings.",
+        "TTFB (ms)": "Time to First Byte. Measures server responsiveness. Fix: Optimise server-side code or use a CDN.",
+        "AEO Readiness Score": "Composite Answer Engine Optimisation quality score. Fix: Add concise answer sections, FAQ schema, and clear question headings.",
         "Indexability Reason": "Primary reason this URL may not be indexed. Fix: Resolve noindex directives, non-200 responses, and canonical mismatches.",
         "Status Code": "HTTP status returned for the URL. Fix: Resolve 4xx/5xx errors and remove unnecessary redirect chains.",
         "SEO Health Score": "Weighted technical SEO quality score for this URL. Fix: Prioritize critical issues and improve warnings in FixPlan.",

@@ -32,7 +32,7 @@ def determine_action_required(row_data: Mapping[str, Any]) -> str:
 
     Always returns one of three literals (never ``None`` or empty string) so Excel
     conditional formatting and guardrails can key on exact values: ``Needs Copy``,
-    ``Needs Optimization``, or ``Complete``.
+    ``Needs Optimisation``, or ``Complete``.
     """
     copy_score = _coerce_score(row_data.get("Copy Score"))
     seo_score = _coerce_score(row_data.get("SEO Score"))
@@ -40,7 +40,7 @@ def determine_action_required(row_data: Mapping[str, Any]) -> str:
     if copy_score is None or copy_score < 80.0:
         return "Needs Copy"
     if seo_score is None or seo_score < 50.0:
-        return "Needs Optimization"
+        return "Needs Optimisation"
     return "Complete"
 
 
