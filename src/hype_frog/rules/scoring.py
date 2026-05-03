@@ -3,12 +3,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+# Rows with HTML-derived signals use these states (see crawler fetcher). "partial" still
+# carries the same rule inputs as Summary tab issue counts; only skip scoring when we never
+# got a usable crawl payload.
+_SCORABLE_EXTRACTION_STATES = frozenset({"complete", "partial"})
+
 
 def score_url_health(
     row: dict[str, Any], summary_rules: list[tuple[str, str, Callable[[dict[str, Any]], bool]]]
 ) -> tuple[Any, str, str, dict[str, list[str]]]:
     extraction_state = str(row.get("Extraction State") or "").strip().lower()
-    if extraction_state != "complete":
+    if extraction_state not in _SCORABLE_EXTRACTION_STATES:
         return None, "Unmeasured", "UNMEASURED", {"Critical": [], "Warning": [], "Observation": []}
 
     matched = {"Critical": [], "Warning": [], "Observation": []}

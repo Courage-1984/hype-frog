@@ -30,9 +30,9 @@ def _coerce_score(value: object) -> float | None:
 def determine_action_required(row_data: Mapping[str, Any]) -> str:
     """Return the Content Hub ``Action Required`` label from Copy and SEO scores.
 
-    Values are chosen so Excel conditional formatting can branch on exact literals:
-    ``Needs Copy`` (copy readiness), ``Needs Optimization`` (SEO readiness), or
-    ``Complete`` when both score thresholds are met.
+    Always returns one of three literals (never ``None`` or empty string) so Excel
+    conditional formatting and guardrails can key on exact values: ``Needs Copy``,
+    ``Needs Optimization``, or ``Complete``.
     """
     copy_score = _coerce_score(row_data.get("Copy Score"))
     seo_score = _coerce_score(row_data.get("SEO Score"))
