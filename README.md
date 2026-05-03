@@ -26,14 +26,13 @@ See `pyproject.toml` for pinned dependency ranges.
 ## Requirements
 
 - **Python 3.12+**
-- Recommended: **[uv](https://docs.astral.sh/uv/)** or `pip` for installs.
+- Recommended: **[uv](https://docs.astral.sh/uv/)** for installs.
 
 ## Setup
 
 ```bash
 # From repository root
 uv sync
-# or: pip install -e .
 ```
 
 For **accurate** (rendered) crawl mode install the optional extra and browser binaries:
@@ -43,7 +42,7 @@ uv sync --extra render
 playwright install chromium
 ```
 
-(`pip install playwright` plus `playwright install chromium` is equivalent if you do not use uv extras.)
+(After `uv sync --extra render`, run `playwright install chromium` once per machine so the browser binaries are present.)
 
 ## Configuration
 
@@ -77,7 +76,7 @@ uv run python -m hype_frog.main --quick-test
 
 If Playwright is not installed, accurate mode falls back to fast HTTP with a warning; the run still completes. The preset uses the African Marketing Confederation page sitemap (10 URLs), crawl mode **accurate**, safety profile **faster** (4 workers, 1.5s delay), and **full** SEO suite output under `reports/latest/` unless `HF_OUTPUT_FILENAME` overrides it.
 
-**`ModuleNotFoundError: No module named 'hype_frog'`** means the editable project is not installed in the active venv. Run **`uv sync`** from the repo root (not only `uv venv` / manual `pip install` of dependencies). Then retry `uv run …`.
+**`ModuleNotFoundError: No module named 'hype_frog'`** means the editable project is not installed in the active venv. Run **`uv sync`** from the repo root (not only `uv venv` without syncing the project). Then retry `uv run …`.
 
 ## Tests
 

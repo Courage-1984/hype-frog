@@ -27,6 +27,10 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     worksheet._charts = []
     light_header_fill = PatternFill("solid", fgColor="E5E7EB")
     headers = header_index(worksheet)
+    health_from_feed: float | None = None
+    projected_health_from_feed: float | None = None
+    projected_pass_from_feed: float | None = None
+    seo_pass_rate_from_run: float | None = None
     for row_idx in range(1, 80):
         for col_idx in range(4, max(worksheet.max_column + 1, 26)):
             worksheet.cell(row=row_idx, column=col_idx, value=None)
@@ -60,13 +64,40 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             "K": 15,
         }.items():
             worksheet.column_dimensions[col_letter].width = width
-        total_urls = to_int(metric_to_value.get("URLs Crawled"), 0)
+        total_urls = to_int(
+            metric_to_value.get("URLs Crawled")
+            or metric_to_value.get("Total URLs"),
+            0,
+        )
+        pass_raw = metric_to_value.get("SEO Pass Rate %") or metric_to_value.get(
+            "Pass Rate (%)"
+        )
         try:
-            pass_rate_pct = float(metric_to_value.get("Pass Rate (%)", 0) or 0.0)
+            pass_rate_pct = float(pass_raw or 0.0)
         except Exception:
             pass_rate_pct = 0.0
+        seo_pass_rate_from_run = pass_rate_pct
         critical_urls = to_int(metric_to_value.get("Critical URL Count"), 0)
         warning_urls = to_int(metric_to_value.get("Warning URL Count"), 0)
+        try:
+            if "Health Score %" in metric_to_value:
+                health_from_feed = float(metric_to_value.get("Health Score %") or 0.0)
+        except Exception:
+            health_from_feed = None
+        try:
+            if "Projected Health Score %" in metric_to_value:
+                projected_health_from_feed = float(
+                    metric_to_value.get("Projected Health Score %") or 0.0
+                )
+        except Exception:
+            projected_health_from_feed = None
+        try:
+            if "Projected Pass Rate %" in metric_to_value:
+                projected_pass_from_feed = float(
+                    metric_to_value.get("Projected Pass Rate %") or 0.0
+                )
+        except Exception:
+            projected_pass_from_feed = None
 
         title = worksheet["A1"]
         title.value = "Executive SEO & AEO Performance Report"
@@ -127,7 +158,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             '=HYPERLINK("#\'Content Optimization Hub\'!A1","Content Hub Readiness (%)")'
         )
         worksheet["B17"] = (
-            "=IFERROR(COUNTIF('Content Optimization Hub'!A:A,\"Completed\")/COUNTA('Content Optimization Hub'!E:E),0)"
+            "=IFERROR(COUNTIF('Content Optimization Hub'!A:A,\"Complete\")/COUNTA('Content Optimization Hub'!E:E),0)"
         )
         worksheet["B17"].number_format = "0.00%"
         worksheet["A18"] = '=HYPERLINK("#\'Schema & Metadata\'!A1","URLs with Schema")'
@@ -317,7 +348,10 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     worksheet["B13"].number_format = "0.00%"
     worksheet["B14"] = f"=IFERROR({warning_urls}/{crawl_denominator},0)"
     worksheet["B14"].number_format = "0.00%"
-    worksheet["B7"] = f"=IFERROR({pass_urls}/{crawl_denominator},0)"
+    if seo_pass_rate_from_run is not None:
+        worksheet["B7"] = seo_pass_rate_from_run / 100.0
+    else:
+        worksheet["B7"] = f"=IFERROR({pass_urls}/{crawl_denominator},0)"
     worksheet["B7"].number_format = "0.00%"
     for row in range(5, 15):
         worksheet[f"A{row}"].alignment = Alignment(horizontal="left", vertical="center")
@@ -339,7 +373,9 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
                     pass
             if score_values:
                 avg_health_score = sum(score_values) / len(score_values)
-    if avg_health_score is not None:
+    if health_from_feed is not None:
+        worksheet["B6"] = f"=IFERROR({round(health_from_feed, 4)}/100,0)"
+    elif avg_health_score is not None:
         worksheet["B6"] = f"=IFERROR({round(avg_health_score, 2)}/100,0)"
     else:
         worksheet["B6"] = f"=IFERROR({pass_rate_pct}/100,0)"
@@ -508,19 +544,28 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     for col, width in {"G": 15, "H": 15, "I": 15, "J": 15, "K": 15}.items():
         worksheet.column_dimensions[col].width = width
 
-    overall_health = float(avg_health_score or pass_rate_pct)
+    overall_health = float(
+        health_from_feed
+        if health_from_feed is not None
+        else (avg_health_score if avg_health_score is not None else pass_rate_pct)
+    )
     health_fill = (
         "C6EFCE"
         if overall_health >= 80
         else "FFEB9C" if overall_health >= 60 else "FFC7CE"
     )
     worksheet["B6"].fill = PatternFill("solid", fgColor=health_fill)
+    b7_pass_display = (
+        seo_pass_rate_from_run
+        if seo_pass_rate_from_run is not None
+        else pass_rate_pct
+    )
     worksheet["B7"].fill = PatternFill(
         "solid",
         fgColor=(
             "C6EFCE"
-            if pass_rate_pct >= 70
-            else "FFEB9C" if pass_rate_pct >= 40 else "FFC7CE"
+            if b7_pass_display >= 70
+            else "FFEB9C" if b7_pass_display >= 40 else "FFC7CE"
         ),
     )
     worksheet["B11"].fill = PatternFill(
@@ -559,9 +604,17 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         (overall_health if overall_health <= 100 else 100.0)
         + ((100.0 - overall_health) * 0.6),
     )
-    worksheet["B15"] = projected_health_pct / 100.0
+    if projected_health_from_feed is not None:
+        ph_use = min(100.0, max(0.0, projected_health_from_feed))
+        worksheet["B15"] = ph_use / 100.0
+    else:
+        worksheet["B15"] = projected_health_pct / 100.0
     worksheet["B15"].number_format = "0.00%"
-    worksheet["B16"] = projected_pass_rate_pct / 100.0
+    if projected_pass_from_feed is not None:
+        pp_use = min(100.0, max(0.0, projected_pass_from_feed))
+        worksheet["B16"] = pp_use / 100.0
+    else:
+        worksheet["B16"] = projected_pass_rate_pct / 100.0
     worksheet["B16"].number_format = "0.00%"
     worksheet["B15"].fill = PatternFill(
         "solid",
@@ -731,7 +784,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         "C14": "Warning URL Rate %. Calculated as Warning URLs / Total URLs.",
         "C15": "Projected Health Score if all current To Do items are completed in this cycle.",
         "C16": "Projected Pass Rate if all current To Do items are completed in this cycle.",
-        "C17": "Content Hub Readiness %. Calculated as completed content items divided by total tracked content URLs.",
+        "C17": "Content Hub Readiness %. Count of literal ``Complete`` in Action Required divided by URLs tracked in column E.",
         "C32": "Most widespread issue from FixPlan by affected URL count.",
         "C33": "Number of URLs impacted by the top blocking issue.",
         "C34": "Total URLs returning client/server errors (4xx + 5xx).",

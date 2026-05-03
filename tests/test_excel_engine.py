@@ -28,7 +28,9 @@ if SRC.is_dir() and str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from hype_frog.reporter.excel_engine import (  # noqa: E402
+    _describe_sheet_from_headers,
     apply_workbook_export_guardrails,
+    friendly_toc_description,
 )
 from hype_frog.reporter.sheets.tables_impl import (  # noqa: E402
     adjust_sheet_format,
@@ -158,35 +160,57 @@ def build_mock_audit_workbook() -> Workbook:
 
 
 def assert_action_required_guardrails(ws: Worksheet) -> None:
-    """Assert non-empty ``Action Required`` cells became red ``Needs Copy``."""
+    """Assert ``Action Required`` uses strict literals, red fill only for ``Needs Copy``."""
     headers = {str(c.value).strip(): c.column for c in ws[1] if c.value is not None}
     col = headers.get("Action Required")
     assert col is not None, "Action Required column missing"
 
-    # Row 2: empty Action Required → stays empty
-    assert ws.cell(row=2, column=col).value in (None, "")
+    c2 = ws.cell(row=2, column=col)
+    assert c2.value == "Complete"
+    assert _fill_hex_upper(c2) == "C6EFCE"
 
-    # Row 3: had text → Needs Copy + red
     c3 = ws.cell(row=3, column=col)
     assert c3.value == "Needs Copy", f"row 3 expected Needs Copy, got {c3.value!r}"
     assert _fill_hex_upper(c3) == "FF0000", (
         f"row 3 fill expected FF0000, got {_fill_hex_upper(c3)!r}"
     )
 
-    # Row 4: whitespace → unchanged (not forced to Needs Copy)
     c4 = ws.cell(row=4, column=col)
-    assert c4.value == "   "
+    assert c4.value == "Complete"
 
-    # Row 5: had text → Needs Copy + red
     c5 = ws.cell(row=5, column=col)
     assert c5.value == "Needs Copy"
     assert _fill_hex_upper(c5) == "FF0000"
+
+
+def test_friendly_toc_description_known_tabs() -> None:
+    assert "Executive overview" in friendly_toc_description("Dashboard")
+    assert "Interactive workspace" in friendly_toc_description(
+        "Content Optimization Hub"
+    )
+    assert "Deep-dive diagnostic" in friendly_toc_description("Technical")
+
+
+def test_friendly_toc_description_unknown_tab() -> None:
+    assert friendly_toc_description("CustomClientTab") == (
+        "Diagnostic metrics for CustomClientTab."
+    )
+
+
+def test_describe_sheet_from_headers_delegates_to_map() -> None:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Technical"
+    desc = _describe_sheet_from_headers(ws)
+    assert "Deep-dive diagnostic" in desc
+    assert "Primary columns" not in desc
 
 
 def assert_toc_no_generic_fallback(wb: Workbook) -> None:
     toc = wb["Table of Contents"]
     c3 = toc["C3"].value or ""
     assert "Detailed URL diagnostic data" not in str(c3).lower()
+    assert "Primary columns" not in str(c3)
     assert len(str(c3)) > 0
 
 

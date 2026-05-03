@@ -706,6 +706,64 @@ def build_content_optimization_hub_rows(
 # ---------------------------------------------------------------------------
 
 _BANNED_TOC_FALLBACK = "Detailed URL diagnostic data"
+
+# Manual TOC blurbs (authoritative for export guardrails and initial TOC seed).
+_TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
+    "Dashboard": (
+        "Executive overview of site-wide SEO performance and critical alerts."
+    ),
+    "Content Optimization Hub": (
+        "Interactive workspace for drafting SEO titles, descriptions, and AEO content."
+    ),
+    "FixPlan": (
+        "Prioritized list of technical and content fixes with estimated effort."
+    ),
+    "Technical": (
+        "Deep-dive diagnostic data for every crawled URL (Status, Load Time, etc.)."
+    ),
+    "AEO": (
+        "Answer Engine Optimization readiness scores and answer-block candidates."
+    ),
+    "Priority URLs": (
+        "High-value pages requiring immediate attention based on business risk."
+    ),
+    "Main": "Primary URL inventory with titles, meta descriptions, and crawl signals.",
+    "Summary": (
+        "Aggregated issue counts, AEO opportunities, and top critical URLs from the run."
+    ),
+    "Content": "Content depth, readability, headings, and thin-content flags per URL.",
+    "Links": "Internal and external link counts and anchor-text quality per URL.",
+    "LinksDetail": "Row-level outbound internal links with crawl resolution status.",
+    "Media": "Image inventory, alt coverage, filename quality, and mixed content flags.",
+    "Schema & Metadata": "JSON-LD, microdata, Open Graph, and Twitter card signals.",
+    "AIOSEO": "Plugin-aligned recommendations and edit links for AIOSEO users.",
+    "Security": "Transport and hardening headers (HSTS, CSP, XFO, referrer policy, etc.).",
+    "PSI Performance": "Lab PageSpeed scores and mobile CWV-related proxies.",
+    "Indexability": "Robots directives, canonicals, and indexability classification.",
+    "Redirects": "Redirect chains, hop lists, HTTPS upgrades, and loop detection.",
+    "Duplicates": "Near-duplicate titles and meta descriptions across the crawl set.",
+    "Pattern and Template Issues": (
+        "Folder-level clusters and template-wide systemic issue patterns."
+    ),
+    "IssueInventory": "Flattened issue log with severity, owner seed, and stable IDs.",
+    "SitemapQA": "Sitemap coverage, URL membership checks, and sitemap metadata QA.",
+    "Quick Reference Guide": "In-workbook SEO and AEO copy standards and guardrails.",
+    "Glossary & Legend": "Definitions for metrics, badges, and workbook conventions.",
+    "RunMetadata": "Run configuration, timestamps, and environment notes.",
+    "DeltaFromPreviousRun": (
+        "New, fixed, and persistent issues compared to a prior audit workbook."
+    ),
+    "ResolvedIssues": "Issues marked resolved when compared to the previous export.",
+    "CrawlGraph": "Derived link graph metrics (click depth, inlinks, PageRank proxy).",
+}
+
+
+def friendly_toc_description(sheet_name: str) -> str:
+    """Return the fixed marketing-style blurb for TOC column C."""
+    key = str(sheet_name or "").strip()
+    if key in _TOC_FRIENDLY_DESCRIPTIONS:
+        return _TOC_FRIENDLY_DESCRIPTIONS[key]
+    return f"Diagnostic metrics for {key}."
 _ACTION_REQUIRED_FILL = PatternFill(
     start_color="FF0000",
     end_color="FF0000",
@@ -726,49 +784,64 @@ def _action_header_map(ws: Worksheet, header_row: int = 1) -> dict[str, int]:
     return out
 
 
-def _describe_sheet_from_headers(ws: Worksheet, *, max_labels: int = 10, max_chars: int = 220) -> str:
-    labels: list[str] = []
-    for cell in ws[1]:
-        v = cell.value
-        if v is None:
-            continue
-        s = str(v).strip()
-        if s:
-            labels.append(s)
-        if len(labels) >= max_labels:
-            break
-    if not labels:
-        return "Row-level metrics for this tab (no header row detected)."
-    body = ", ".join(labels)
-    text = f"Primary columns: {body}"
-    if len(text) > max_chars:
-        return text[: max_chars - 1].rstrip() + "…"
-    return text
+_ACTION_REQUIRED_ALLOWED: frozenset[str] = frozenset(
+    {"Needs Copy", "Needs Optimization", "Complete"}
+)
+_OPTIMIZATION_FILL = PatternFill(
+    start_color="FFC000", end_color="FFC000", fill_type="solid"
+)
+_COMPLETE_FILL = PatternFill(
+    start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"
+)
+
+
+def _describe_sheet_from_headers(
+    ws: Worksheet, *, max_labels: int = 10, max_chars: int = 220
+) -> str:
+    """TOC description is driven by sheet name, not inferred column headers."""
+    del max_labels, max_chars  # retained for backward-compatible call sites/tests
+    return friendly_toc_description(ws.title)
+
+
+def _normalize_action_required_cell_value(raw: object) -> str:
+    """Map workbook cell content to strict Action Required literals (never None/empty)."""
+    if raw is None:
+        return "Complete"
+    s = str(raw).strip()
+    if not s:
+        return "Complete"
+    if s in _ACTION_REQUIRED_ALLOWED:
+        return s
+    lowered = s.lower()
+    if lowered in {"ready to publish", "completed", "complete."}:
+        return "Complete"
+    # Legacy free-text or unknown labels still imply open work; default to copy track.
+    return "Needs Copy"
 
 
 def apply_action_required_guardrails(ws: Worksheet, *, header_row: int = 1) -> None:
-    """
-    For column **Action Required**: any non-empty data cell becomes literal
-    ``Needs Copy`` with bold white text on solid ``#FF0000`` fill.
-    """
+    """Normalize **Action Required** to strict literals and apply fills (red only for ``Needs Copy``)."""
     headers = _action_header_map(ws, header_row)
     col = headers.get("Action Required")
     if not col:
         return
     for r in range(header_row + 1, ws.max_row + 1):
         cell = ws.cell(row=r, column=col)
-        raw = cell.value
-        if raw is None:
-            continue
-        if isinstance(raw, str) and not raw.strip():
-            continue
-        cell.value = "Needs Copy"
-        cell.font = _ACTION_REQUIRED_FONT
-        cell.fill = _ACTION_REQUIRED_FILL
+        literal = _normalize_action_required_cell_value(cell.value)
+        cell.value = literal
+        if literal == "Needs Copy":
+            cell.font = _ACTION_REQUIRED_FONT
+            cell.fill = _ACTION_REQUIRED_FILL
+        elif literal == "Needs Optimization":
+            cell.font = Font(bold=True, color="000000")
+            cell.fill = _OPTIMIZATION_FILL
+        else:
+            cell.font = Font(bold=True, color="000000")
+            cell.fill = _COMPLETE_FILL
 
 
 def refresh_toc_descriptions_dynamic(wb: Workbook) -> None:
-    """Rewrite TOC column C from each target sheet's header row (no generic fallback)."""
+    """Rewrite TOC column C using the canonical friendly description map."""
     if "Table of Contents" not in wb.sheetnames:
         return
     toc = wb["Table of Contents"]
@@ -784,11 +857,10 @@ def refresh_toc_descriptions_dynamic(wb: Workbook) -> None:
         if name not in wb.sheetnames:
             row += 1
             continue
-        target = wb[name]
-        desc_cell.value = _describe_sheet_from_headers(target)
+        desc_cell.value = friendly_toc_description(name)
         cur = str(desc_cell.value or "")
         if _BANNED_TOC_FALLBACK.lower() in cur.lower():
-            desc_cell.value = _describe_sheet_from_headers(target)
+            desc_cell.value = friendly_toc_description(name)
         row += 1
 
 
@@ -846,4 +918,5 @@ __all__ = [
     "apply_freeze_c2_data_sheets",
     "apply_workbook_export_guardrails",
     "refresh_toc_descriptions_dynamic",
+    "friendly_toc_description",
 ]

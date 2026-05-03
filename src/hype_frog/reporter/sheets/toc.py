@@ -3,6 +3,8 @@ from __future__ import annotations
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.views import Selection
 
+from hype_frog.reporter.excel_engine import friendly_toc_description
+
 
 def apply_workbook_toc_and_links(
     writer,
@@ -45,45 +47,13 @@ def apply_workbook_toc_and_links(
         toc_ws["A2"].font = Font(color=std_white, bold=True)
         toc_ws["B2"].font = Font(color=std_white, bold=True)
         toc_ws["C2"].font = Font(color=std_white, bold=True)
-        toc_descriptions = {
-            "Dashboard": "Executive overview and core site metrics.",
-            "Content Optimization Hub": "Copywriter workspace. Edit Meta Data, H-Tags, and AEO snippets.",
-            "Quick Reference Guide": "SEO and AEO standards and target lengths.",
-            "FixPlan": "Prioritized list of technical actions based on ROI.",
-            "Main": "Primary URL inventory with key crawl metrics.",
-            "Technical": "Status codes, response times, and server metrics.",
-            "Content": "Word counts, readability, and content depth analysis.",
-            "AEO": "Answer Engine Optimization and snippet extraction readiness.",
-            "Schema & Metadata": "JSON-LD, Microdata, and OpenGraph validation.",
-            "Links": "Internal and external link counts per page.",
-            "Indexability": "Robots.txt, Canonical tags, and NoIndex directives.",
-            "Redirects": "301/302 Redirect chains and loops.",
-            "Priority URLs": "Highest business-value pages requiring immediate attention.",
-            "AIOSEO": "All in One SEO plugin data extraction.",
-            "Security": "SSL, mixed content, and header security.",
-            "Summary": "High-level aggregate crawl data.",
-            "LinksDetail": "Row-by-row internal outlink breakdown.",
-            "Media": "Image sizes, alt text, and broken media.",
-            "Pattern and Template Issues": "Sitewide structural flaws detected by folder path.",
-            "Duplicates": "Exact and near-duplicate content detection.",
-            "PSI Performance": "Core Web Vitals and Google PageSpeed metrics.",
-            "IssueInventory": "Raw log of all detected errors.",
-            "RunMetadata": "Crawl timestamp and configuration details.",
-            "DeltaFromPreviousRun": "Changes detected since the previous crawl run.",
-            "ResolvedIssues": "Issues that are now fixed versus prior runs.",
-            "Glossary & Legend": "Definitions for metrics, statuses, and scoring labels.",
-            "CrawlGraph": "Link relationships and crawl path visibility.",
-            "SitemapQA": "Sitemap coverage and metadata validation.",
-        }
         row_ptr = 3
         for sheet_name in wb.sheetnames:
             if sheet_name == "Table of Contents":
                 continue
             toc_ws[f"A{row_ptr}"] = sheet_name
             toc_ws[f"B{row_ptr}"] = f'=HYPERLINK("#\'{_sheet_link_target(sheet_name)}\'!A1","Open")'
-            toc_ws[f"C{row_ptr}"] = toc_descriptions.get(
-                sheet_name, "Detailed URL diagnostic data."
-            )
+            toc_ws[f"C{row_ptr}"] = friendly_toc_description(sheet_name)
             toc_ws[f"B{row_ptr}"].font = Font(
                 color=std_blue, underline="single", bold=True
             )
