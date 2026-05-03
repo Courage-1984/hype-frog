@@ -776,6 +776,18 @@ _HEADER_TOOLTIP_MESSAGES: dict[str, str] = {
     "Click Depth": (
         "Number of clicks required to reach this URL from the homepage."
     ),
+    "AEO Readiness Score": (
+        "Proprietary score (0-100) measuring how likely an AI engine is to extract "
+        "a direct answer from this URL."
+    ),
+    "Orphan Pages": (
+        "Pages with zero internal incoming links; difficult for search engines to "
+        "discover and value."
+    ),
+    "Canonical Type": (
+        "Self: URL points to itself. Cross: URL points to another page. "
+        "Missing: No canonical tag found."
+    ),
 }
 
 

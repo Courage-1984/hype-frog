@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -244,3 +244,39 @@ def apply_cross_sheet_links(
                     column=hub_status_col,
                     value=f"=IFERROR(INDEX('Content Optimization Hub'!A:A,MATCH({u_letter}{r},'Content Optimization Hub'!C:C,0)),\"Not in Hub\")",
                 )
+
+
+def apply_editor_url_column_hyperlinks(
+    worksheet: Worksheet,
+    sheet_name: str,
+    *,
+    disable_external_links_and_images: bool,
+) -> None:
+    """Turn Elementor / AIOSEO edit URLs into real outbound hyperlinks (when enabled)."""
+    if sheet_name == "Content Optimization Hub":
+        header_row, first_data_row, column_name = 2, 3, "Elementor Builder Link"
+    elif sheet_name == "AIOSEO":
+        header_row, first_data_row, column_name = 1, 2, "Direct Edit Link"
+    else:
+        return
+    if worksheet.max_row < first_data_row:
+        return
+    headers: dict[str, int] = {}
+    for col_idx in range(1, worksheet.max_column + 1):
+        raw = worksheet.cell(row=header_row, column=col_idx).value
+        if raw is not None:
+            headers[str(raw).strip()] = col_idx
+    col_idx = headers.get(column_name)
+    if not col_idx:
+        return
+    link_font = Font(color="0563C1", underline="single")
+    for row_idx in range(first_data_row, worksheet.max_row + 1):
+        cell = worksheet.cell(row=row_idx, column=col_idx)
+        val = sanitize_excel_url(cell.value)
+        if val.startswith(("http://", "https://")) and is_safe_hyperlink_target(
+            val, disable_external_links_and_images=disable_external_links_and_images
+        ):
+            cell.hyperlink = val
+            cell.style = "Hyperlink"
+            cell.font = link_font
+            cell.alignment = Alignment(wrap_text=True, vertical="top")

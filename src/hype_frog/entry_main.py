@@ -602,6 +602,7 @@ async def main(run: RunConfig | None = None) -> None:
                     "Cache-Control",
                     "ETag",
                     "X-Robots-Tag",
+                    "Content-Security-Policy",
                     "Meta Robots Raw",
                     "Canonical URL",
                     "Canonical Matches Final URL",

@@ -14,11 +14,13 @@ from hype_frog.reporter.sheets.conditional import (
     apply_generic_sheet_coloring,
     apply_main_sheet_heatmaps,
     apply_psi_conditional_rules,
+    apply_sheet_text_wrap_columns,
     apply_wrapped_row_heights,
 )
 from hype_frog.reporter.sheets.config import (
     DATA_HEAVY_TABS,
     DEBUG_EXCEL_ISOLATION_MODE,
+    DISABLE_EXTERNAL_LINKS_AND_IMAGES,
     DISABLE_NON_CORE_FREEZE_PANES,
     STD_BLUE,
     STD_NAVY,
@@ -33,6 +35,7 @@ from hype_frog.reporter.sheets.layout import (
     hide_noisy_columns,
     reorder_columns,
 )
+from hype_frog.reporter.sheets.links import apply_editor_url_column_hyperlinks
 from hype_frog.reporter.sheets.navigation import (
     add_back_to_dashboard_link,
     add_url_navigation_links,
@@ -91,12 +94,19 @@ def adjust_sheet_format(writer, sheet_name):
     add_back_to_dashboard_link(worksheet, sheet_name)
     if sheet_name == "Content Optimization Hub":
         apply_content_hub_conditional_rules(worksheet, writer)
+    apply_sheet_text_wrap_columns(worksheet, sheet_name)
+    if sheet_name in {"Content Optimization Hub", "AIOSEO"}:
+        apply_editor_url_column_hyperlinks(
+            worksheet,
+            sheet_name,
+            disable_external_links_and_images=DISABLE_EXTERNAL_LINKS_AND_IMAGES,
+        )
     if sheet_name == "PSI Performance":
         apply_psi_conditional_rules(worksheet)
     add_all_header_tooltips(worksheet)
     if sheet_name in DATA_HEAVY_TABS:
         add_header_tooltips(worksheet)
-    if sheet_name in {"Technical", "Main"}:
+    if sheet_name in {"Technical", "Main", "AEO"}:
         apply_header_tooltips(worksheet, header_row=1)
     if sheet_name == "Dashboard" and not DEBUG_EXCEL_ISOLATION_MODE:
         style_dashboard(worksheet, writer)
