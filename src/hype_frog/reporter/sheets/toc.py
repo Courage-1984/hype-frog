@@ -5,6 +5,39 @@ from openpyxl.worksheet.views import Selection
 
 from hype_frog.reporter.excel_engine import friendly_toc_description
 
+# Canonical left-to-right workbook tab order (move_sheet targets).
+PREFERRED_WORKBOOK_TAB_ORDER: tuple[str, ...] = (
+    "Table of Contents",
+    "Dashboard",
+    "Content Optimization Hub",
+    "Quick Reference Guide",
+    "Summary",
+    "FixPlan",
+    "Content",
+    "Main",
+    "Priority URLs",
+    "AIOSEO",
+    "Technical",
+    "PSI Performance",
+    "AEO",
+    "Indexability",
+    "Redirects",
+    "Security",
+    "Schema & Metadata",
+    "Links",
+    "LinksDetail",
+    "Media",
+    "Duplicates",
+    "Pattern and Template Issues",
+    "CrawlGraph",
+    "SitemapQA",
+    "IssueInventory",
+    "ResolvedIssues",
+    "DeltaFromPreviousRun",
+    "RunMetadata",
+    "Glossary & Legend",
+)
+
 
 def apply_workbook_toc_and_links(
     writer,
@@ -64,7 +97,7 @@ def apply_workbook_toc_and_links(
         toc_ws.freeze_panes = "A3"
     link_map = {
         "Summary": "Reference Tab",
-        "FixPlan": "Reference Tab",
+        "FixPlan": "Detail Reference Tab",
         "Dashboard": "Target Tab",
         "AIOSEO": "Reference Tab",
         "IssueInventory": "Reference Tab",
@@ -81,47 +114,12 @@ def apply_workbook_toc_and_links(
             cell = ws.cell(row=row_idx, column=col_idx)
             target = str(cell.value or "").strip()
             if target and target in wb.sheetnames:
-                cell.hyperlink = f"#{target}!A1"
+                safe = _sheet_link_target(target)
+                cell.hyperlink = f"#'{safe}'!A1"
                 cell.style = "Hyperlink"
-    preferred_first_tabs = [
-        "Table of Contents",
-        "Dashboard",
-        "Content Optimization Hub",
-        "Quick Reference Guide",
-        "FixPlan",
-        "Main",
-        "Technical",
-        "Content",
-        "AEO",
-        "Schema & Metadata",
-        "Links",
-        "Indexability",
-        "Redirects",
-        "Priority URLs",
-        "AIOSEO",
-        "Security",
-        "Summary",
-        "LinksDetail",
-        "Media",
-        "Duplicates",
-        "Pattern and Template Issues",
-        "PSI Performance",
-        "IssueInventory",
-        "CrawlGraph",
-        "SitemapQA",
-        "DeltaFromPreviousRun",
-        "RunMetadata",
-    ]
-    legend_name = "Glossary & Legend"
-    if legend_name in wb.sheetnames and legend_name not in preferred_first_tabs:
-        preferred_first_tabs.append(legend_name)
-    for idx, tab_name in enumerate(preferred_first_tabs):
+    for idx, tab_name in enumerate(PREFERRED_WORKBOOK_TAB_ORDER):
         if tab_name in wb.sheetnames:
             wb.move_sheet(wb[tab_name], offset=-wb.index(wb[tab_name]) + idx)
-    if legend_name in wb.sheetnames:
-        wb.move_sheet(
-            wb[legend_name], offset=len(wb.sheetnames) - 1 - wb.index(wb[legend_name])
-        )
     low_signal_tabs = {"RunMetadata", "DeltaFromPreviousRun"}
     for tab_name in low_signal_tabs:
         if tab_name in wb.sheetnames:
@@ -154,6 +152,7 @@ def apply_workbook_toc_and_links(
             "AIOSEO",
             "Security",
             "Summary",
+            "Quick Reference Guide",
             "LinksDetail",
             "Media",
             "Pattern and Template Issues",

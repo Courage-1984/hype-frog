@@ -130,7 +130,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet["B7"].number_format = "0.00%"
         worksheet["A8"] = '=HYPERLINK("#\'Technical\'!A1","Pass URLs")'
         worksheet["B8"] = 0
-        worksheet["A9"] = '=HYPERLINK("#\'FixPlan\'!A1","Critical URLs")'
+        worksheet["A9"] = '=HYPERLINK("#\'Priority URLs\'!A1","Critical URLs")'
         worksheet["B9"] = critical_urls
         worksheet["A10"] = '=HYPERLINK("#\'Technical\'!A1","Warning URLs")'
         worksheet["B10"] = warning_urls
