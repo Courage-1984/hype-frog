@@ -61,11 +61,11 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             "D": 30,
             "E": 15,
             "F": 5,
-            "G": 15,
-            "H": 15,
-            "I": 15,
-            "J": 15,
-            "K": 15,
+            "G": 25,
+            "H": 25,
+            "I": 30,
+            "J": 30,
+            "K": 30,
         }.items():
             worksheet.column_dimensions[col_letter].width = width
         total_urls = to_int(
@@ -485,7 +485,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
                     owner_rollup[owner_name]["warning"] += 1
                 else:
                     owner_rollup[owner_name]["info"] += 1
-    worksheet["M5"] = "Top Blocking Issue"
+    worksheet["M5"] = "Primary blocking issue"
     worksheet["N5"] = top_issue_name
     worksheet["M6"] = "Top Issue Affected URLs"
     worksheet["N6"] = top_issue_affected
@@ -505,7 +505,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     worksheet["K23"] = "Warning"
     for ref in ("G22",):
         worksheet[ref].fill = light_header_fill
-        worksheet[ref].font = table_header_font
+        worksheet[ref].font = Font(color="000000", bold=True, size=12)
         worksheet[ref].alignment = Alignment(
             horizontal="center", vertical="center", wrap_text=True
         )
@@ -517,6 +517,9 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             horizontal="center", vertical="center", wrap_text=True
         )
     worksheet.merge_cells("G22:K22")
+    worksheet["G22"].alignment = Alignment(
+        horizontal="center", vertical="center", wrap_text=True
+    )
 
     owner_rows_sorted = sorted(
         owner_rollup.items(),
@@ -546,7 +549,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet["G24"].fill = PatternFill("solid", fgColor="F5F7FA")
         worksheet["G24"].alignment = Alignment(horizontal="center", vertical="center")
 
-    for col, width in {"G": 15, "H": 15, "I": 15, "J": 15, "K": 15}.items():
+    for col, width in {"G": 25, "H": 25, "I": 30, "J": 30, "K": 30}.items():
         worksheet.column_dimensions[col].width = width
 
     overall_health = float(
@@ -694,6 +697,9 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     quick_links.append(("AIOSEO Action Queue", "#AIOSEO!A1"))
     for idx, (label, target) in enumerate(quick_links, start=13):
         worksheet[f"I{idx}"] = label
+        worksheet[f"I{idx}"].alignment = Alignment(
+            horizontal="left", vertical="center", wrap_text=True
+        )
         worksheet[f"J{idx}"] = f'=HYPERLINK("{target}","Open")'
         worksheet[f"J{idx}"].font = Font(color=STD_BLUE, underline="single", bold=True)
         worksheet[f"I{idx}"].fill = PatternFill("solid", fgColor="F5F7FA")
@@ -702,10 +708,10 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
 
     worksheet["I4"] = "BUSINESS IMPACT SUMMARY"
     worksheet["I5"] = (
-        f"{status_buckets['4xx Errors'] + status_buckets['5xx Errors']} error URLs detected "
-        f"({status_buckets['4xx Errors']} 4xx / {status_buckets['5xx Errors']} 5xx). "
+        f"{status_buckets['4xx Errors'] + status_buckets['5xx Errors']} URLs returned error "
+        f"responses ({status_buckets['4xx Errors']} 4xx / {status_buckets['5xx Errors']} 5xx). "
         f"Critical issue volume is {critical_urls} URLs and warning volume is {warning_urls}. "
-        f"Top blocker: {top_issue_name} affecting {top_issue_affected} URLs."
+        f"Primary blocker: {top_issue_name} affecting {top_issue_affected} URLs."
     )
     worksheet.merge_cells("I4:K4")
     worksheet.merge_cells("I5:K10")
@@ -713,6 +719,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     worksheet["I4"].font = table_header_font
     worksheet["I4"].alignment = Alignment(horizontal="center", vertical="center")
     worksheet["I5"].fill = PatternFill("solid", fgColor="F5F7FA")
+    worksheet["I5"].font = Font(color="000000", bold=False, size=11)
     worksheet["I5"].alignment = Alignment(
         horizontal="left", vertical="top", wrap_text=True
     )
@@ -725,6 +732,10 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet[ref].font = table_header_font
         worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
     worksheet.merge_cells("G4:H4")
+    worksheet["G4"].font = Font(color="000000", bold=True, size=10)
+    worksheet["G4"].alignment = Alignment(
+        horizontal="center", vertical="center", wrap_text=True
+    )
 
     traditional_score = max(
         0.0, min(100.0, (success_count / max(1, crawl_denominator)) * 100.0)
@@ -762,15 +773,18 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
     worksheet["G9"] = "Strategic Narrative"
     worksheet["G10"] = (
-        "High SEO / Low AEO suggests the site is visible to humans but invisible to AI answer engines."
+        "High SEO / low AEO suggests the site is visible to humans but less visible to AI answer engines."
         if traditional_score >= 70 and aeo_readiness < 60
         else "SEO and AEO signals are moving together; continue balancing crawl health with answer-first content."
     )
     worksheet.merge_cells("G10:H12")
     worksheet["G9"].fill = table_header_fill
     worksheet["G9"].font = table_header_font
-    worksheet["G9"].alignment = Alignment(horizontal="center", vertical="center")
+    worksheet["G9"].alignment = Alignment(
+        horizontal="center", vertical="center", wrap_text=True
+    )
     worksheet["G10"].fill = PatternFill("solid", fgColor="F5F7FA")
+    worksheet["G10"].font = Font(color="000000", bold=False, size=11)
     worksheet["G10"].alignment = Alignment(
         horizontal="left", vertical="top", wrap_text=True
     )
@@ -789,7 +803,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         "C15": "Projected Health Score if all current To Do items are completed in this cycle.",
         "C16": "Projected Pass Rate if all current To Do items are completed in this cycle.",
         "C17": "Content Hub Readiness %. Count of literal ``Complete`` in Action Required divided by URLs tracked in column E.",
-        "O5": "Most widespread issue from FixPlan by affected URL count.",
+        "O5": "Most widespread issue from FixPlan by affected URL count (primary blocker).",
         "O6": "Number of URLs impacted by the top blocking issue.",
         "O7": "Total URLs returning client/server errors (4xx + 5xx).",
         "O8": "Average Time to First Byte across Technical URLs (ms).",
@@ -834,6 +848,20 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         )
     worksheet.row_dimensions[15].height = 35
     worksheet.row_dimensions[16].height = 35
+    worksheet.row_dimensions[5].height = max(
+        float(worksheet.row_dimensions[5].height or 0), 60.0
+    )
+    for _rn in range(6, 10):
+        worksheet.row_dimensions[_rn].height = max(
+            float(worksheet.row_dimensions[_rn].height or 0), 24.0
+        )
+    for _rn in (10, 11, 12):
+        worksheet.row_dimensions[_rn].height = max(
+            float(worksheet.row_dimensions[_rn].height or 0), 36.0
+        )
+    worksheet.row_dimensions[21].height = max(
+        float(worksheet.row_dimensions[21].height or 0), 60.0
+    )
     for row_idx in range(1, 70):
         for col_idx in range(1, 12):
             cell = worksheet.cell(row=row_idx, column=col_idx)
