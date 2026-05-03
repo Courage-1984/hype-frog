@@ -66,6 +66,54 @@ def apply_wrapped_row_heights(worksheet: Worksheet) -> None:
             worksheet.row_dimensions[row_idx].height = min(120, 15 * max_lines)
 
 
+_SHEET_WRAP_TARGETS: dict[str, tuple[int, tuple[str, ...]]] = {
+    "Content Optimization Hub": (
+        2,
+        (
+            "Current Page Copy Snippet",
+            "Proposed H-Tag Fixes",
+            "AEO Answer Block Draft",
+        ),
+    ),
+    "Technical": (1, ("Redirect Hops", "X-Robots-Tag", "Content-Security-Policy")),
+    "AEO": (1, ("Why It Matters", "Snippet Preview Mockup")),
+}
+
+
+def apply_sheet_text_wrap_columns(worksheet: Worksheet, sheet_name: str) -> None:
+    """Wrap and cap row heights for high-volume narrative / policy columns."""
+    spec = _SHEET_WRAP_TARGETS.get(sheet_name)
+    if not spec:
+        return
+    header_row, col_names = spec
+    if worksheet.max_row <= header_row:
+        return
+    headers: dict[str, int] = {}
+    for c in range(1, worksheet.max_column + 1):
+        v = worksheet.cell(row=header_row, column=c).value
+        if v is not None and str(v).strip():
+            headers[str(v).strip()] = c
+    wrap_cols = [headers[n] for n in col_names if n in headers]
+    if not wrap_cols:
+        return
+    for row_idx in range(header_row + 1, worksheet.max_row + 1):
+        max_lines = 1
+        for col_idx in wrap_cols:
+            cell = worksheet.cell(row=row_idx, column=col_idx)
+            cell.alignment = Alignment(
+                wrap_text=True, vertical="top", horizontal="left"
+            )
+            val = cell.value
+            if val is None:
+                continue
+            text = str(val)
+            explicit_lines = text.count("\n") + 1
+            estimated_wrap_lines = max(1, int(len(text) / 45) + 1)
+            max_lines = max(max_lines, explicit_lines, estimated_wrap_lines)
+        if max_lines > 1:
+            worksheet.row_dimensions[row_idx].height = min(110, 13 * max_lines)
+
+
 def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
     """Apply base per-cell semantic coloring and global conditional formatting.
 
@@ -473,6 +521,7 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
 
 __all__ = [
     "apply_wrapped_row_heights",
+    "apply_sheet_text_wrap_columns",
     "apply_generic_sheet_coloring",
     "apply_content_hub_conditional_rules",
     "apply_psi_conditional_rules",
