@@ -96,7 +96,7 @@ def _value_or_default(value: object, default: float = 0.0) -> float:
 
 
 def _apply_seo_health_export_defaults(extra_rows: list[dict[str, object]]) -> None:
-    """Force numeric SEO Health Score for Dashboard CF; align with Technical export rows."""
+    """Force numeric SEO / composite scores for Dashboard CF and Technical heatmaps."""
     for r in extra_rows:
         badge = str(r.get("Severity Badge") or "").strip()
         raw = r.get("SEO Health Score")
@@ -109,6 +109,16 @@ def _apply_seo_health_export_defaults(extra_rows: list[dict[str, object]]) -> No
                 r["SEO Health Score"] = float(raw)
             except (TypeError, ValueError):
                 r["SEO Health Score"] = 0.0
+        raw_seo = r.get("SEO Score")
+        if isinstance(raw_seo, float) and math.isnan(raw_seo):
+            raw_seo = None
+        if raw_seo is None or str(raw_seo).strip() == "":
+            r["SEO Score"] = 0.0
+        else:
+            try:
+                r["SEO Score"] = float(raw_seo)
+            except (TypeError, ValueError):
+                r["SEO Score"] = 0.0
 
 
 def _sync_main_rows_seo_fields_from_extra(
@@ -125,6 +135,7 @@ def _sync_main_rows_seo_fields_from_extra(
         if not ex:
             continue
         m["SEO Health Score"] = ex.get("SEO Health Score")
+        m["SEO Score"] = ex.get("SEO Score")
         m["Severity Badge"] = ex.get("Severity Badge")
         m["Action Needed"] = ex.get("Action Needed")
 
@@ -1786,71 +1797,37 @@ async def main(run: RunConfig | None = None) -> None:
                 to_excel_safe(
                     pd.DataFrame(sitemap_rows), writer, "SitemapQA", index=False
                 )
-                preferred_first_tabs = [
+                apply_tab_hyperlinks(writer)
+                for sname in (
                     "Dashboard",
                     "Content Optimization Hub",
                     "Quick Reference Guide",
+                    "Summary",
                     "FixPlan",
-                    "Main",
-                    "Technical",
-                    "PSI Performance",
                     "Content",
-                    "AEO",
-                    "Schema & Metadata",
-                    "Links",
-                    "Indexability",
-                    "Redirects",
+                    "Main",
                     "Priority URLs",
                     "AIOSEO",
-                    "Security",
-                    "Summary",
-                    "LinksDetail",
-                    "Media",
-                    "Pattern and Template Issues",
-                ]
-                wb = writer.book
-                for idx, tab_name in enumerate(preferred_first_tabs):
-                    if tab_name in wb.sheetnames:
-                        wb.move_sheet(
-                            wb[tab_name], offset=-wb.index(wb[tab_name]) + idx
-                        )
-                apply_tab_hyperlinks(writer)
-                if "Glossary & Legend" in wb.sheetnames:
-                    wb.move_sheet(
-                        wb["Glossary & Legend"],
-                        offset=len(wb.sheetnames)
-                        - 1
-                        - wb.index(wb["Glossary & Legend"]),
-                    )
-                for sname in [
-                    "Dashboard",
-                    "Content Optimization Hub",
-                    "Quick Reference Guide",
-                    "FixPlan",
-                    "Glossary & Legend",
                     "Technical",
-                    "Content",
+                    "PSI Performance",
+                    "AEO",
+                    "Indexability",
+                    "Redirects",
+                    "Security",
+                    "Schema & Metadata",
                     "Links",
                     "LinksDetail",
                     "Media",
-                    "Schema & Metadata",
-                    "AEO",
-                    "AIOSEO",
-                    "Security",
-                    "Indexability",
-                    "Redirects",
                     "Duplicates",
                     "Pattern and Template Issues",
-                    "PSI Performance",
-                    "Priority URLs",
-                    "IssueInventory",
-                    "ResolvedIssues",
-                    "RunMetadata",
-                    "DeltaFromPreviousRun",
                     "CrawlGraph",
                     "SitemapQA",
-                    "Summary",
-                ]:
+                    "IssueInventory",
+                    "ResolvedIssues",
+                    "DeltaFromPreviousRun",
+                    "RunMetadata",
+                    "Glossary & Legend",
+                ):
                     adjust_sheet_format(writer, sname)
             apply_workbook_export_guardrails(writer.book)
             logger.info("Audit complete! Report saved to %s", output_filename)

@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from openpyxl.utils.cell import coordinate_to_tuple
 
-from hype_frog.reporter.excel_engine import apply_fixplan_workflow_formatting, ensure_auto_filter, ensure_freeze_header
+from hype_frog.reporter.excel_engine import (
+    apply_fixplan_workflow_formatting,
+    apply_header_tooltips,
+    ensure_auto_filter,
+    ensure_freeze_header,
+)
 from hype_frog.reporter.sheets import apply_workbook_toc_and_links
 from hype_frog.reporter.sheets.conditional import (
     apply_content_hub_conditional_rules,
@@ -91,6 +96,8 @@ def adjust_sheet_format(writer, sheet_name):
     add_all_header_tooltips(worksheet)
     if sheet_name in DATA_HEAVY_TABS:
         add_header_tooltips(worksheet)
+    if sheet_name in {"Technical", "Main"}:
+        apply_header_tooltips(worksheet, header_row=1)
     if sheet_name == "Dashboard" and not DEBUG_EXCEL_ISOLATION_MODE:
         style_dashboard(worksheet, writer)
     if sheet_name != "Dashboard":

@@ -27,12 +27,12 @@ def add_back_to_dashboard_link(worksheet: Worksheet, sheet_name: str) -> None:
     """
     if DEBUG_EXCEL_ISOLATION_MODE:
         return
-    if sheet_name in {"Dashboard", "Content Optimization Hub"}:
+    if sheet_name == "Dashboard":
         return
     target_col = worksheet.max_column + 1
     target_ref = f"{get_column_letter(target_col)}1"
     worksheet[target_ref] = "BACK TO DASHBOARD"
-    worksheet[target_ref].hyperlink = "#Dashboard!A1"
+    worksheet[target_ref].hyperlink = "#'Dashboard'!A1"
     worksheet[target_ref].style = "Hyperlink"
     worksheet[target_ref].font = Font(color=STD_BLUE, underline="single", bold=True)
     worksheet[target_ref].alignment = Alignment(horizontal="left")

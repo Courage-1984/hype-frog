@@ -29,6 +29,7 @@ if SRC.is_dir() and str(SRC) not in sys.path:
 
 from hype_frog.reporter.excel_engine import (  # noqa: E402
     _describe_sheet_from_headers,
+    apply_header_tooltips,
     apply_workbook_export_guardrails,
     friendly_toc_description,
 )
@@ -36,36 +37,10 @@ from hype_frog.reporter.sheets.tables_impl import (  # noqa: E402
     adjust_sheet_format,
     apply_tab_hyperlinks,
 )
+from hype_frog.reporter.sheets.toc import PREFERRED_WORKBOOK_TAB_ORDER  # noqa: E402
 
-_ADJUST_SHEET_ORDER: tuple[str, ...] = (
-    "Main",
-    "Dashboard",
-    "Content Optimization Hub",
-    "Quick Reference Guide",
-    "FixPlan",
-    "Glossary & Legend",
-    "Technical",
-    "Content",
-    "Links",
-    "LinksDetail",
-    "Media",
-    "Schema & Metadata",
-    "AEO",
-    "AIOSEO",
-    "Security",
-    "Indexability",
-    "Redirects",
-    "Duplicates",
-    "Pattern and Template Issues",
-    "PSI Performance",
-    "Priority URLs",
-    "IssueInventory",
-    "ResolvedIssues",
-    "RunMetadata",
-    "DeltaFromPreviousRun",
-    "CrawlGraph",
-    "SitemapQA",
-    "Summary",
+_ADJUST_SHEET_ORDER: tuple[str, ...] = tuple(
+    n for n in PREFERRED_WORKBOOK_TAB_ORDER if n != "Table of Contents"
 )
 
 
@@ -195,6 +170,17 @@ def test_friendly_toc_description_unknown_tab() -> None:
     assert friendly_toc_description("CustomClientTab") == (
         "Diagnostic metrics for CustomClientTab."
     )
+
+
+def test_apply_header_tooltips_sets_comments() -> None:
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["URL", "TTFB (ms)", "Mobile LCP (s)", "Internal PageRank", "Click Depth"])
+    apply_header_tooltips(ws, header_row=1)
+    assert ws["B1"].comment is not None
+    assert "Time to First Byte" in ws["B1"].comment.text
+    assert ws["C1"].comment is not None
+    assert "Largest Contentful Paint" in ws["C1"].comment.text
 
 
 def test_describe_sheet_from_headers_delegates_to_map() -> None:

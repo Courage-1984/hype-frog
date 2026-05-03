@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import quote, unquote, urlparse, urlsplit, urlunsplit
 
 import pandas as pd
+from openpyxl.comments import Comment
 from openpyxl.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule, FormulaRule
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -764,6 +765,37 @@ def friendly_toc_description(sheet_name: str) -> str:
     if key in _TOC_FRIENDLY_DESCRIPTIONS:
         return _TOC_FRIENDLY_DESCRIPTIONS[key]
     return f"Diagnostic metrics for {key}."
+
+
+_HEADER_TOOLTIP_MESSAGES: dict[str, str] = {
+    "TTFB (ms)": "Time to First Byte: Measures server responsiveness.",
+    "LCP (s)": "Largest Contentful Paint: Measures perceived load speed.",
+    "Internal PageRank": (
+        "Authority score based on internal linking structure."
+    ),
+    "Click Depth": (
+        "Number of clicks required to reach this URL from the homepage."
+    ),
+}
+
+
+def apply_header_tooltips(
+    worksheet: Worksheet, *, header_row: int = 1
+) -> None:
+    """Attach Excel cell comments to selected metric headers (UX guidance)."""
+    lcp_body = _HEADER_TOOLTIP_MESSAGES["LCP (s)"]
+    for col_idx in range(1, worksheet.max_column + 1):
+        cell = worksheet.cell(row=header_row, column=col_idx)
+        header = str(cell.value or "").strip()
+        if not header:
+            continue
+        tip = _HEADER_TOOLTIP_MESSAGES.get(header)
+        if tip is None and "lcp" in header.lower() and "(s)" in header:
+            tip = lcp_body
+        if tip:
+            cell.comment = Comment(tip, "hype-frog")
+
+
 _ACTION_REQUIRED_FILL = PatternFill(
     start_color="FF0000",
     end_color="FF0000",
@@ -919,4 +951,5 @@ __all__ = [
     "apply_workbook_export_guardrails",
     "refresh_toc_descriptions_dynamic",
     "friendly_toc_description",
+    "apply_header_tooltips",
 ]
