@@ -6,7 +6,7 @@ from collections import defaultdict
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from hype_frog.models import ExtraRowPayload, MainRowPayload
+from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.rules import owner_for_issue, stable_issue_id
 
 

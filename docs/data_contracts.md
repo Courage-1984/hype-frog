@@ -4,10 +4,10 @@
 
 Each processed URL contributes:
 
-- **`main`** — `dict[str, Any]` aligned with `MainRow`-style fields in `models.py` plus dynamic columns added by the pipeline (scores, badges, extraction fields, etc.).
+- **`main`** — `dict[str, Any]` aligned with `MainRowPayload` contracts in `src/hype_frog/core/models.py` plus additive pipeline fields (scores, badges, extraction metadata, etc.).
 - **`extra`** — `dict[str, Any]` for extended signals (`ExtraRow` patterns: links, hreflang, snippets, etc.).
 
-Typed aliases document intent; runtime rows may carry additional keys when `extra="allow"` models are used.
+Typed payload models in `src/hype_frog/core/models.py` document intent; runtime rows may carry additional additive keys where models permit `extra="allow"`.
 
 ## Additive key policy
 

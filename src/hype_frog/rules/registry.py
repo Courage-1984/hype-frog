@@ -5,7 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 from hype_frog.config import DEFAULT_EFFORT_BY_SEVERITY, DEFAULT_OWNER_BY_SEVERITY
-from hype_frog.utils import to_bool
+from hype_frog.core.text_utils import to_bool
 
 RuleFn = Callable[[dict[str, Any]], bool]
 

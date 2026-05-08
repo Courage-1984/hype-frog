@@ -23,13 +23,13 @@ from hype_frog.orchestration.export_flow import execute_export
 from hype_frog.orchestration.run_setup import resolve_run_setup
 from hype_frog.pipeline.enrich import value_or_default as _value_or_default_pipeline
 from hype_frog.rules import owner_for_issue, stable_issue_id, workflow_metrics_for_issue
-from hype_frog.utils import normalize_url_key
+from hype_frog.core.url_normalization import normalize_url
 
 logger = get_logger(__name__)
 
 
 def _normalize_url_key(url: object) -> str:
-    return normalize_url_key(url)
+    return normalize_url(url)
 
 
 def _extract_subfolder(url: str) -> str:

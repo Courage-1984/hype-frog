@@ -29,9 +29,13 @@ from hype_frog.pipeline.enrich import (
     compute_internal_link_intelligence,
 )
 from hype_frog.rules import get_summary_rules
-from hype_frog.utils import normalize_url_key
+from hype_frog.core.url_normalization import normalize_url
 
 logger = get_logger(__name__)
+
+
+def normalize_url_key(url: object, keep_query: bool = True) -> str:
+    return normalize_url(url, keep_query=keep_query)
 
 
 @dataclass(frozen=True)

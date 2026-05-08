@@ -28,9 +28,14 @@ from hype_frog.crawler.data_assembler import (
 )
 from hype_frog.crawler.network_engine import fetch_http, fetch_rendered
 from hype_frog.core.models import CrawlRowPayload
-from hype_frog.utils import normalize_url_key, status_class
+from hype_frog.core.text_utils import status_class
+from hype_frog.core.url_normalization import normalize_url
 
 logger = get_logger(__name__)
+
+
+def normalize_url_key(url: object, keep_query: bool = True) -> str:
+    return normalize_url(url, keep_query=keep_query)
 
 
 async def _populate_robots_cache(

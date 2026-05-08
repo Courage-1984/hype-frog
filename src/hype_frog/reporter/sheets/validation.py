@@ -6,7 +6,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.reporter.sheets.config import DISABLE_DATA_VALIDATION
 from hype_frog.reporter.sheets.schema import add_schema_header_tooltips
-from hype_frog.reporter.sheets.utils import header_index
+from hype_frog.reporter.sheets.style_helpers import header_index
 
 
 def friendly_metric_label(header: str) -> str:

@@ -6,8 +6,13 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from hype_frog.models import ExtraRowPayload
-from hype_frog.utils import normalize_text_hash, normalize_url_key
+from hype_frog.core.models import ExtraRowPayload
+from hype_frog.core.text_utils import normalize_text_hash
+from hype_frog.core.url_normalization import normalize_url
+
+
+def normalize_url_key(url: object, keep_query: bool = True) -> str:
+    return normalize_url(url, keep_query=keep_query)
 
 
 @dataclass(frozen=True)

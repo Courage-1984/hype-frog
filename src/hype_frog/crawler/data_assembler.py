@@ -7,21 +7,36 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
+from hype_frog.core.text_utils import (
+    image_extension,
+    looks_generic_image_filename,
+    status_class,
+    word_count_band,
+)
+from hype_frog.core.url_normalization import normalize_url
 from hype_frog.extractors import (
     extract_aeo_snippets,
     parse_html_signals,
     parse_jsonld_summary,
     resolve_indexability_directive,
 )
-from hype_frog.utils import (
-    image_extension,
-    looks_generic_image_filename,
-    normalize_url_key,
-    readability_flesch,
-    status_class,
-    url_depth,
-    word_count_band,
-)
+
+
+def normalize_url_key(url: object, keep_query: bool = True) -> str:
+    return normalize_url(url, keep_query=keep_query)
+
+
+def readability_flesch(words: int, sentences: int) -> float | None:
+    if words <= 0 or sentences <= 0:
+        return None
+    return round(206.835 - 1.015 * (words / sentences), 2)
+
+
+def url_depth(url: str) -> int:
+    path = urlparse(url).path.strip("/")
+    if not path:
+        return 0
+    return len([p for p in path.split("/") if p])
 
 def init_rows(
     url: str, sitemap_meta: dict[str, dict[str, object]] | None

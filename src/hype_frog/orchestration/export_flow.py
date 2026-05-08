@@ -17,7 +17,7 @@ from hype_frog.config import (
     TIMEOUT_SECONDS,
 )
 from hype_frog.core import get_logger
-from hype_frog.models import SummaryMetricsPayload
+from hype_frog.core.models import SummaryMetricsPayload
 from hype_frog.orchestration.crawl_runner import CrawlExecutionResult
 from hype_frog.orchestration.enrichment_flow import EnrichmentResult
 from hype_frog.orchestration.export_registry import (
@@ -52,9 +52,13 @@ from hype_frog.rules import (
     owner_for_issue,
     root_cause_and_fix,
 )
-from hype_frog.utils import normalize_url_key
+from hype_frog.core.url_normalization import normalize_url
 
 logger = get_logger(__name__)
+
+
+def normalize_url_key(url: object, keep_query: bool = True) -> str:
+    return normalize_url(url, keep_query=keep_query)
 
 
 @dataclass(frozen=True)

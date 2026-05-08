@@ -20,7 +20,12 @@ from hype_frog.rules import (
     score_url_health,
     stable_issue_id,
 )
-from hype_frog.utils import normalize_text_hash, normalize_url_key
+from hype_frog.core.text_utils import normalize_text_hash
+from hype_frog.core.url_normalization import normalize_url
+
+
+def normalize_url_key(url: object, keep_query: bool = True) -> str:
+    return normalize_url(url, keep_query=keep_query)
 
 
 def compute_seo_technical_copy_scores(

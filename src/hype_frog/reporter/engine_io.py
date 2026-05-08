@@ -7,11 +7,15 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 import pandas as pd
 
 from hype_frog.checkpoint.cache import AuditCache
-from hype_frog.models import ExtraRowPayload, MainRowPayload
-from hype_frog.utils import normalize_url_key
+from hype_frog.core.models import ExtraRowPayload, MainRowPayload
+from hype_frog.core.url_normalization import normalize_url
 
 _ILLEGAL_XLSX_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
 _INVALID_SHEET_CHARS_RE = re.compile(r"[:\\/*?\[\]]")
+
+
+def normalize_url_key(url: object, keep_query: bool = True) -> str:
+    return normalize_url(url, keep_query=keep_query)
 
 
 def _safe_sheet_name(name: str) -> str:

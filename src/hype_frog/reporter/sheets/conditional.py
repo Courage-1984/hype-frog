@@ -24,7 +24,7 @@ from hype_frog.reporter.sheets.links import (
     normalize_url_for_match,
     sanitize_excel_url,
 )
-from hype_frog.reporter.sheets.utils import header_index
+from hype_frog.reporter.sheets.style_helpers import header_index
 from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
 
 

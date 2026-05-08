@@ -7,7 +7,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
-from hype_frog.reporter.sheets.utils import header_index, to_int
+from hype_frog.reporter.sheets.style_helpers import header_index, to_int
 
 MAIN_COLUMN_GROUP_DEFINITIONS: dict[str, list[str]] = {
     "Metadata Group": [

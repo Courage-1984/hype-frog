@@ -6,7 +6,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.worksheet import Worksheet
 
-from hype_frog.models import ExtraRowPayload, MainRowPayload, SummaryMetricsPayload
+from hype_frog.core.models import ExtraRowPayload, MainRowPayload, SummaryMetricsPayload
 from hype_frog.reporter.dashboard_logic import (
     FixPlanRowPayload,
     compute_dashboard_metrics,
@@ -32,7 +32,7 @@ from hype_frog.reporter.sheets.config import (
     STD_BLUE,
     STD_NAVY,
 )
-from hype_frog.reporter.sheets.utils import header_index, to_int
+from hype_frog.reporter.sheets.style_helpers import header_index, to_int
 from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
 
 
