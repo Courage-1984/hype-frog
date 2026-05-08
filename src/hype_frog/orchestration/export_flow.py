@@ -20,6 +20,19 @@ from hype_frog.core import get_logger
 from hype_frog.models import SummaryMetricsPayload
 from hype_frog.orchestration.crawl_runner import CrawlExecutionResult
 from hype_frog.orchestration.enrichment_flow import EnrichmentResult
+from hype_frog.orchestration.export_registry import (
+    ExportRegistryConfig,
+    build_crawlgraph_rows,
+    build_delta_and_trend_rows,
+    build_duplicates_rows,
+    build_pattern_rows,
+    build_priority_rows,
+    build_schema_and_snippets_rows,
+    build_sitemapqa_rows,
+    get_finalization_steps,
+    get_sheet_sequence,
+    get_standard_sheet_columns,
+)
 from hype_frog.orchestration.run_setup import RunSetup
 from hype_frog.pipeline.export import sanitize_rows, to_excel_safe
 from hype_frog.reporter import adjust_sheet_format, apply_tab_hyperlinks
@@ -38,9 +51,8 @@ from hype_frog.rules import (
     get_summary_rules,
     owner_for_issue,
     root_cause_and_fix,
-    stable_issue_id,
 )
-from hype_frog.utils import normalize_text_hash, normalize_url_key
+from hype_frog.utils import normalize_url_key
 
 logger = get_logger(__name__)
 
@@ -82,7 +94,6 @@ def execute_export(
     extra_rows = [row.values for row in typed_extra_rows]
     status_by_url = dict(enrichment.status_by_url)
 
-    main_df = pd.DataFrame(main_rows)
     main_by_url = {
         str(row.get("URL") or "").strip(): row for row in main_rows if row.get("URL")
     }
@@ -154,99 +165,34 @@ def execute_export(
         write_dict_rows_sheet(writer, "Main", main_cols, typed_main_rows)
         adjust_sheet_format(writer, "Main")
         if full_suite:
-            technical_cols = [
-                "URL", "Content Cluster ID", "Extraction State", "Extraction Source",
-                "Health Icon", "Severity Badge", "SEO Health Score", "SEO Score",
-                "Technical Health", "Copy Score", "Action Needed", "Owner", "Sprint",
-                "Status", "Status Code", "Final URL", "Protocol", "Redirect Chain Length",
-                "Redirect Target", "Redirect Hops", "HTTP->HTTPS Redirect", "Status Class",
-                "TTFB (ms)", "Total Request Time (ms)", "Content-Type", "HTTP Version",
-                "HTML Size (KB)", "Compression Enabled", "Cache-Control", "ETag",
-                "X-Robots-Tag", "Content-Security-Policy", "Meta Robots Raw", "Canonical URL",
-                "Canonical Matches Final URL", "Canonical Type", "Canonical Absolute URL",
-                "Canonical in Sitemap Match", "Hreflang Present", "Hreflang Count",
-                "Hreflang Self Reference", "Hreflang Reciprocal Check",
-                "Hreflang Canonical Consistency", "x-default Present", "Pagination rel=next",
-                "Pagination rel=prev", "Last-Modified", "Published Date", "Modified Date",
-                "Last Updated", "Change Frequency", "Priority", "Indexability Reason",
-                "Schema Types Count", "Schema Types Found", "Internal Links Count",
-                "Unique Internal Links Count", "External Links Count",
-                "AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)", "llms.txt Present",
-                "Desktop PSI Score", "Mobile PSI Score", "Mobile LCP (s)", "Mobile CLS",
-                "Mobile TTFB (s)", "CWV LCP (s)", "CWV CLS", "CWV Data Source",
-                "Field vs Lab", "GSC Clicks", "GSC Impressions", "GSC CTR",
-                "GSC Avg Position", "Click Depth", "Internal Inlinks", "Orphan Pages",
-                "Internal PageRank", "Regional Authority Score", "Regional Entity Hits",
-                "Answer Block Detected (First 60 Words)", "AEO Extractability Score",
-                "Critical Issues Count", "Warning Issues Count", "Observation Issues Count",
-                "Inlinks Bucket", "Important But Underlinked", "SERP Title Truncation Risk",
-                "SERP Meta Truncation Risk", "SERP Title Pixel Approx", "SERP Meta Pixel Approx",
-                "Cannibalization Hint", "Stable Issue IDs", "URL Depth", "Param URL Flag",
-            ]
-            content_cols = [
-                "URL", "H1 Count", "Missing H1 Flag", "Multiple H1 Flag", "Title Missing",
-                "Meta Description Missing", "Word Count", "Word Count Band", "Sentence Count",
-                "Body Text-to-HTML Ratio", "Readability (Rough Flesch)", "Thin Content Flag",
-            ]
-            links_cols = [
-                "URL", "Internal Links Count", "Unique Internal Links Count", "External Links Count",
-                "Nofollow Internal Links Count", "Nofollow External Links Count",
-                "Generic Anchor Text Count", "Broken Internal Links Count",
-                "Unresolved Internal Links Count", "Internal Link Statuses",
-            ]
-            media_cols = [
-                "URL", "Image Count", "Images", "Images Missing Alt", "Image Alt Coverage (%)",
-                "Image Extension Distribution", "Likely Large Image Count", "Image Filename Quality Issues",
-                "Image On Canonical Domain (%)", "Mixed Content Detected",
-            ]
-            schema_cols = [
-                "URL", "Schema Types Found", "Schema Types Count", "Schema Parse Errors",
-                "OG Title", "OG Description", "OG Image", "Open Graph Complete", "Twitter Card Type",
-            ]
-            aeo_cols = [
-                "URL", "AEO Badge", "AEO Readiness Score", "Why It Matters", "FAQ Section Count",
-                "Question Heading Count", "QAPage/FAQ Schema Present", "Speakable Schema Present",
-                "HowTo Signal", "Definition Signal", "List/Table Answer Signal",
-                "Paragraphs 40-60 Words Count", "Answer Block Detected (First 60 Words)",
-                "AEO Extractability Score", "Snippet Preview Mockup", "Title Missing",
-                "Meta Description Missing",
-            ]
-            security_cols = [
-                "URL", "Strict-Transport-Security", "Content-Security-Policy", "X-Content-Type-Options",
-                "X-Frame-Options", "Referrer-Policy", "Permissions-Policy", "Robots.txt Accessible",
-                "Sitemap in Robots.txt", "Robots.txt Crawl-Delay", "Robots.txt Disallow /",
-            ]
-            write_dict_rows_sheet(writer, "Technical", technical_cols, typed_extra_rows)
-            write_dict_rows_sheet(writer, "Content", content_cols, typed_extra_rows)
-            write_dict_rows_sheet(writer, "Links", links_cols, typed_extra_rows)
-            write_dict_rows_sheet(writer, "Media", media_cols, typed_extra_rows)
-            write_dict_rows_sheet(writer, "Schema & Metadata", schema_cols, typed_extra_rows)
-            aeo_rows = build_aeo_rows_fn(extra_rows)
-            write_dict_rows_sheet(writer, "AEO", aeo_cols, aeo_rows)
+            sheet_columns = get_standard_sheet_columns()
+            for sheet_name in (
+                "Technical",
+                "Content",
+                "Links",
+                "Media",
+                "Schema & Metadata",
+            ):
+                write_dict_rows_sheet(
+                    writer,
+                    sheet_name,
+                    sheet_columns[sheet_name],
+                    typed_extra_rows,
+                )
+            schema_and_snippet_rows = build_schema_and_snippets_rows(
+                extra_rows=extra_rows,
+                build_aeo_rows_fn=build_aeo_rows_fn,
+            )
+            aeo_rows = schema_and_snippet_rows["AEO"]
+            write_dict_rows_sheet(writer, "AEO", sheet_columns["AEO"], aeo_rows)
             aioseo_rows = build_aioseo_rows_fn(extra_rows, main_by_url, DEFAULT_OWNER_BY_SEVERITY)
-            aioseo_cols = [
-                "URL", "WordPress Post ID", "Direct Edit Link", "AIOSEO Panel", "Severity",
-                "Issue", "Current Value", "Recommended Target", "Why It Matters", "How to Fix in AIOSEO",
-                "Reference Tab", "Reference Field", "Action Needed", "Owner", "Status",
-                "Priority Score", "Est. Hours", "Stable Issue ID",
-            ]
-            write_dict_rows_sheet(writer, "AIOSEO", aioseo_cols, aioseo_rows)
-            write_dict_rows_sheet(writer, "Security", security_cols, typed_extra_rows)
-            psi_rows = [{
-                "URL": row.get("URL"),
-                "Desktop Score": row.get("Desktop PSI Score", 0),
-                "Mobile Score": row.get("Mobile PSI Score", 0),
-                "Mobile LCP": row.get("Mobile LCP (s)", 0.0),
-                "Mobile CLS": row.get("Mobile CLS", 0.0),
-                "Mobile TTFB": row.get("Mobile TTFB (s)", 0.0),
-            } for row in extra_rows]
+            write_dict_rows_sheet(writer, "AIOSEO", sheet_columns["AIOSEO"], aioseo_rows)
+            write_dict_rows_sheet(writer, "Security", sheet_columns["Security"], typed_extra_rows)
+            psi_rows = schema_and_snippet_rows["PSI Performance"]
             to_excel_safe(pd.DataFrame(psi_rows), writer, "PSI Performance", index=False)
-            indexability_cols = [
-                "URL", "Status Code", "Status Class", "Final URL", "Indexability Reason",
-                "Meta Robots Raw", "X-Robots-Tag", "Canonical URL", "Canonical Type",
-                "Canonical Matches Final URL", "Canonical in Sitemap Match",
-            ]
-            write_dict_rows_sheet(writer, "Indexability", indexability_cols, typed_extra_rows)
+            write_dict_rows_sheet(
+                writer, "Indexability", sheet_columns["Indexability"], typed_extra_rows
+            )
             redirects_rows = []
             for row in extra_rows:
                 redirects_rows.append({
@@ -265,7 +211,7 @@ def execute_export(
                 })
             write_dict_rows_sheet(
                 writer, "Redirects",
-                ["URL", "Status Code", "Final URL", "Redirect Chain Length", "Redirect Target", "Redirect Hops", "HTTP->HTTPS Redirect", "Redirect Loop Flag"],
+                sheet_columns["Redirects"],
                 redirects_rows,
             )
             link_rows = []
@@ -275,66 +221,19 @@ def execute_export(
                     crawlable = target_status is None or (isinstance(target_status, int) and target_status < 400)
                     link_rows.append({**item, "Target Status (if crawled)": target_status, "Crawlable": crawlable})
             to_excel_safe(pd.DataFrame(link_rows), writer, "LinksDetail", index=False)
-            title_groups: defaultdict[str, list[str]] = defaultdict(list)
-            desc_groups: defaultdict[str, list[str]] = defaultdict(list)
-            for row in main_rows:
-                t_key = normalize_text_hash(row.get("Title"))
-                d_key = normalize_text_hash(row.get("Meta Description"))
-                if t_key:
-                    title_groups[t_key].append(row.get("URL"))
-                if d_key:
-                    desc_groups[d_key].append(row.get("URL"))
-            duplicate_rows = []
-            for row in main_rows:
-                t_key = normalize_text_hash(row.get("Title"))
-                d_key = normalize_text_hash(row.get("Meta Description"))
-                duplicate_rows.append({
-                    "URL": row.get("URL"),
-                    "Title Duplicate Count": len(title_groups.get(t_key, [])) if t_key else 0,
-                    "Meta Description Duplicate Count": len(desc_groups.get(d_key, [])) if d_key else 0,
-                    "Title Duplicate URLs": " | ".join(title_groups.get(t_key, [])) if t_key and len(title_groups.get(t_key, [])) > 1 else None,
-                    "Meta Duplicate URLs": " | ".join(desc_groups.get(d_key, [])) if d_key and len(desc_groups.get(d_key, [])) > 1 else None,
-                })
+            duplicate_rows = build_duplicates_rows(main_rows)
             to_excel_safe(pd.DataFrame(duplicate_rows), writer, "Duplicates", index=False)
-            folder_groups: defaultdict[str, list[dict[str, object]]] = defaultdict(list)
-            for row in extra_rows:
-                folder_groups[extract_subfolder_fn(str(row.get("Final URL") or row.get("URL") or ""))].append(row)
-            cluster_rows = []
-            template_issue_counts: defaultdict[str, defaultdict[str, int]] = defaultdict(lambda: defaultdict(int))
-            for folder, urls_in_group in sorted(folder_groups.items(), key=lambda item: len(item[1]), reverse=True):
-                if not urls_in_group:
-                    continue
-                url_count = len(urls_in_group)
-                missing_h1_count = sum(1 for row in urls_in_group if bool(row.get("Missing H1 Flag")))
-                missing_meta_count = sum(1 for row in urls_in_group if bool(row.get("Meta Description Missing")))
-                systemic_issue = None
-                exact_action = None
-                if (missing_h1_count / max(1, url_count)) >= 0.8:
-                    systemic_issue = "Missing H1 is template-wide"
-                    exact_action = "Update template to render exactly one descriptive H1 for each page based on page-specific title data."
-                elif (missing_meta_count / max(1, url_count)) >= 0.8:
-                    systemic_issue = "Missing meta description is template-wide"
-                    exact_action = "Update template/meta generation logic to output a unique 120-160 character meta description per page."
-                if systemic_issue:
-                    cluster_rows.append({
-                        "Subfolder": folder,
-                        "URL Count": url_count,
-                        "Systemic Issue": systemic_issue,
-                        "Affected Ratio": round((max(missing_h1_count, missing_meta_count) / max(1, url_count)) * 100, 2),
-                        "Exact Action": exact_action,
-                    })
-                for row in urls_in_group:
-                    for issue in str(row.get("Matched Issues") or "").split(" | "):
-                        if issue:
-                            template_issue_counts[folder][issue] += 1
-            pattern_df = pd.DataFrame(cluster_rows)
-            if pattern_df.empty:
-                pattern_df = pd.DataFrame([{
-                    "Subfolder": "/", "URL Count": 0,
-                    "Systemic Issue": "No systemic template issues above 80%.",
-                    "Affected Ratio": 0, "Exact Action": "N/A",
-                }])
-            to_excel_safe(pd.DataFrame(pattern_df), writer, "Pattern and Template Issues", index=False, startrow=1)
+            pattern_rows, template_issue_counts = build_pattern_rows(
+                extra_rows,
+                extract_subfolder_fn=extract_subfolder_fn,
+            )
+            to_excel_safe(
+                pd.DataFrame(pattern_rows),
+                writer,
+                "Pattern and Template Issues",
+                index=False,
+                startrow=1,
+            )
             writer.book["Pattern and Template Issues"]["A1"] = (
                 "WHAT IS THIS? This tab detects structural flaws coded into your page templates. "
                 "Fixing one template here can instantly fix hundreds of pages."
@@ -387,51 +286,13 @@ def execute_export(
             ]
             write_dict_rows_sheet(writer, CONTENT_OPTIMISATION_HUB_SHEET, content_hub_cols, content_hub_rows)
             # Remaining dashboard/delta/report tabs preserved from prior flow
-            priority_rows = []
-            for row in extra_rows:
-                risk_score = (
-                    value_or_default_fn(row.get("Critical Issues Count"), 0.0) * 30
-                    + value_or_default_fn(row.get("Warning Issues Count"), 0.0) * 10
-                    + (100 - value_or_default_fn(row.get("SEO Health Score"), 100.0))
-                )
-                reasons = []
-                if value_or_default_fn(row.get("Critical Issues Count"), 0.0) > 0:
-                    reasons.append("Has critical issues")
-                if (row.get("Broken Internal Links Count") or 0) > 0:
-                    reasons.append("Broken internal links")
-                if row.get("Canonical Type") == "cross-canonical":
-                    reasons.append("Cross canonical")
-                if "noindex" in str(row.get("Indexability Reason", "")).lower():
-                    reasons.append("Noindex")
-                owner_seed_issue = (
-                    "Broken Internal Links"
-                    if (row.get("Broken Internal Links Count") or 0) > 0
-                    else "Canonical Points Elsewhere" if row.get("Canonical Type") == "cross-canonical"
-                    else "Noindex Directive" if "noindex" in str(row.get("Indexability Reason", "")).lower()
-                    else ""
-                )
-                url_value = str(row.get("URL") or "")
-                revenue_intent = "High" if any(slug in url_value.lower() for slug in high_value_slugs) else "Standard"
-                priority_rows.append({
-                    "URL": row.get("URL"),
-                    "Business Risk Score": int(risk_score),
-                    "SEO Health Score": row.get("SEO Health Score"),
-                    "Severity Badge": row.get("Severity Badge"),
-                    "Critical Issues Count": row.get("Critical Issues Count"),
-                    "Warning Issues Count": row.get("Warning Issues Count"),
-                    "Indexability Reason": row.get("Indexability Reason"),
-                    "Broken Internal Links Count": row.get("Broken Internal Links Count"),
-                    "Canonical Type": row.get("Canonical Type"),
-                    "GSC Impressions": row.get("GSC Impressions", 0.0),
-                    "GSC CTR": row.get("GSC CTR", 0.0),
-                    "Revenue Intent": revenue_intent,
-                    "Why Prioritized": " | ".join(reasons) if reasons else "Monitor",
-                    "Action Needed": "Yes" if risk_score >= 30 else "No",
-                    "Owner": owner_for_issue(owner_seed_issue, str(row.get("Severity Badge") or "")),
-                    "Sprint": "",
-                    "Status": "Open",
-                })
-            priority_df = pd.DataFrame(sorted(priority_rows, key=lambda item: item["Business Risk Score"], reverse=True))
+            priority_rows = build_priority_rows(
+                extra_rows,
+                high_value_slugs=high_value_slugs,
+                value_or_default_fn=value_or_default_fn,
+                owner_for_issue_fn=owner_for_issue,
+            )
+            priority_df = pd.DataFrame(priority_rows)
             to_excel_safe(priority_df, writer, "Priority URLs", index=False)
             total_urls = len(typed_extra_rows)
             pass_count = sum(
@@ -644,57 +505,16 @@ def execute_export(
                 {"Key": "Previous Audit Path", "Value": previous_audit_path or "Not supplied"},
             ]
             to_excel_safe(pd.DataFrame(run_meta_rows), writer, "RunMetadata", index=False)
-            current_issue_ids = {
-                str(value).strip()
-                for value in issue_inventory_df.get("Stable Issue ID", pd.Series(dtype="object")).dropna().tolist()
-                if str(value).strip()
-            }
-            resolved_issues = prev_issue_ids - current_issue_ids
-            delta_rows = [
-                {"Metric": "New Issues", "Count": len(current_issue_ids - prev_issue_ids)},
-                {"Metric": "Resolved Issues", "Count": len(resolved_issues)},
-                {"Metric": "Unchanged Issues", "Count": len(current_issue_ids & prev_issue_ids)},
-                {"Metric": "Previously Fixed But Reopened", "Count": len(current_issue_ids & prev_fixed_issue_ids)},
-            ]
-            for _, issue_name, _ in summary_rules:
-                current_count = len(
-                    [
-                        row
-                        for row in typed_extra_rows
-                        if issue_name
-                        in str(row.values.get("Matched Issues") or "").split(" | ")
-                    ]
-                )
-                delta_rows.append(
-                    {
-                        "Metric": f"Issue Delta: {issue_name}",
-                        "Count": current_count - int(prev_counts.get(issue_name, 0)),
-                    }
-                )
+            delta_rows, resolved_issues_df = build_delta_and_trend_rows(
+                issue_inventory_df=issue_inventory_df,
+                typed_extra_rows=typed_extra_rows,
+                summary_rules=summary_rules,
+                prev_issue_ids=prev_issue_ids,
+                prev_fixed_issue_ids=prev_fixed_issue_ids,
+                prev_counts=prev_counts,
+                previous_issue_inventory_df=previous_issue_inventory_df,
+            )
             to_excel_safe(pd.DataFrame(delta_rows), writer, "DeltaFromPreviousRun", index=False)
-            if (
-                not previous_issue_inventory_df.empty
-                and "Stable Issue ID" in previous_issue_inventory_df.columns
-            ):
-                previous_issue_inventory_df = previous_issue_inventory_df.copy()
-                previous_issue_inventory_df["Stable Issue ID"] = (
-                    previous_issue_inventory_df["Stable Issue ID"].astype(str).str.strip()
-                )
-                resolved_issues_df = previous_issue_inventory_df[
-                    previous_issue_inventory_df["Stable Issue ID"].isin(resolved_issues)
-                ].copy()
-            else:
-                resolved_issues_df = pd.DataFrame(columns=["Stable Issue ID"])
-            if resolved_issues_df.empty:
-                resolved_issues_df = pd.DataFrame(
-                    [
-                        {
-                            "Stable Issue ID": "",
-                            "Issue": "No resolved issues identified for this comparison run.",
-                            "URL": "",
-                        }
-                    ]
-                )
             to_excel_safe(resolved_issues_df, writer, "ResolvedIssues", index=False)
             legend_rows = [
                 {"Section": "How To Use", "Term": "Step 1: Start on Dashboard", "Meaning": "Review pass rate, critical URL count, and Immediate Actions to understand overall risk first.", "Values/Threshold": "5-minute executive scan", "Related Tabs": "Dashboard, Priority URLs"},
@@ -706,95 +526,35 @@ def execute_export(
                 {"Section": "Color Key", "Term": "Red", "Meaning": "Failure / high-priority issue or to-do critical task.", "Values/Threshold": "High risk", "Related Tabs": "All"},
             ]
             to_excel_safe(pd.DataFrame(legend_rows), writer, "Glossary & Legend", index=False)
-            crawl_inlinks_map: defaultdict[str, set[str]] = defaultdict(set)
-            crawled_set_main = {normalize_url_key(url) for url in main_df["URL"].dropna().tolist()}
-            for row in extra_rows:
-                source = normalize_url_key(row.get("URL"))
-                for target in row.get("Internal Links List", []):
-                    target_norm = normalize_url_key(target)
-                    if target_norm in crawled_set_main:
-                        crawl_inlinks_map[target_norm].add(source)
-            graph_rows = [
-                {
-                    "URL": url_item,
-                    "Inlinks Count": len(
-                        inlinks := sorted(list(crawl_inlinks_map.get(normalize_url_key(url_item), set())))
-                    ),
-                    "Inlinks URLs": " | ".join(inlinks) if inlinks else None,
-                    "Orphan Candidate": len(inlinks) == 0,
-                    "Click Depth": next(
-                        (
-                            row.get("Click Depth")
-                            for row in extra_rows
-                            if normalize_url_key(row.get("URL")) == normalize_url_key(url_item)
-                        ),
-                        None,
-                    ),
-                    "Internal PageRank": next(
-                        (
-                            row.get("Internal PageRank")
-                            for row in extra_rows
-                            if normalize_url_key(row.get("URL")) == normalize_url_key(url_item)
-                        ),
-                        0.0,
-                    ),
-                }
-                for url_item in main_df["URL"].dropna().tolist()
-            ]
+            graph_rows = build_crawlgraph_rows(
+                main_urls=[str(row.get("URL") or "") for row in main_rows if row.get("URL")],
+                extra_rows=extra_rows,
+            )
             to_excel_safe(pd.DataFrame(graph_rows), writer, "CrawlGraph", index=False)
-            sitemap_rows = []
-            if sitemap_meta:
-                for sitemap_url, meta in sitemap_meta.items():
-                    matched = next(
-                        (
-                            row
-                            for row in extra_rows
-                            if normalize_url_key(row.get("URL", "")) == normalize_url_key(sitemap_url)
-                        ),
-                        None,
-                    )
-                    final_url = matched.get("Final URL") if matched else None
-                    status_code = matched.get("Status Code") if matched else None
-                    sitemap_rows.append(
-                        {
-                            "Sitemap URL": sitemap_url,
-                            "Final URL": final_url,
-                            "Status Code": status_code,
-                            "Found via Crawl": bool(matched),
-                            "Found via Sitemap": True,
-                            "Discovery Source": "Both" if matched else "Sitemap",
-                            "In Sitemap but Non-200": status_code != 200,
-                            "Sitemap URL Redirects": (
-                                matched.get("Redirect Chain Length", 0) > 0 if matched else None
-                            ),
-                            "In Sitemap but Canonicalized Elsewhere": (
-                                matched.get("Canonical Type") == "cross-canonical" if matched else None
-                            ),
-                            "Missing <lastmod>": not bool(meta.get("lastmod")),
-                            "Missing <changefreq>": not bool(meta.get("changefreq")),
-                            "Missing <priority>": not bool(meta.get("priority")),
-                            "Sitemap <lastmod>": meta.get("lastmod"),
-                            "Sitemap <changefreq>": meta.get("changefreq"),
-                            "Sitemap <priority>": meta.get("priority"),
-                            "Source Sitemap": meta.get("source_sitemap"),
-                        }
-                    )
+            sitemap_rows = build_sitemapqa_rows(
+                sitemap_meta=sitemap_meta,
+                extra_rows=extra_rows,
+            )
             to_excel_safe(pd.DataFrame(sitemap_rows), writer, "SitemapQA", index=False)
-            apply_tab_hyperlinks(writer)
-            for sname in (
-                "Dashboard", CONTENT_OPTIMISATION_HUB_SHEET, "Quick Reference Guide", "Summary", "FixPlan",
-                "Content", "Main", "Priority URLs", "AIOSEO", "Technical", "PSI Performance", "AEO",
-                "Indexability", "Redirects", "Security", "Schema & Metadata", "Links", "LinksDetail",
-                "Media", "Duplicates", "Pattern and Template Issues", "CrawlGraph", "SitemapQA",
-                "IssueInventory", "ResolvedIssues", "DeltaFromPreviousRun", "RunMetadata", "Glossary & Legend",
-            ):
-                if sname in writer.sheets:
-                    adjust_sheet_format(writer, sname)
-                else:
-                    logger.warning(
-                        "Skipping sheet formatting for missing sheet: %s", sname
+        registry_config = ExportRegistryConfig(full_suite=full_suite)
+        for final_step in get_finalization_steps():
+            if final_step == "apply_tab_hyperlinks":
+                apply_tab_hyperlinks(writer)
+            elif final_step == "format_sheets":
+                for sname in get_sheet_sequence(registry_config):
+                    format_name = (
+                        CONTENT_OPTIMISATION_HUB_SHEET
+                        if sname == "Content Optimisation Hub"
+                        else sname
                     )
-        apply_workbook_export_guardrails(writer.book)
+                    if format_name in writer.sheets:
+                        adjust_sheet_format(writer, format_name)
+                    else:
+                        logger.warning(
+                            "Skipping sheet formatting for missing sheet: %s", format_name
+                        )
+            elif final_step == "apply_workbook_export_guardrails":
+                apply_workbook_export_guardrails(writer.book)
         logger.info("Audit complete! Report saved to %s", output_filename)
     finally:
         if writer is not None:
