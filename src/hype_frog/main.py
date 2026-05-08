@@ -6,7 +6,7 @@ import argparse
 import asyncio
 
 from hype_frog.core.run_config import RunConfig, quick_test_run_config
-from hype_frog.entry_main import main as _async_main
+from hype_frog.app_orchestrator import main as _async_main
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:

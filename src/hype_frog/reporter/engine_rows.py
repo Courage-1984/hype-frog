@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from openpyxl.utils import get_column_letter
 
 from hype_frog.checkpoint.cache import AuditCache
+from hype_frog.models import ExtraRowPayload, MainRowPayload
 from hype_frog.reporter.engine_io import (
     _normalize_url_for_match,
     _safe_sheet_name,
@@ -27,7 +28,7 @@ def _fallback_keyword(url: str, h1_text: str) -> str:
 
 def build_fixplan_rows(
     summary_rules: list[tuple[str, str, Any]],
-    extra_rows: list[dict[str, Any]],
+    extra_rows: list[ExtraRowPayload],
     aeo_issue_names: set[str],
     root_cause_resolver: Any,
     default_effort_by_severity: dict[str, str],
@@ -43,7 +44,7 @@ def build_fixplan_rows(
         affected = [
             r
             for r in extra_rows
-            if issue_name in str(r.get("Matched Issues") or "").split(" | ")
+            if issue_name in str(r.values.get("Matched Issues") or "").split(" | ")
         ]
         root_cause, recommended_fix = root_cause_resolver(issue_name)
         effort = default_effort_by_severity.get(severity, "S")
@@ -66,7 +67,9 @@ def build_fixplan_rows(
                 )
             )
         )
-        affected_urls = [str(r.get("URL") or "") for r in affected if r.get("URL")]
+        affected_urls = [
+            str(r.values.get("URL") or "") for r in affected if r.values.get("URL")
+        ]
         systemic_issue_tokens = (
             "CWV",
             "Schema",
@@ -94,7 +97,7 @@ def build_fixplan_rows(
                 "Likely Root Cause": root_cause,
                 "Recommended Fix": recommended_fix,
                 "Owner": owner_for_issue(issue_name, severity),
-                "URL": affected[0].get("URL") if affected else "",
+                "URL": affected[0].values.get("URL") if affected else "",
                 "Affected URLs": (
                     f"SEE DETAILS IN {reference_tab}"
                     if len(affected_urls) > 10
@@ -197,15 +200,19 @@ def _content_hub_column_letter(header: str) -> str:
 
 
 def build_content_optimisation_hub_rows(
-    main_rows: list[dict[str, Any]],
-    extra_rows: list[dict[str, Any]],
+    main_rows: list[MainRowPayload],
+    extra_rows: list[ExtraRowPayload],
     fixplan_rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     main_by_url = {
-        _normalize_url_for_match(r.get("URL")): r for r in main_rows if r.get("URL")
+        _normalize_url_for_match(r.values.get("URL")): r
+        for r in main_rows
+        if r.values.get("URL")
     }
     extra_by_url = {
-        _normalize_url_for_match(r.get("URL")): r for r in extra_rows if r.get("URL")
+        _normalize_url_for_match(r.values.get("URL")): r
+        for r in extra_rows
+        if r.values.get("URL")
     }
     manual_content_urls = {
         _normalize_url_for_match(r.get("URL"))
@@ -225,19 +232,21 @@ def build_content_optimisation_hub_rows(
         "regional authority",
     )
     for e in extra_rows:
-        url = _normalize_url_for_match(e.get("URL"))
-        issues = str(e.get("Matched Issues") or "").lower()
+        row_values = e.values
+        url = _normalize_url_for_match(row_values.get("URL"))
+        issues = str(row_values.get("Matched Issues") or "").lower()
         if url and any(tok in issues for tok in content_issue_tokens):
             manual_content_urls.add(url)
 
     if not manual_content_urls:
         scored_urls: list[tuple[float, str]] = []
         for e in extra_rows:
-            raw_url = _normalize_url_for_match(e.get("URL"))
+            row_values = e.values
+            raw_url = _normalize_url_for_match(row_values.get("URL"))
             if not raw_url:
                 continue
             try:
-                score = float(e.get("SEO Health Score") or 0.0)
+                score = float(row_values.get("SEO Health Score") or 0.0)
             except Exception:
                 score = 0.0
             scored_urls.append((score, raw_url))
@@ -252,8 +261,10 @@ def build_content_optimisation_hub_rows(
 
     rows: list[dict[str, Any]] = []
     for excel_row, url in enumerate(sorted(manual_content_urls), start=3):
-        m = main_by_url.get(url, {})
-        e = extra_by_url.get(url, {})
+        main_payload = main_by_url.get(url)
+        extra_payload = extra_by_url.get(url)
+        m = main_payload.values if main_payload else {}
+        e = extra_payload.values if extra_payload else {}
         score = float(e.get("SEO Health Score") or 0)
         post_id = e.get("WordPress Post ID")
         try:
@@ -325,8 +336,8 @@ def build_content_optimisation_hub_rows(
 
 
 def build_content_optimization_hub_rows(
-    main_rows: list[dict[str, Any]],
-    extra_rows: list[dict[str, Any]],
+    main_rows: list[MainRowPayload],
+    extra_rows: list[ExtraRowPayload],
     fixplan_rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Backward-compatible alias (US spelling) for :func:`build_content_optimisation_hub_rows`."""

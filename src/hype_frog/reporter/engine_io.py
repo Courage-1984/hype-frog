@@ -7,6 +7,7 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 import pandas as pd
 
 from hype_frog.checkpoint.cache import AuditCache
+from hype_frog.models import ExtraRowPayload, MainRowPayload
 from hype_frog.utils import normalize_url_key
 
 _ILLEGAL_XLSX_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
@@ -45,14 +46,27 @@ def build_core_dataframes(
     return pd.DataFrame(main_rows), pd.DataFrame(extra_rows), main_rows, extra_rows
 
 
+def _row_to_mapping(
+    row: dict[str, Any] | MainRowPayload | ExtraRowPayload,
+) -> dict[str, Any]:
+    if isinstance(row, (MainRowPayload, ExtraRowPayload)):
+        return row.values
+    return row
+
+
 def write_dict_rows_sheet(
-    writer: Any, sheet_name: str, columns: list[str], rows: list[dict[str, Any]]
+    writer: Any,
+    sheet_name: str,
+    columns: list[str],
+    rows: list[dict[str, Any] | MainRowPayload | ExtraRowPayload],
 ) -> None:
+    """Write row payloads to sheet; conversion occurs right before write."""
     ws = writer.book.create_sheet(title=_safe_sheet_name(sheet_name))
     writer.sheets[sheet_name] = ws
     ws.append(columns)
     for row in rows:
-        ws.append([_sanitize_excel_value(row.get(col)) for col in columns])
+        row_mapping = _row_to_mapping(row)
+        ws.append([_sanitize_excel_value(row_mapping.get(col)) for col in columns])
 
 
 def _sanitize_excel_url(url_value: Any) -> str:

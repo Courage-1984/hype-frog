@@ -27,6 +27,7 @@ from hype_frog.crawler.data_assembler import (
     init_rows,
 )
 from hype_frog.crawler.network_engine import fetch_http, fetch_rendered
+from hype_frog.models import CrawlRowPayload
 from hype_frog.utils import normalize_url_key, status_class
 
 logger = get_logger(__name__)
@@ -70,11 +71,13 @@ async def fetch_and_parse(
     crawl_mode: str = "fast",
     render_wait_ms: int = 4000,
     selector_wait_ms: int = 3000,
-) -> dict[str, dict[str, Any]]:
+) -> CrawlRowPayload:
     del full_suite
     async with semaphore:
         start_time = time.time()
         main_data, extra = init_rows(url, sitemap_meta)
+        main_values = main_data.values
+        extra_values = extra.values
         timeout = aiohttp.ClientTimeout(
             total=TIMEOUT_SECONDS,
             connect=CONNECT_TIMEOUT_SECONDS,
@@ -98,43 +101,43 @@ async def fetch_and_parse(
         redirect_targets = result["redirect_hops"]
         html = result["html"]
 
-        main_data["Load Time (s)"] = round(time.time() - start_time, 3)
-        main_data["Status Code"] = status_code
-        extra["Status Code"] = status_code
+        main_values["Load Time (s)"] = round(time.time() - start_time, 3)
+        main_values["Status Code"] = status_code
+        extra_values["Status Code"] = status_code
         if final_url:
-            extra["Final URL"] = normalize_url_key(final_url)
-            extra["Protocol"] = urlparse(final_url).scheme
+            extra_values["Final URL"] = normalize_url_key(final_url)
+            extra_values["Protocol"] = urlparse(final_url).scheme
             parsed_final = urlparse(final_url)
             domain_key = f"{parsed_final.scheme}://{parsed_final.netloc}"
         else:
             domain_key = ""
-        extra["Redirect Chain Length"] = len(redirect_targets)
-        extra["Status Class"] = status_class(status_code)
-        extra["TTFB (ms)"] = result["ttfb_ms"]
-        extra["Total Request Time (ms)"] = result["total_request_ms"]
-        extra["Content-Type"] = response_headers.get("Content-Type")
-        extra["Cache-Control"] = response_headers.get("Cache-Control")
-        extra["ETag"] = response_headers.get("ETag")
-        extra["X-Robots-Tag"] = response_headers.get("X-Robots-Tag")
-        extra["Strict-Transport-Security"] = response_headers.get(
+        extra_values["Redirect Chain Length"] = len(redirect_targets)
+        extra_values["Status Class"] = status_class(status_code)
+        extra_values["TTFB (ms)"] = result["ttfb_ms"]
+        extra_values["Total Request Time (ms)"] = result["total_request_ms"]
+        extra_values["Content-Type"] = response_headers.get("Content-Type")
+        extra_values["Cache-Control"] = response_headers.get("Cache-Control")
+        extra_values["ETag"] = response_headers.get("ETag")
+        extra_values["X-Robots-Tag"] = response_headers.get("X-Robots-Tag")
+        extra_values["Strict-Transport-Security"] = response_headers.get(
             "Strict-Transport-Security"
         )
-        extra["Content-Security-Policy"] = response_headers.get("Content-Security-Policy")
-        extra["X-Content-Type-Options"] = response_headers.get("X-Content-Type-Options")
-        extra["X-Frame-Options"] = response_headers.get("X-Frame-Options")
-        extra["Referrer-Policy"] = response_headers.get("Referrer-Policy")
-        extra["Permissions-Policy"] = response_headers.get("Permissions-Policy")
+        extra_values["Content-Security-Policy"] = response_headers.get("Content-Security-Policy")
+        extra_values["X-Content-Type-Options"] = response_headers.get("X-Content-Type-Options")
+        extra_values["X-Frame-Options"] = response_headers.get("X-Frame-Options")
+        extra_values["Referrer-Policy"] = response_headers.get("Referrer-Policy")
+        extra_values["Permissions-Policy"] = response_headers.get("Permissions-Policy")
         content_encoding = (response_headers.get("Content-Encoding") or "").lower()
-        extra["Compression Enabled"] = any(
+        extra_values["Compression Enabled"] = any(
             token in content_encoding for token in ("gzip", "br", "deflate")
         )
         if redirect_targets:
             final_target = final_url or url
-            extra["Redirect Hops"] = " -> ".join(redirect_targets + [final_target])
-            extra["Redirect Target"] = final_target
+            extra_values["Redirect Hops"] = " -> ".join(redirect_targets + [final_target])
+            extra_values["Redirect Target"] = final_target
             first_scheme = urlparse(redirect_targets[0]).scheme.lower()
             final_scheme = urlparse(final_target).scheme.lower()
-            extra["HTTP->HTTPS Redirect"] = (
+            extra_values["HTTP->HTTPS Redirect"] = (
                 first_scheme == "http" and final_scheme == "https"
             )
 
@@ -146,10 +149,10 @@ async def fetch_and_parse(
                     robots_cache=robots_cache,
                     domain_key=domain_key,
                 )
-            extra["llms.txt Present"] = robots_cache.get(domain_key, {}).get(
+            extra_values["llms.txt Present"] = robots_cache.get(domain_key, {}).get(
                 "llms_present"
             )
-            extra["AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)"] = (
+            extra_values["AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)"] = (
                 robots_cache.get(domain_key, {}).get("ai_allowed")
             )
 
@@ -175,39 +178,39 @@ async def fetch_and_parse(
                     }
                 else:
                     extraction_state_hint = "partial"
-            main_data["Extraction Source"] = extraction_source
-            extra["Extraction Source"] = extraction_source
+            main_values["Extraction Source"] = extraction_source
+            extra_values["Extraction Source"] = extraction_source
             if rendered_headers:
-                extra["Cache-Control"] = rendered_headers.get(
-                    "cache-control", extra["Cache-Control"]
+                extra_values["Cache-Control"] = rendered_headers.get(
+                    "cache-control", extra_values["Cache-Control"]
                 )
-                extra["ETag"] = rendered_headers.get("etag", extra["ETag"])
-                extra["X-Robots-Tag"] = rendered_headers.get(
-                    "x-robots-tag", extra["X-Robots-Tag"]
+                extra_values["ETag"] = rendered_headers.get("etag", extra_values["ETag"])
+                extra_values["X-Robots-Tag"] = rendered_headers.get(
+                    "x-robots-tag", extra_values["X-Robots-Tag"]
                 )
-                extra["Strict-Transport-Security"] = rendered_headers.get(
-                    "strict-transport-security", extra["Strict-Transport-Security"]
+                extra_values["Strict-Transport-Security"] = rendered_headers.get(
+                    "strict-transport-security", extra_values["Strict-Transport-Security"]
                 )
-                extra["Content-Security-Policy"] = rendered_headers.get(
-                    "content-security-policy", extra["Content-Security-Policy"]
+                extra_values["Content-Security-Policy"] = rendered_headers.get(
+                    "content-security-policy", extra_values["Content-Security-Policy"]
                 )
-                extra["X-Content-Type-Options"] = rendered_headers.get(
-                    "x-content-type-options", extra["X-Content-Type-Options"]
+                extra_values["X-Content-Type-Options"] = rendered_headers.get(
+                    "x-content-type-options", extra_values["X-Content-Type-Options"]
                 )
-                extra["X-Frame-Options"] = rendered_headers.get(
-                    "x-frame-options", extra["X-Frame-Options"]
+                extra_values["X-Frame-Options"] = rendered_headers.get(
+                    "x-frame-options", extra_values["X-Frame-Options"]
                 )
-                extra["Referrer-Policy"] = rendered_headers.get(
-                    "referrer-policy", extra["Referrer-Policy"]
+                extra_values["Referrer-Policy"] = rendered_headers.get(
+                    "referrer-policy", extra_values["Referrer-Policy"]
                 )
-                extra["Permissions-Policy"] = rendered_headers.get(
-                    "permissions-policy", extra["Permissions-Policy"]
+                extra_values["Permissions-Policy"] = rendered_headers.get(
+                    "permissions-policy", extra_values["Permissions-Policy"]
                 )
                 rendered_encoding = (
                     rendered_headers.get("content-encoding") or ""
                 ).lower()
                 if rendered_encoding:
-                    extra["Compression Enabled"] = any(
+                    extra_values["Compression Enabled"] = any(
                         token in rendered_encoding for token in ("gzip", "br", "deflate")
                     )
             assemble_from_html(
@@ -216,16 +219,16 @@ async def fetch_and_parse(
                 html=html,
                 resolved_url=resolved_url,
             )
-            main_data["Extraction State"] = extraction_state_hint
+            main_values["Extraction State"] = extraction_state_hint
         else:
-            main_data["Extraction State"] = "skipped"
+            main_values["Extraction State"] = "skipped"
 
-        if main_data["Load Time (s)"] is None:
-            main_data["Load Time (s)"] = round(time.time() - start_time, 3)
+        if main_values["Load Time (s)"] is None:
+            main_values["Load Time (s)"] = round(time.time() - start_time, 3)
         finalize_row_state(main_data, extra)
-        logger.info("[%s] Crawled: %s", main_data["Status Code"], url)
+        logger.info("[%s] Crawled: %s", main_values["Status Code"], url)
         delay_seconds = (
             request_delay if request_delay is not None else DELAY_BETWEEN_REQUESTS
         )
         await asyncio.sleep(delay_seconds + random.uniform(0, REQUEST_JITTER_SECONDS))
-        return {"main": main_data, "extra": extra}
+        return CrawlRowPayload(main=main_data, extra=extra)
