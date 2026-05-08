@@ -9,7 +9,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.formatting.rule import CellIsRule, ColorScaleRule, FormulaRule
 
-from hype_frog.reporter.excel_engine import apply_global_conditional_formatting
+from hype_frog.reporter.engine_formatting import apply_global_conditional_formatting
 from hype_frog.reporter.sheets.config import (
     CONTENT_OPTIMISATION_HUB_SHEET,
     DEBUG_EXCEL_ISOLATION_MODE,

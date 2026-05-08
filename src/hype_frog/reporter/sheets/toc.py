@@ -3,7 +3,7 @@ from __future__ import annotations
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.views import Selection
 
-from hype_frog.reporter.excel_engine import friendly_toc_description
+from hype_frog.reporter.engine_guardrails import friendly_toc_description
 from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 
 # Canonical left-to-right workbook tab order (move_sheet targets).
