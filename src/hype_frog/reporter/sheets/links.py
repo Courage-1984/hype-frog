@@ -7,8 +7,12 @@ from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
+from hype_frog.core.url_normalization import normalize_url
 from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
-from hype_frog.utils import normalize_url_key
+
+
+def normalize_url_key(url: object, keep_query: bool = True) -> str:
+    return normalize_url(url, keep_query=keep_query)
 
 
 def is_safe_hyperlink_target(

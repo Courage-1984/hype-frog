@@ -16,7 +16,7 @@ from hype_frog.reporter.sheets.links import (
     add_url_navigation_links as add_url_navigation_links_impl,
     apply_cross_sheet_links as apply_cross_sheet_links_impl,
 )
-from hype_frog.reporter.sheets.utils import header_index
+from hype_frog.reporter.sheets.style_helpers import header_index
 
 
 def add_back_to_dashboard_link(worksheet: Worksheet, sheet_name: str) -> None:

@@ -4,7 +4,7 @@ import json
 import os
 from datetime import datetime
 
-from hype_frog.models import CheckpointPayload, CrawlResult
+from hype_frog.core.models import CheckpointPayload, CrawlResult
 
 
 def load_checkpoint(checkpoint_file: str) -> tuple[list[CrawlResult], set[str]]:

@@ -7,7 +7,11 @@ from urllib.parse import urlparse
 import networkx as nx
 
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
-from hype_frog.utils import normalize_url_key
+from hype_frog.core.url_normalization import normalize_url
+
+
+def normalize_url_key(url: object, keep_query: bool = True) -> str:
+    return normalize_url(url, keep_query=keep_query)
 
 
 def _row_values(

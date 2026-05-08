@@ -5,7 +5,7 @@ import os
 import sqlite3
 from typing import Iterator
 
-from hype_frog.models import CrawlResult
+from hype_frog.core.models import CrawlResult
 
 
 class AuditCache:

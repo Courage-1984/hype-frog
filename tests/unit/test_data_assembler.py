@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from hype_frog.crawler.data_assembler import assemble_from_html, finalize_row_state, init_rows
-from hype_frog.models import ExtraRowPayload, MainRowPayload
+from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.pipeline.export import sanitize_rows
 
 

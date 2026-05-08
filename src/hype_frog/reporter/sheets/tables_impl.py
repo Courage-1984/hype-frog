@@ -67,7 +67,7 @@ from hype_frog.reporter.sheets.view_state import (
     sanitize_sheet_view_selection,
     set_freeze_panes_safe,
 )
-from hype_frog.reporter.sheets.utils import header_index
+from hype_frog.reporter.sheets.style_helpers import header_index
 
 _COPY_HUB_WIDE_HEADERS: frozenset[str] = frozenset(
     {

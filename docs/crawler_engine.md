@@ -31,4 +31,4 @@ Network configuration (`config.py`) supplies maximum attempts, base delay, max d
 
 ## URL identity
 
-Normalization helpers (`utils`, `core`) ensure deduplication, checkpoint resume, and join keys stay consistent across crawl, enrichment, and reporting.
+Normalization helpers in `src/hype_frog/core/url_normalization.py` ensure deduplication, checkpoint resume, and join keys stay consistent across crawl, enrichment, and reporting.
