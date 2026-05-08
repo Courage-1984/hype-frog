@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from hype_frog.models import ExtraRowPayload, MainRowPayload, SummaryMetricsPayload
+from hype_frog.core.models import ExtraRowPayload, MainRowPayload, SummaryMetricsPayload
 
 
 class FixPlanRowPayload(BaseModel):

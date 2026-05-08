@@ -5,7 +5,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 from urllib.parse import urlparse
 
-from hype_frog.models import (
+from hype_frog.core.models import (
     CrawlResultModel,
     ExtraRowPayload,
     MainRowPayload,

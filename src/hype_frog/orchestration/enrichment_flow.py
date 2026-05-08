@@ -14,7 +14,7 @@ from hype_frog.crawler import (
     fetch_psi_metrics_batch,
 )
 from hype_frog.orchestration.crawl_runner import CrawlExecutionResult
-from hype_frog.models import CrawlRowPayload, ExtraRowPayload, MainRowPayload
+from hype_frog.core.models import CrawlRowPayload, ExtraRowPayload, MainRowPayload
 from hype_frog.pipeline.assemble import (
     assemble_enriched_row,
     build_inlinks_map,

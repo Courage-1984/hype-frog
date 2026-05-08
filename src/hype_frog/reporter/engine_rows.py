@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from openpyxl.utils import get_column_letter
 
 from hype_frog.checkpoint.cache import AuditCache
-from hype_frog.models import ExtraRowPayload, MainRowPayload
+from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.reporter.engine_io import (
     _normalize_url_for_match,
     _safe_sheet_name,
