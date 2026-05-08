@@ -5,12 +5,12 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import coordinate_to_tuple
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from hype_frog.reporter.excel_engine import (
+from hype_frog.reporter.engine_formatting import (
     apply_fixplan_workflow_formatting,
-    apply_header_tooltips,
     ensure_auto_filter,
     ensure_freeze_header,
 )
+from hype_frog.reporter.engine_guardrails import apply_header_tooltips
 from hype_frog.reporter.sheets.toc import apply_workbook_toc_and_links
 from hype_frog.reporter.sheets.conditional import (
     apply_content_hub_conditional_rules,

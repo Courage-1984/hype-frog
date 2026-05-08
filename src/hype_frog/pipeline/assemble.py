@@ -5,9 +5,10 @@ from collections.abc import Callable, Mapping
 from typing import Any
 from urllib.parse import urlparse
 
-from hype_frog.models import harden_page_row_metrics
+from hype_frog.models import CrawlResultModel, harden_page_row_metrics
 from hype_frog.pipeline.content_cluster import compute_content_cluster_id
 from hype_frog.pipeline.enrich import value_or_default
+from hype_frog.pipeline.graph_engine import build_inlinks_map
 from hype_frog.rules import (
     get_summary_rules,
     owner_for_issue,
@@ -80,7 +81,7 @@ def assemble_enriched_row(
     url_norm = norm(main_data.get("URL"))
     found_via_sitemap = bool(url_norm and url_norm in sitemap_url_keys)
     found_via_crawl = bool(url_norm)
-    return {
+    merged_row = {
         **main_data,
         "SEO Health Score": extra_data.get("SEO Health Score"),
         "Severity Badge": extra_data.get("Severity Badge"),
@@ -118,6 +119,8 @@ def assemble_enriched_row(
         "Copy Score": round(copy_score, 2),
         "SEO Score": round(seo_score, 2),
     }
+    validated = CrawlResultModel.model_validate({"main": merged_row, "extra": extra_data})
+    return validated.main
 
 
 def row_with_psi_gsc_harden(
@@ -218,26 +221,6 @@ def row_with_canonical_and_internal_links(
         " | ".join(link_statuses) if link_statuses else None
     )
     return out
-
-
-def build_inlinks_map(
-    extra_rows: list[dict[str, object]],
-    normalize_url_key_fn: Callable[[object], str] | None = None,
-) -> defaultdict[str, set[str]]:
-    norm = normalize_url_key_fn or normalize_url_key
-    crawled_set = {
-        norm(row.get("Final URL") or row.get("URL") or "")
-        for row in extra_rows
-        if (row.get("Final URL") or row.get("URL"))
-    }
-    inlinks_map: defaultdict[str, set[str]] = defaultdict(set)
-    for row in extra_rows:
-        source = norm(row.get("Final URL") or row.get("URL") or "")
-        for target in row.get("Internal Links List", []):
-            t_norm = norm(target)
-            if t_norm in crawled_set and source:
-                inlinks_map[t_norm].add(source)
-    return inlinks_map
 
 
 def row_with_seo_health_enrichment(
@@ -342,7 +325,8 @@ def row_with_seo_health_enrichment(
         hints.append("Near-duplicate meta description cluster")
     if hints:
         base["Cannibalization Hint"] = " | ".join(hints)
-    return base
+    validated = CrawlResultModel.model_validate({"main": {}, "extra": base})
+    return validated.extra
 
 
 def enrich_extra_rows_with_composite_scores(
