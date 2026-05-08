@@ -48,28 +48,29 @@ See `pyproject.toml` for pinned dependency ranges.
 ## Requirements
 
 - **Python 3.12+**
-- Recommended: **[uv](https://docs.astral.sh/uv/)** or `pip` for installs.
+- Recommended: **[uv](https://docs.astral.sh/uv/)** for installs.
 
 ## Setup
 
 ```bash
 # From repository root
 uv sync
-# or: pip install -e .
 ```
 
-For **accurate** (rendered) crawl mode you typically need:
+For **accurate** (rendered) crawl mode install the optional extra and browser binaries:
 
 ```bash
-pip install playwright
+uv sync --extra render
 playwright install chromium
 ```
 
-(Exact commands may match your environment manager.)
+(After `uv sync --extra render`, run `playwright install chromium` once per machine so the browser binaries are present.)
 
 ## Configuration
 
-- Copy or create a `.env` file for environment variables used at runtime (output paths, optional API credentials for auxiliary metrics, etc.). Do not commit secrets.
+- Copy `.env.example` to `.env` for runtime variables (see the example file for **PSI** and **GSC** setup notes). Do not commit secrets.
+- **PSI:** set `PSI_API_KEY` in `.env` when you want PageSpeed Insights lab data. The key must belong to a Google Cloud project with the PageSpeed Insights API enabled.
+- **GSC:** the app uses the **OAuth desktop** flow via `client_secrets.json` and `token.json` beside the `hype_frog` package (see `.env.example`). The signed-in user needs Search Console access to a property that matches the crawl target; the code requests read-only scope `https://www.googleapis.com/auth/webmasters.readonly`.
 - Interactive runs prompt for crawl profile, suite mode, checkpoint interval, and optional previous workbook path.
 
 ## Running
@@ -85,12 +86,24 @@ uv run python -m hype_frog.main
 
 Follow CLI prompts for target URL or sitemap, limits, and profiles.
 
-**`ModuleNotFoundError: No module named 'hype_frog'`** means the editable project is not installed in the active venv. Run **`uv sync`** from the repo root (not only `uv venv` / manual `pip install` of dependencies). Then retry `uv run …`.
+### Non-interactive quick test (10 URLs)
+
+Smoke-test the full pipeline (sitemap cap, faster profile, full workbook suite, PSI disabled, no checkpoint prompts) without typing at the console:
+
+```bash
+uv sync --extra render   # optional: real Playwright rendering for accurate mode
+playwright install chromium
+uv run python -m hype_frog.main --quick-test
+```
+
+If Playwright is not installed, accurate mode falls back to fast HTTP with a warning; the run still completes. The preset uses the African Marketing Confederation page sitemap (10 URLs), crawl mode **accurate**, safety profile **faster** (4 workers, 1.5s delay), and **full** SEO suite output under `reports/latest/` unless `HF_OUTPUT_FILENAME` overrides it.
+
+**`ModuleNotFoundError: No module named 'hype_frog'`** means the editable project is not installed in the active venv. Run **`uv sync`** from the repo root (not only `uv venv` without syncing the project). Then retry `uv run …`.
 
 ## Tests
 
 ```bash
-python -m pytest tests test_excel_engine.py -q
+uv run pytest
 ```
 
 Re-run the suite after substantive changes to crawl, pipeline, or reporting code.
@@ -106,7 +119,7 @@ Detailed breakdown lives under **`./docs/`** (modular markdown only):
 
 ## Governance
 
-Cursor rules live in **`.cursor/rules/`** as `.mdc` modules (`architecture`, `crawler_engine`, `excel_reporters`, `auto_documentation`, `vibe_coding_guardrails`, plus legacy `*_agent` stubs that point to the expanded files).
+Cursor rules live in **`.cursor/rules/`** as scoped `.mdc` modules (`crawler_agent.mdc`, `excel_agent.mdc`). The root **`.cursorrules`** file summarizes stack and safety expectations; deeper reporting and crawler invariants are documented under **`./docs/`** and should stay consistent with those rules.
 
 ## Policy notes
 
