@@ -9,7 +9,6 @@ from datetime import datetime
 from urllib.parse import urlparse
 
 import pandas as pd
-from dotenv import load_dotenv
 
 from hype_frog.checkpoint import AuditCache, load_checkpoint, save_checkpoint
 from hype_frog.config import (
@@ -20,7 +19,7 @@ from hype_frog.config import (
     TIMEOUT_SECONDS,
     DELAY_BETWEEN_REQUESTS,
 )
-from hype_frog.core import configure_logging, get_logger, get_user_config
+from hype_frog.core import get_logger
 from hype_frog.core.run_config import RunConfig
 from hype_frog.crawler import (
     check_url_status_light_limited,
@@ -31,6 +30,7 @@ from hype_frog.crawler import (
     parse_sitemap,
 )
 from hype_frog.models import CrawlResult
+from hype_frog.orchestration.run_setup import resolve_run_setup
 from hype_frog.pipeline.enrich import (
     compute_internal_link_intelligence as _compute_internal_link_intelligence_pipeline,
 )
@@ -141,40 +141,20 @@ def _sync_main_rows_seo_fields_from_extra(
 
 
 async def main(run: RunConfig | None = None) -> None:
-    configure_logging()
-    load_dotenv()
-    logger.info("=== Python Technical SEO Auditor ===")
-    if run is not None:
-        target_input = run.target_input
-        max_urls = run.max_urls
-        max_psi_urls = run.max_psi_urls
-        high_value_slugs = list(run.high_value_slugs)
-        crawl_mode = run.crawl_mode
-        render_wait_ms = run.render_wait_ms
-        selector_wait_ms = run.selector_wait_ms
-        workers_preset = run.workers
-        request_delay_preset = run.request_delay
-        full_suite_preset = run.full_suite
-        previous_audit_path_preset = run.previous_audit_path
-        checkpoint_every_preset = run.checkpoint_every
-        resume_checkpoint_mode = run.resume_checkpoint
-        logger.info("Non-interactive run preset active (e.g. --quick-test).")
-    else:
-        (
-            target_input,
-            max_urls,
-            max_psi_urls,
-            high_value_slugs,
-            crawl_mode,
-            render_wait_ms,
-            selector_wait_ms,
-        ) = get_user_config()
-        workers_preset = None
-        request_delay_preset = None
-        full_suite_preset = None
-        previous_audit_path_preset = None
-        checkpoint_every_preset = None
-        resume_checkpoint_mode = "prompt"
+    setup = resolve_run_setup(run)
+    target_input = setup.target_input
+    max_urls = setup.max_urls
+    max_psi_urls = setup.max_psi_urls
+    high_value_slugs = setup.high_value_slugs
+    crawl_mode = setup.crawl_mode
+    render_wait_ms = setup.render_wait_ms
+    selector_wait_ms = setup.selector_wait_ms
+    workers_preset = setup.workers_preset
+    request_delay_preset = setup.request_delay_preset
+    full_suite_preset = setup.full_suite_preset
+    previous_audit_path_preset = setup.previous_audit_path_preset
+    checkpoint_every_preset = setup.checkpoint_every_preset
+    resume_checkpoint_mode = setup.resume_checkpoint_mode
     urls: list[str] = []
     sitemap_meta: dict[str, dict[str, str | None]] = {}
     workers = MAX_WORKERS

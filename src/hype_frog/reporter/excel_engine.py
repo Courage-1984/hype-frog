@@ -509,20 +509,6 @@ def _fallback_keyword(url: str, h1_text: str) -> str:
     return ""
 
 
-def compute_content_cluster_id(
-    url: Any, *, title: str = "", h1_or_structure: str = ""
-) -> str:
-    """Derive a stable topical cluster label for Technical inventory and grouping."""
-    raw_title = str(title or "").strip().lower()
-    if not raw_title:
-        raw_title = _fallback_keyword(
-            str(url or ""), str(h1_or_structure or "")
-        ).lower()
-    title_pattern = re.sub(r"\d+", "{n}", raw_title)[:24] if raw_title else "untitled"
-    seg = [s for s in urlparse(str(url or "")).path.strip("/").split("/") if s]
-    return f"{(seg[0] if seg else 'home')}-{title_pattern}".replace(" ", "-")
-
-
 def write_cached_sheet_chunked(
     writer: Any,
     cache: AuditCache,
@@ -1187,7 +1173,6 @@ __all__ = [
     "write_snippet_candidates_chunked",
     "build_content_optimisation_hub_rows",
     "build_content_optimization_hub_rows",
-    "compute_content_cluster_id",
     "apply_action_required_guardrails",
     "apply_freeze_c2_data_sheets",
     "apply_workbook_export_guardrails",

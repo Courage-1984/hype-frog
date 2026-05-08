@@ -6,8 +6,8 @@ from typing import Any
 from urllib.parse import urlparse
 
 from hype_frog.models import harden_page_row_metrics
+from hype_frog.pipeline.content_cluster import compute_content_cluster_id
 from hype_frog.pipeline.enrich import value_or_default
-from hype_frog.reporter.excel_engine import compute_content_cluster_id
 from hype_frog.rules import (
     get_summary_rules,
     owner_for_issue,

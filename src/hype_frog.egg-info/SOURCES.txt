@@ -18,6 +18,7 @@ src/hype_frog/checkpoint/store.py
 src/hype_frog/core/__init__.py
 src/hype_frog/core/cli.py
 src/hype_frog/core/logger.py
+src/hype_frog/core/run_config.py
 src/hype_frog/core/url_normalization.py
 src/hype_frog/crawler/__init__.py
 src/hype_frog/crawler/client.py
@@ -31,14 +32,19 @@ src/hype_frog/extractors/__init__.py
 src/hype_frog/extractors/page.py
 src/hype_frog/extractors/robots.py
 src/hype_frog/extractors/schema.py
+src/hype_frog/orchestration/__init__.py
+src/hype_frog/orchestration/run_setup.py
 src/hype_frog/pipeline/__init__.py
+src/hype_frog/pipeline/action_required.py
 src/hype_frog/pipeline/assemble.py
+src/hype_frog/pipeline/content_cluster.py
 src/hype_frog/pipeline/context.py
 src/hype_frog/pipeline/enrich.py
 src/hype_frog/pipeline/export.py
 src/hype_frog/pipeline/score.py
 src/hype_frog/reporter/__init__.py
 src/hype_frog/reporter/excel_engine.py
+src/hype_frog/reporter/summary_builder.py
 src/hype_frog/reporter/sheets/__init__.py
 src/hype_frog/reporter/sheets/coh.py
 src/hype_frog/reporter/sheets/conditional.py
@@ -63,3 +69,4 @@ src/hype_frog/rules/registry.py
 src/hype_frog/rules/scoring.py
 tests/test_excel_engine.py
 tests/test_extractors.py
+tests/test_scoring.py
