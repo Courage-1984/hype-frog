@@ -1,0 +1,13 @@
+---
+description: Guardrails for openpyxl reporting, sanitization, and UX logic.
+globs: "src/hype_frog/reporter/**/*.py"
+alwaysApply: true
+---
+
+# Excel Reporting Standards
+
+## Workbook Integrity & UX
+- **Data Mutability:** Do not overwrite or mutate pipeline data (`main_data`) inside the reporter layer. Treat dictionaries as read-only.
+- **Sanitization:** All string cell values MUST be sanitized to prevent CSV/Excel injection (strip leading `=`, `+`, `-`, `@`).
+- **Formatting:** Ensure Ghost Pane guards are active to freeze top rows. The Table of Contents (TOC) naming must exactly match the tab names.
+- **Conditional Logic:** The 'Action Required' column in the Content Hub must strictly trigger "Needs Copy" red conditional formatting when populated. Do not pass `None` to action columns.

@@ -1,0 +1,32 @@
+Extended governance lives in `.cursor/rules/` as scoped `.mdc` modules (`crawler_agent.mdc`, `excel_agent.mdc`). Long-form invariants and architecture narrative live under `./docs/` (for example `docs/crawler_engine.md`, `docs/excel_reporting_standards.md`, `docs/architecture_overview.md`).
+
+Tech stack: Python 3.12+ with aiohttp, optional `playwright.async_api`, openpyxl, pandas.
+
+Package and environment management (strict): Use uv as the sole package and environment manager. Never suggest or execute pip install, pip freeze, or python -m venv. All dependency additions must use uv add, environment syncs must use uv sync, and script executions must use uv run. Treat the uv.lock file as the absolute source of truth for dependencies.
+
+Code style:
+- All new or modified function signatures must use explicit Python type hints from typing.
+- Keep formatting Black/Ruff compatible.
+- Prefer small, testable functions and clear separation of concerns.
+
+UK English (copy, logs, workbook strings):
+- Prefer British spelling in user-facing text and log messages (for example ``Optimisation``, ``Authoritative``, ``Sitemap`` as a common noun where appropriate).
+- Keep the canonical Content Hub sheet title aligned with ``CONTENT_OPTIMISATION_HUB_SHEET`` in ``src/hype_frog/reporter/sheets/config.py``.
+
+Locale and copy (UK English):
+- User-facing strings, workbook tab labels, tooltips, glossary text, and log messages must use **British English** spelling and vocabulary (for example *optimisation*, *authoritative*, *sitemaps*, *colour* where appropriate). Prefer *-ise* over US *-ize* unless the term is a proper name, vendor string, or industry-standard acronym that is conventionally fixed.
+
+Resilience and runtime safety:
+- Network operations must use retries with exponential backoff before marking a crawl/extraction failed.
+- Fail fast only after bounded retry attempts; then set extraction state to "skipped" or "partial" with explicit reason.
+- Avoid blocking calls in async paths. Do not use sync Playwright APIs in crawler runtime code.
+
+Architecture constraints:
+- Preserve modular boundaries: crawler/extractors/rules/reporters/pipeline.
+- Do not delete core logic or perform massive rewrites without explicit human approval.
+- Keep Excel output stable and client-safe: sanitize strings before writing workbook data.
+
+Vibe coding safety protocols:
+- Implementation Thoughts: before writing code, provide a one-sentence "Vibe Check" explaining how the change fits the existing architecture.
+- Data Integrity: do not rename/remove existing dictionary keys in `main_data` or pipeline objects. New fields must be additive only.
+- Atomic Changes: prefer small incremental updates; if a task requires changing more than 3 files, request explicit confirmation before proceeding.

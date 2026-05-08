@@ -1,0 +1,23 @@
+---
+description: Use this when modifying fetchers, extractors, or the crawler engine.
+globs: "{src/hype_frog/crawler,src/hype_frog/extractors,src/hype_frog/pipeline,src/hype_frog/core}/**/*.py"
+alwaysApply: false
+---
+
+Canonical expanded narrative: [`docs/crawler_engine.md`](../../docs/crawler_engine.md) (keep rules and docs aligned when editing fetch/extract/pipeline code).
+
+# Crawler Engine Rules
+
+- Use `playwright.async_api` only; do not introduce blocking sync Playwright usage.
+- Preserve dual crawl mode behavior:
+  - Fast mode (`aiohttp` HTTP parsing)
+  - Accurate mode (rendered browser fetch with graceful fallback)
+- Maintain extraction data contract:
+  - `Extraction State`: `complete | partial | skipped`
+  - `Extraction Source`: `raw_http | rendered_browser`
+- Keep bounded concurrency controls active:
+  - `aiohttp.TCPConnector(limit, limit_per_host, keepalive_timeout)`
+  - Playwright session semaphore cap
+- Keep retry/backoff semantics for network requests and avoid unbounded retries.
+- Preserve URL normalization consistency for all joins/lookups/formulas.
+- Skill: whenever a new extractor field is introduced, explicitly map it into the Extraction State contract and ensure it is tracked as `complete`, `partial`, or `skipped`.
