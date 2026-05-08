@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 import networkx as nx
 
-from hype_frog.models import ExtraRowPayload, MainRowPayload
+from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.utils import normalize_url_key
 
 

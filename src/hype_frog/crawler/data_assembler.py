@@ -6,7 +6,7 @@ from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
-from hype_frog.models import ExtraRowPayload, MainRowPayload
+from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.extractors import (
     extract_aeo_snippets,
     parse_html_signals,

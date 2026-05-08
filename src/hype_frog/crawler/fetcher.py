@@ -27,7 +27,7 @@ from hype_frog.crawler.data_assembler import (
     init_rows,
 )
 from hype_frog.crawler.network_engine import fetch_http, fetch_rendered
-from hype_frog.models import CrawlRowPayload
+from hype_frog.core.models import CrawlRowPayload
 from hype_frog.utils import normalize_url_key, status_class
 
 logger = get_logger(__name__)
