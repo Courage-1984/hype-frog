@@ -6,6 +6,7 @@ from collections import defaultdict
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from hype_frog.models import ExtraRowPayload, MainRowPayload
 from hype_frog.rules import owner_for_issue, stable_issue_id
 
 
@@ -18,9 +19,10 @@ def safe_rule(rule_fn: Callable[..., Any], row: Mapping[str, Any]) -> bool:
 
 def build_summary_rows(
     summary_rules: list[tuple[str, str, Any]],
-    extra_rows: list[dict[str, object]],
+    extra_rows: list[ExtraRowPayload],
     template_issue_counts: defaultdict[str, defaultdict[str, int]],
     value_or_default: Callable[[object, float], float],
+    main_rows: list[MainRowPayload] | None = None,
 ) -> list[dict[str, object]]:
     """Build rows for the Summary sheet (issue counts, AEO block, top URLs, templates)."""
     aeo_issue_names = {
@@ -40,9 +42,12 @@ def build_summary_rows(
             "Affected URLs (sample)": None,
         }
     )
+    del main_rows
     for severity, issue_name, rule_fn in summary_rules:
         affected_urls = [
-            row.get("URL") for row in extra_rows if safe_rule(rule_fn, row)
+            row.values.get("URL")
+            for row in extra_rows
+            if safe_rule(rule_fn, row.values)
         ]
         summary_rows.append(
             {
@@ -76,7 +81,9 @@ def build_summary_rows(
         if issue_name not in aeo_issue_names:
             continue
         affected_urls = [
-            row.get("URL") for row in extra_rows if safe_rule(rule_fn, row)
+            row.values.get("URL")
+            for row in extra_rows
+            if safe_rule(rule_fn, row.values)
         ]
         summary_rows.append(
             {
@@ -112,22 +119,23 @@ def build_summary_rows(
         [
             r
             for r in extra_rows
-            if value_or_default(r.get("Critical Issues Count"), 0.0) > 0
+            if value_or_default(r.values.get("Critical Issues Count"), 0.0) > 0
         ],
         key=lambda r: (
-            -value_or_default(r.get("Critical Issues Count"), 0.0),
-            value_or_default(r.get("SEO Health Score"), 100.0),
+            -value_or_default(r.values.get("Critical Issues Count"), 0.0),
+            value_or_default(r.values.get("SEO Health Score"), 100.0),
         ),
     )[:10]
     for idx, row in enumerate(critical_urls, start=1):
+        row_values = row.values
         summary_rows.append(
             {
                 "Section": "Top 10 Critical URLs",
                 "Severity": "Critical",
-                "Issue": f"#{idx} {row.get('URL')}",
-                "Affected URL Count": row.get("Critical Issues Count"),
+                "Issue": f"#{idx} {row_values.get('URL')}",
+                "Affected URL Count": row_values.get("Critical Issues Count"),
                 "Reference Tab": "Priority URLs",
-                "Affected URLs (sample)": row.get("Matched Issues"),
+                "Affected URLs (sample)": row_values.get("Matched Issues"),
             }
         )
     summary_rows.append(
@@ -164,15 +172,18 @@ def build_summary_rows(
 
 def build_issue_inventory_rows(
     summary_rules: list[tuple[str, str, Any]],
-    extra_rows: list[dict[str, object]],
+    extra_rows: list[ExtraRowPayload],
+    main_rows: list[MainRowPayload] | None = None,
 ) -> list[dict[str, object]]:
     """Flatten matched issues per URL for the IssueInventory sheet."""
+    del main_rows
     critical_names = {i[1] for i in summary_rules if i[0] == "Critical"}
     warning_names = {i[1] for i in summary_rules if i[0] == "Warning"}
     rows: list[dict[str, object]] = []
     for row in extra_rows:
-        url = row.get("URL")
-        for issue in str(row.get("Matched Issues") or "").split(" | "):
+        row_values = row.values
+        url = row_values.get("URL")
+        for issue in str(row_values.get("Matched Issues") or "").split(" | "):
             if not issue:
                 continue
             issue_severity = (

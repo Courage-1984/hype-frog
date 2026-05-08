@@ -14,6 +14,7 @@ from hype_frog.crawler import (
     fetch_psi_metrics_batch,
 )
 from hype_frog.orchestration.crawl_runner import CrawlExecutionResult
+from hype_frog.models import CrawlRowPayload, ExtraRowPayload, MainRowPayload
 from hype_frog.pipeline.assemble import (
     assemble_enriched_row,
     build_inlinks_map,
@@ -35,58 +36,72 @@ logger = get_logger(__name__)
 
 @dataclass(frozen=True)
 class EnrichmentResult:
-    main_rows: list[dict[str, object]]
-    extra_rows: list[dict[str, object]]
+    typed_main_rows: list[MainRowPayload]
+    typed_extra_rows: list[ExtraRowPayload]
     status_by_url: dict[str, object]
     sitemap_url_keys: set[str]
 
+    @property
+    def main_rows(self) -> list[dict[str, object]]:
+        return [dict(row.values) for row in self.typed_main_rows]
 
-def _apply_seo_health_export_defaults(extra_rows: list[dict[str, object]]) -> None:
+    @property
+    def extra_rows(self) -> list[dict[str, object]]:
+        return [dict(row.values) for row in self.typed_extra_rows]
+
+
+def _apply_seo_health_export_defaults(extra_rows: list[ExtraRowPayload]) -> None:
     for row in extra_rows:
-        badge = str(row.get("Severity Badge") or "").strip()
-        raw = row.get("SEO Health Score")
+        row_values = row.values
+        badge = str(row_values.get("Severity Badge") or "").strip()
+        raw = row_values.get("SEO Health Score")
         if isinstance(raw, float) and math.isnan(raw):
             raw = None
         if badge == "Unmeasured" or raw is None or str(raw).strip() == "":
-            row["SEO Health Score"] = 0.0
+            row_values["SEO Health Score"] = 0.0
         else:
             try:
-                row["SEO Health Score"] = float(raw)
+                row_values["SEO Health Score"] = float(raw)
             except (TypeError, ValueError):
-                row["SEO Health Score"] = 0.0
-        raw_seo = row.get("SEO Score")
+                row_values["SEO Health Score"] = 0.0
+        raw_seo = row_values.get("SEO Score")
         if isinstance(raw_seo, float) and math.isnan(raw_seo):
             raw_seo = None
         if raw_seo is None or str(raw_seo).strip() == "":
-            row["SEO Score"] = 0.0
+            row_values["SEO Score"] = 0.0
         else:
             try:
-                row["SEO Score"] = float(raw_seo)
+                row_values["SEO Score"] = float(raw_seo)
             except (TypeError, ValueError):
-                row["SEO Score"] = 0.0
+                row_values["SEO Score"] = 0.0
 
 
 def _sync_main_rows_seo_fields_from_extra(
-    main_rows: list[dict[str, object]],
-    extra_rows: list[dict[str, object]],
+    main_rows: list[MainRowPayload],
+    extra_rows: list[ExtraRowPayload],
 ) -> None:
     extra_by_url = {
-        str(row.get("URL") or "").strip(): row for row in extra_rows if row.get("URL")
+        str(row.values.get("URL") or "").strip(): row
+        for row in extra_rows
+        if row.values.get("URL")
     }
     for row in main_rows:
-        url = str(row.get("URL") or "").strip()
+        row_values = row.values
+        url = str(row_values.get("URL") or "").strip()
         extra = extra_by_url.get(url)
         if not extra:
             continue
-        row["SEO Health Score"] = extra.get("SEO Health Score")
-        row["SEO Score"] = extra.get("SEO Score")
-        row["Severity Badge"] = extra.get("Severity Badge")
-        row["Action Needed"] = extra.get("Action Needed")
+        extra_values = extra.values
+        row_values["SEO Health Score"] = extra_values.get("SEO Health Score")
+        row_values["SEO Score"] = extra_values.get("SEO Score")
+        row_values["Severity Badge"] = extra_values.get("Severity Badge")
+        row_values["Action Needed"] = extra_values.get("Action Needed")
 
 
 async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult:
-    main_rows = list(crawl_result.main_rows)
-    extra_rows = list(crawl_result.extra_rows)
+    crawl_rows: list[CrawlRowPayload] = list(crawl_result.crawl_rows)
+    main_rows = [row.main for row in crawl_rows]
+    extra_rows = [row.extra for row in crawl_rows]
     sitemap_url_keys = {normalize_url_key(url) for url in crawl_result.sitemap_meta.keys()}
     async with create_session() as session:
         try:
@@ -112,7 +127,11 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
         else:
             psi_map = await fetch_psi_metrics_batch(
                 session,
-                [str(row.get("URL") or "") for row in extra_rows if row.get("URL")],
+                [
+                    str(row.values.get("URL") or "")
+                    for row in extra_rows
+                    if row.values.get("URL")
+                ],
                 max_urls=crawl_result.max_psi_urls,
             )
             if crawl_result.max_psi_urls is not None:
@@ -121,12 +140,13 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                     crawl_result.max_psi_urls,
                 )
 
-        extra_work: list[dict[str, object]] = []
+        extra_work: list[ExtraRowPayload] = []
         for row in extra_rows:
-            url_key = str(row.get("Final URL") or row.get("URL") or "").strip()
+            row_values = row.values
+            url_key = str(row_values.get("Final URL") or row_values.get("URL") or "").strip()
             extra_work.append(
                 row_with_psi_gsc_harden(
-                    dict(row),
+                    row,
                     url_key=url_key,
                     normalized_key=normalize_url_key(url_key),
                     psi_map=psi_map,
@@ -136,14 +156,15 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
 
         status_by_url: dict[str, object] = {}
         for row in extra_work:
-            if row.get("Final URL"):
-                status_by_url[normalize_url_key(row["Final URL"])] = row.get("Status Code")
-            if row.get("URL"):
-                status_by_url[normalize_url_key(row["URL"])] = row.get("Status Code")
+            row_values = row.values
+            if row_values.get("Final URL"):
+                status_by_url[normalize_url_key(row_values["Final URL"])] = row_values.get("Status Code")
+            if row_values.get("URL"):
+                status_by_url[normalize_url_key(row_values["URL"])] = row_values.get("Status Code")
 
         unresolved_targets = set()
         for row in extra_work:
-            for target in row.get("Internal Links List Full", []):
+            for target in row.values.get("Internal Links List Full", []):
                 if normalize_url_key(target) not in status_by_url:
                     unresolved_targets.add(target)
         if unresolved_targets:
@@ -162,9 +183,9 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                 status_by_url[normalize_url_key(target)] = status
 
     crawled_finals = {
-        normalize_url_key(row.get("Final URL"))
+        normalize_url_key(row.values.get("Final URL"))
         for row in extra_work
-        if row.get("Final URL")
+        if row.values.get("Final URL")
     }
     extra_work = [
         row_with_canonical_and_internal_links(
@@ -175,7 +196,9 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
         for row in extra_work
     ]
 
-    graph_metrics = compute_internal_link_intelligence(extra_work, crawl_result.source_label)
+    graph_metrics = compute_internal_link_intelligence(
+        extra_work, crawl_result.source_label
+    )
     title_map, meta_map, segment_by_url = build_title_meta_segment_maps(main_rows)
     summary_rules = get_summary_rules()
     main_by_url_pre = main_by_url_map(main_rows)
@@ -199,15 +222,18 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
     )
     _apply_seo_health_export_defaults(enriched_extra_rows)
 
-    extra_by_url = {
-        str(row.get("URL") or "").strip(): row
+    extra_by_url: dict[str, ExtraRowPayload] = {
+        str(row.values.get("URL") or "").strip(): row
         for row in enriched_extra_rows
-        if row.get("URL")
+        if row.values.get("URL")
     }
     enriched_main_rows = [
         assemble_enriched_row(
-            dict(row),
-            extra_by_url.get(str(row.get("URL") or "").strip(), {}),
+            row,
+            extra_by_url.get(
+                str(row.values.get("URL") or "").strip(),
+                ExtraRowPayload.model_validate({}),
+            ),
             sitemap_url_keys=sitemap_url_keys,
         )
         for row in main_rows
@@ -215,8 +241,8 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
     _sync_main_rows_seo_fields_from_extra(enriched_main_rows, enriched_extra_rows)
 
     return EnrichmentResult(
-        main_rows=enriched_main_rows,
-        extra_rows=enriched_extra_rows,
+        typed_main_rows=enriched_main_rows,
+        typed_extra_rows=enriched_extra_rows,
         status_by_url=status_by_url,
         sitemap_url_keys=sitemap_url_keys,
     )

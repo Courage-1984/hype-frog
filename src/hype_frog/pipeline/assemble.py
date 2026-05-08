@@ -5,7 +5,12 @@ from collections.abc import Callable, Mapping
 from typing import Any
 from urllib.parse import urlparse
 
-from hype_frog.models import CrawlResultModel, harden_page_row_metrics
+from hype_frog.models import (
+    CrawlResultModel,
+    ExtraRowPayload,
+    MainRowPayload,
+    harden_page_row_metrics,
+)
 from hype_frog.pipeline.content_cluster import compute_content_cluster_id
 from hype_frog.pipeline.enrich import value_or_default
 from hype_frog.pipeline.graph_engine import build_inlinks_map
@@ -61,12 +66,12 @@ def compute_seo_technical_copy_scores(
 
 
 def assemble_enriched_row(
-    main_data: dict[str, object],
-    extra_data: dict[str, object],
+    main_data: MainRowPayload,
+    extra_data: ExtraRowPayload,
     *,
     sitemap_url_keys: set[str],
     normalize_url_key_fn: Callable[[object], str] | None = None,
-) -> dict[str, object]:
+) -> MainRowPayload:
     """
     Merge main tab fields from extra telemetry and attach composite scores.
 
@@ -75,37 +80,39 @@ def assemble_enriched_row(
     written to the Technical sheet). Returns a new dict; inputs are not mutated.
     """
     norm = normalize_url_key_fn or normalize_url_key
+    main_values = main_data.values
+    extra_values = extra_data.values
     technical_health, copy_score, seo_score = compute_seo_technical_copy_scores(
-        extra_data
+        extra_values
     )
-    url_norm = norm(main_data.get("URL"))
+    url_norm = norm(main_values.get("URL"))
     found_via_sitemap = bool(url_norm and url_norm in sitemap_url_keys)
     found_via_crawl = bool(url_norm)
     merged_row = {
-        **main_data,
-        "SEO Health Score": extra_data.get("SEO Health Score"),
-        "Severity Badge": extra_data.get("Severity Badge"),
-        "Health Icon": extra_data.get("Health Icon"),
-        "Extraction State": main_data.get("Extraction State")
-        or extra_data.get("Extraction State", "skipped"),
-        "Extraction Source": main_data.get("Extraction Source")
-        or extra_data.get("Extraction Source", "raw_http"),
-        "CWV LCP (s)": extra_data.get("CWV LCP (s)"),
-        "CWV CLS": extra_data.get("CWV CLS"),
-        "Field vs Lab": extra_data.get("Field vs Lab"),
-        "Regional Authority Score": extra_data.get("Regional Authority Score"),
-        "Desktop PSI Score": extra_data.get("Desktop PSI Score", 0),
-        "Mobile PSI Score": extra_data.get("Mobile PSI Score", 0),
-        "Mobile LCP (s)": extra_data.get("Mobile LCP (s)", 0.0),
-        "Mobile CLS": extra_data.get("Mobile CLS", 0.0),
-        "Mobile TTFB (s)": extra_data.get("Mobile TTFB (s)", 0.0),
-        "GSC Clicks": extra_data.get("GSC Clicks", 0.0),
-        "GSC Impressions": extra_data.get("GSC Impressions", 0.0),
-        "GSC CTR": extra_data.get("GSC CTR", 0.0),
-        "GSC Avg Position": extra_data.get("GSC Avg Position", 0.0),
-        "Click Depth": extra_data.get("Click Depth"),
-        "Orphan Pages": extra_data.get("Orphan Pages", False),
-        "Internal PageRank": extra_data.get("Internal PageRank", 0.0),
+        **main_values,
+        "SEO Health Score": extra_values.get("SEO Health Score"),
+        "Severity Badge": extra_values.get("Severity Badge"),
+        "Health Icon": extra_values.get("Health Icon"),
+        "Extraction State": main_values.get("Extraction State")
+        or extra_values.get("Extraction State", "skipped"),
+        "Extraction Source": main_values.get("Extraction Source")
+        or extra_values.get("Extraction Source", "raw_http"),
+        "CWV LCP (s)": extra_values.get("CWV LCP (s)"),
+        "CWV CLS": extra_values.get("CWV CLS"),
+        "Field vs Lab": extra_values.get("Field vs Lab"),
+        "Regional Authority Score": extra_values.get("Regional Authority Score"),
+        "Desktop PSI Score": extra_values.get("Desktop PSI Score", 0),
+        "Mobile PSI Score": extra_values.get("Mobile PSI Score", 0),
+        "Mobile LCP (s)": extra_values.get("Mobile LCP (s)", 0.0),
+        "Mobile CLS": extra_values.get("Mobile CLS", 0.0),
+        "Mobile TTFB (s)": extra_values.get("Mobile TTFB (s)", 0.0),
+        "GSC Clicks": extra_values.get("GSC Clicks", 0.0),
+        "GSC Impressions": extra_values.get("GSC Impressions", 0.0),
+        "GSC CTR": extra_values.get("GSC CTR", 0.0),
+        "GSC Avg Position": extra_values.get("GSC Avg Position", 0.0),
+        "Click Depth": extra_values.get("Click Depth"),
+        "Orphan Pages": extra_values.get("Orphan Pages", False),
+        "Internal PageRank": extra_values.get("Internal PageRank", 0.0),
         "Found via Sitemap": found_via_sitemap,
         "Found via Crawl": found_via_crawl,
         "Discovery Source": (
@@ -119,24 +126,27 @@ def assemble_enriched_row(
         "Copy Score": round(copy_score, 2),
         "SEO Score": round(seo_score, 2),
     }
-    validated = CrawlResultModel.model_validate({"main": merged_row, "extra": extra_data})
-    return validated.main
+    validated = CrawlResultModel.model_validate(
+        {"main": merged_row, "extra": extra_values}
+    )
+    return MainRowPayload.model_validate(validated.main)
 
 
 def row_with_psi_gsc_harden(
-    row: dict[str, object],
+    row: ExtraRowPayload,
     *,
     url_key: str,
     normalized_key: str,
     psi_map: Mapping[str, Any],
     gsc_metrics: Mapping[str, Any],
     normalize_url_key_fn: Callable[[object], str] | None = None,
-) -> dict[str, object]:
+) -> ExtraRowPayload:
     norm = normalize_url_key_fn or normalize_url_key
+    row_values = row.values
     psi = psi_map.get(url_key) or psi_map.get(normalized_key)
     if psi:
         merged: dict[str, object] = {
-            **row,
+            **row_values,
             "Desktop PSI Score": psi.get("Desktop Score", 0),
             "Mobile PSI Score": psi.get("Mobile Score", 0),
             "Mobile LCP (s)": psi.get("Mobile LCP", 0.0),
@@ -149,7 +159,7 @@ def row_with_psi_gsc_harden(
         }
     else:
         merged = {
-            **row,
+            **row_values,
             "Desktop PSI Score": 0,
             "Mobile PSI Score": 0,
             "Mobile LCP (s)": 0.0,
@@ -173,40 +183,41 @@ def row_with_psi_gsc_harden(
             "GSC CTR": 0.0,
             "GSC Avg Position": 0.0,
         }
-    return {**merged, **harden_page_row_metrics(merged)}
+    return ExtraRowPayload.model_validate({**merged, **harden_page_row_metrics(merged)})
 
 
 def row_with_canonical_and_internal_links(
-    row: dict[str, object],
+    row: ExtraRowPayload,
     *,
     crawled_finals: set[str],
     status_by_url: Mapping[str, object],
     normalize_url_key_fn: Callable[[object], str] | None = None,
-) -> dict[str, object]:
+) -> ExtraRowPayload:
     norm = normalize_url_key_fn or normalize_url_key
-    canonical_url = row.get("Canonical URL")
-    url_val = row.get("URL")
-    out = dict(row)
+    row_values = row.values
+    canonical_url = row_values.get("Canonical URL")
+    url_val = row_values.get("URL")
+    out = dict(row_values)
     if canonical_url and url_val:
         out["Canonical in Sitemap Match"] = norm(canonical_url) == norm(url_val)
     else:
-        out["Canonical in Sitemap Match"] = row.get("Canonical in Sitemap Match")
+        out["Canonical in Sitemap Match"] = row_values.get("Canonical in Sitemap Match")
     out["Hreflang Canonical Consistency"] = (
         (
-            bool(row.get("Hreflang Present"))
-            and row.get("Canonical Type") in {"self", "missing"}
+            bool(row_values.get("Hreflang Present"))
+            and row_values.get("Canonical Type") in {"self", "missing"}
         )
-        if row.get("Hreflang Present")
+        if row_values.get("Hreflang Present")
         else None
     )
-    if row.get("Hreflang Present"):
+    if row_values.get("Hreflang Present"):
         out["Hreflang Reciprocal Check"] = norm(
-            row.get("Final URL", "")
-        ) in crawled_finals and bool(row.get("Hreflang Self Reference"))
+            row_values.get("Final URL", "")
+        ) in crawled_finals and bool(row_values.get("Hreflang Self Reference"))
     broken_internal = 0
     unresolved_internal = 0
     link_statuses: list[str] = []
-    for target in row.get("Internal Links List Full", []):
+    for target in row_values.get("Internal Links List Full", []):
         status = status_by_url.get(norm(target))
         if isinstance(status, int) and status >= 400:
             broken_internal += 1
@@ -220,11 +231,11 @@ def row_with_canonical_and_internal_links(
     out["Internal Link Statuses"] = (
         " | ".join(link_statuses) if link_statuses else None
     )
-    return out
+    return ExtraRowPayload.model_validate(out)
 
 
 def row_with_seo_health_enrichment(
-    row: dict[str, object],
+    row: ExtraRowPayload,
     *,
     summary_rules: list[tuple[str, str, Any]],
     sitemap_url_keys: set[str],
@@ -233,14 +244,15 @@ def row_with_seo_health_enrichment(
     title_map: Mapping[str, list[Any]],
     meta_map: Mapping[str, list[Any]],
     segment_by_url: Mapping[Any, str],
-    main_by_url: Mapping[str, dict[str, object]],
+    main_by_url: Mapping[str, MainRowPayload],
     normalize_url_key_fn: Callable[[object], str] | None = None,
-) -> dict[str, object]:
+) -> ExtraRowPayload:
     norm = normalize_url_key_fn or normalize_url_key
-    score, badge, icon, matched = score_url_health(row, summary_rules)
-    row_url_norm = norm(row.get("Final URL") or row.get("URL"))
+    row_values = row.values
+    score, badge, icon, matched = score_url_health(row_values, summary_rules)
+    row_url_norm = norm(row_values.get("Final URL") or row_values.get("URL"))
     base: dict[str, object] = {
-        **row,
+        **row_values,
         "Found via Sitemap": bool(row_url_norm and row_url_norm in sitemap_url_keys),
         "Found via Crawl": bool(row_url_norm),
     }
@@ -279,13 +291,13 @@ def row_with_seo_health_enrichment(
     base["Sprint"] = ""
     base["Status"] = "Open"
     all_issue_ids = [
-        stable_issue_id(row.get("URL"), issue)
+        stable_issue_id(row_values.get("URL"), issue)
         for issue in matched["Critical"]
         + matched["Warning"]
         + matched["Observation"]
     ]
     base["Stable Issue IDs"] = " | ".join(all_issue_ids) if all_issue_ids else None
-    final_norm = norm(row.get("Final URL") or row.get("URL") or "")
+    final_norm = norm(row_values.get("Final URL") or row_values.get("URL") or "")
     inlinks_count = len(inlinks_map.get(final_norm, set()))
     graph_row = graph_metrics.get(final_norm, {})
     base["Click Depth"] = graph_row.get("Click Depth")
@@ -307,10 +319,11 @@ def row_with_seo_health_enrichment(
         base["Important But Underlinked"] = (
             value_or_default(score, 0.0) < 70 and inlinks_count <= 2
         )
-    url_for_hint = row.get("URL")
-    main_match = main_by_url.get(str(url_for_hint or "").strip(), {})
-    title_key = normalize_text_hash(main_match.get("Title"))
-    meta_key = normalize_text_hash(main_match.get("Meta Description"))
+    url_for_hint = row_values.get("URL")
+    main_match = main_by_url.get(str(url_for_hint or "").strip())
+    main_values = main_match.values if main_match else {}
+    title_key = normalize_text_hash(main_values.get("Title"))
+    meta_key = normalize_text_hash(main_values.get("Meta Description"))
     hints: list[str] = []
     if title_key and len(title_map.get(title_key, [])) > 1:
         hints.append("Near-duplicate title cluster")
@@ -326,38 +339,42 @@ def row_with_seo_health_enrichment(
     if hints:
         base["Cannibalization Hint"] = " | ".join(hints)
     validated = CrawlResultModel.model_validate({"main": {}, "extra": base})
-    return validated.extra
+    return ExtraRowPayload.model_validate(validated.extra)
 
 
 def enrich_extra_rows_with_composite_scores(
-    rows: list[dict[str, object]],
+    rows: list[ExtraRowPayload],
     *,
-    main_by_url: Mapping[str, dict[str, object]] | None = None,
-) -> list[dict[str, object]]:
-    out: list[dict[str, object]] = []
+    main_by_url: Mapping[str, MainRowPayload] | None = None,
+) -> list[ExtraRowPayload]:
+    out: list[ExtraRowPayload] = []
     for r in rows:
-        th, cs, seo = compute_seo_technical_copy_scores(r)
+        row_values = r.values
+        th, cs, seo = compute_seo_technical_copy_scores(row_values)
         merged: dict[str, object] = {
-            **r,
+            **row_values,
             "Technical Health": round(th, 2),
             "Copy Score": round(cs, 2),
             "SEO Score": round(seo, 2),
         }
         if main_by_url is not None:
-            m = main_by_url.get(str(r.get("URL") or "").strip(), {})
-            tit = str(m.get("Title") or "").strip()
+            m = main_by_url.get(str(row_values.get("URL") or "").strip())
+            main_values = m.values if m else {}
+            tit = str(main_values.get("Title") or "").strip()
             h1ish = str(
-                m.get("H1 Content") or r.get("Current H-Tag Structure") or ""
+                main_values.get("H1 Content")
+                or row_values.get("Current H-Tag Structure")
+                or ""
             ).strip()
             merged["Content Cluster ID"] = compute_content_cluster_id(
-                r.get("URL"), title=tit, h1_or_structure=h1ish
+                row_values.get("URL"), title=tit, h1_or_structure=h1ish
             )
-        out.append(merged)
+        out.append(ExtraRowPayload.model_validate(merged))
     return out
 
 
 def build_title_meta_segment_maps(
-    main_rows: list[dict[str, object]],
+    main_rows: list[MainRowPayload],
 ) -> tuple[
     defaultdict[str, list[str]],
     defaultdict[str, list[str]],
@@ -367,27 +384,28 @@ def build_title_meta_segment_maps(
     meta_map: defaultdict[str, list[str]] = defaultdict(list)
     segment_by_url: dict[str, str] = {}
     for mrow in main_rows:
-        t_key = normalize_text_hash(mrow.get("Title"))
-        d_key = normalize_text_hash(mrow.get("Meta Description"))
-        parsed_u = urlparse(str(mrow.get("URL") or ""))
+        row = mrow.values
+        t_key = normalize_text_hash(row.get("Title"))
+        d_key = normalize_text_hash(row.get("Meta Description"))
+        parsed_u = urlparse(str(row.get("URL") or ""))
         segs = [s for s in parsed_u.path.strip("/").split("/") if s]
-        u = mrow.get("URL")
+        u = row.get("URL")
         if u is not None:
             segment_by_url[str(u)] = segs[0] if segs else "(home)"
         if t_key:
-            title_map[t_key].append(mrow.get("URL"))
+            title_map[t_key].append(row.get("URL"))
         if d_key:
-            meta_map[d_key].append(mrow.get("URL"))
+            meta_map[d_key].append(row.get("URL"))
     return title_map, meta_map, segment_by_url
 
 
 def main_by_url_map(
-    main_rows: list[dict[str, object]],
-) -> dict[str, dict[str, object]]:
+    main_rows: list[MainRowPayload],
+) -> dict[str, MainRowPayload]:
     return {
-        str(r.get("URL") or "").strip(): r
+        str(r.values.get("URL") or "").strip(): r
         for r in main_rows
-        if r.get("URL")
+        if r.values.get("URL")
     }
 
 

@@ -16,9 +16,8 @@ from hype_frog.config import (
 )
 from hype_frog.core import get_logger
 from hype_frog.crawler import create_session, fetch_and_parse, parse_sitemap
-from hype_frog.models import CrawlResult
+from hype_frog.models import CrawlResult, CrawlRowPayload
 from hype_frog.orchestration.run_setup import RunSetup
-from hype_frog.reporter.excel_engine import load_cached_rows
 from hype_frog.utils import build_output_filename
 
 logger = get_logger(__name__)
@@ -27,8 +26,7 @@ logger = get_logger(__name__)
 @dataclass(frozen=True)
 class CrawlExecutionResult:
     output_filename: str
-    main_rows: list[dict[str, object]]
-    extra_rows: list[dict[str, object]]
+    crawl_rows: list[CrawlRowPayload]
     target_input: str
     max_psi_urls: int | None
     crawl_urls: list[str]
@@ -195,13 +193,17 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
 
         completed_urls_runtime = set(checkpoint_completed_urls)
         pending_batch: list[CrawlResult] = []
+        typed_results: list[CrawlRowPayload] = []
         crawled_count = len(checkpoint_completed_urls)
         total_urls = len(urls) + len(checkpoint_completed_urls)
         for done_task in asyncio.as_completed(tasks):
-            result = await done_task
+            result_payload: CrawlRowPayload = await done_task
+            typed_results.append(result_payload)
+            main_row, extra_row = result_payload.model_dump_rows()
+            result: CrawlResult = {"main": main_row, "extra": extra_row}
             pending_batch.append(result)
             crawled_count += 1
-            url_done = result.get("main", {}).get("URL")
+            url_done = main_row.get("URL")
             if url_done:
                 completed_urls_runtime.add(url_done)
             if len(pending_batch) >= flush_batch_size:
@@ -231,12 +233,10 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             )
 
         logger.info("Generating Excel report...")
-        main_rows, extra_rows = load_cached_rows(cache)
         cache.close(cleanup_file=True)
         return CrawlExecutionResult(
             output_filename=output_filename,
-            main_rows=main_rows,
-            extra_rows=extra_rows,
+            crawl_rows=typed_results,
             target_input=setup.target_input,
             max_psi_urls=setup.max_psi_urls,
             crawl_urls=urls,

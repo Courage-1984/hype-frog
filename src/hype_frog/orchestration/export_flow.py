@@ -17,6 +17,7 @@ from hype_frog.config import (
     TIMEOUT_SECONDS,
 )
 from hype_frog.core import get_logger
+from hype_frog.models import SummaryMetricsPayload
 from hype_frog.orchestration.crawl_runner import CrawlExecutionResult
 from hype_frog.orchestration.enrichment_flow import EnrichmentResult
 from hype_frog.orchestration.run_setup import RunSetup
@@ -75,8 +76,10 @@ def execute_export(
     checkpoint_every = crawl_result.checkpoint_every
     high_value_slugs = setup.high_value_slugs
 
-    main_rows = list(enrichment.main_rows)
-    extra_rows = list(enrichment.extra_rows)
+    typed_main_rows = list(enrichment.typed_main_rows)
+    typed_extra_rows = list(enrichment.typed_extra_rows)
+    main_rows = [row.values for row in typed_main_rows]
+    extra_rows = [row.values for row in typed_extra_rows]
     status_by_url = dict(enrichment.status_by_url)
 
     main_df = pd.DataFrame(main_rows)
@@ -148,7 +151,7 @@ def execute_export(
     try:
         writer = pd.ExcelWriter(output_filename, engine="openpyxl")
         main_cols = list(main_rows[0].keys()) if main_rows else []
-        write_dict_rows_sheet(writer, "Main", main_cols, main_rows)
+        write_dict_rows_sheet(writer, "Main", main_cols, typed_main_rows)
         adjust_sheet_format(writer, "Main")
         if full_suite:
             technical_cols = [
@@ -213,11 +216,11 @@ def execute_export(
                 "X-Frame-Options", "Referrer-Policy", "Permissions-Policy", "Robots.txt Accessible",
                 "Sitemap in Robots.txt", "Robots.txt Crawl-Delay", "Robots.txt Disallow /",
             ]
-            write_dict_rows_sheet(writer, "Technical", technical_cols, extra_rows)
-            write_dict_rows_sheet(writer, "Content", content_cols, extra_rows)
-            write_dict_rows_sheet(writer, "Links", links_cols, extra_rows)
-            write_dict_rows_sheet(writer, "Media", media_cols, extra_rows)
-            write_dict_rows_sheet(writer, "Schema & Metadata", schema_cols, extra_rows)
+            write_dict_rows_sheet(writer, "Technical", technical_cols, typed_extra_rows)
+            write_dict_rows_sheet(writer, "Content", content_cols, typed_extra_rows)
+            write_dict_rows_sheet(writer, "Links", links_cols, typed_extra_rows)
+            write_dict_rows_sheet(writer, "Media", media_cols, typed_extra_rows)
+            write_dict_rows_sheet(writer, "Schema & Metadata", schema_cols, typed_extra_rows)
             aeo_rows = build_aeo_rows_fn(extra_rows)
             write_dict_rows_sheet(writer, "AEO", aeo_cols, aeo_rows)
             aioseo_rows = build_aioseo_rows_fn(extra_rows, main_by_url, DEFAULT_OWNER_BY_SEVERITY)
@@ -228,7 +231,7 @@ def execute_export(
                 "Priority Score", "Est. Hours", "Stable Issue ID",
             ]
             write_dict_rows_sheet(writer, "AIOSEO", aioseo_cols, aioseo_rows)
-            write_dict_rows_sheet(writer, "Security", security_cols, extra_rows)
+            write_dict_rows_sheet(writer, "Security", security_cols, typed_extra_rows)
             psi_rows = [{
                 "URL": row.get("URL"),
                 "Desktop Score": row.get("Desktop PSI Score", 0),
@@ -243,7 +246,7 @@ def execute_export(
                 "Meta Robots Raw", "X-Robots-Tag", "Canonical URL", "Canonical Type",
                 "Canonical Matches Final URL", "Canonical in Sitemap Match",
             ]
-            write_dict_rows_sheet(writer, "Indexability", indexability_cols, extra_rows)
+            write_dict_rows_sheet(writer, "Indexability", indexability_cols, typed_extra_rows)
             redirects_rows = []
             for row in extra_rows:
                 redirects_rows.append({
@@ -343,19 +346,33 @@ def execute_export(
                 "No Answer-Friendly Structure",
                 "No 40-60 Word Answer Paragraphs",
             }
-            summary_rows = build_summary_rows(summary_rules, extra_rows, template_issue_counts, value_or_default_fn)
+            summary_rows = build_summary_rows(
+                summary_rules,
+                typed_extra_rows,
+                template_issue_counts,
+                value_or_default_fn,
+                main_rows=typed_main_rows,
+            )
             to_excel_safe(pd.DataFrame(summary_rows), writer, "Summary", index=False)
-            issue_inventory_rows = build_issue_inventory_rows(summary_rules, extra_rows)
+            issue_inventory_rows = build_issue_inventory_rows(
+                summary_rules,
+                typed_extra_rows,
+                main_rows=typed_main_rows,
+            )
             issue_inventory_df = pd.DataFrame(issue_inventory_rows)
             to_excel_safe(issue_inventory_df, writer, "IssueInventory", index=False)
             fixplan_rows = build_fixplan_rows(
-                summary_rules, extra_rows, aeo_issue_names, root_cause_and_fix,
+                summary_rules, typed_extra_rows, aeo_issue_names, root_cause_and_fix,
                 DEFAULT_EFFORT_BY_SEVERITY, DEFAULT_OWNER_BY_SEVERITY,
             )
             fixplan_df = pd.DataFrame(sorted(fixplan_rows, key=lambda item: (-item["Affected Count"], item["Severity"])))
             to_excel_safe(fixplan_df, writer, "FixPlan", index=False)
-            hub_base_rows = build_content_optimisation_hub_rows(main_rows, extra_rows, fixplan_rows)
-            extra_by_url = {str(row.get("URL") or ""): row for row in extra_rows}
+            hub_base_rows = build_content_optimisation_hub_rows(
+                typed_main_rows, typed_extra_rows, fixplan_rows
+            )
+            extra_by_url = {
+                str(row.values.get("URL") or ""): row.values for row in typed_extra_rows
+            }
             content_hub_rows: list[dict[str, object]] = []
             for hub_row in hub_base_rows:
                 metrics = extra_by_url.get(str(hub_row.get("URL") or ""), {})
@@ -416,26 +433,26 @@ def execute_export(
                 })
             priority_df = pd.DataFrame(sorted(priority_rows, key=lambda item: item["Business Risk Score"], reverse=True))
             to_excel_safe(priority_df, writer, "Priority URLs", index=False)
-            total_urls = len(extra_rows)
+            total_urls = len(typed_extra_rows)
             pass_count = sum(
                 1
-                for row in extra_rows
-                if str(row.get("Severity Badge") or "") == "Pass"
+                for row in typed_extra_rows
+                if str(row.values.get("Severity Badge") or "") == "Pass"
             )
             critical_count = sum(
                 1
-                for row in extra_rows
-                if str(row.get("Severity Badge") or "") == "Critical"
+                for row in typed_extra_rows
+                if str(row.values.get("Severity Badge") or "") == "Critical"
             )
             warning_count = sum(
                 1
-                for row in extra_rows
-                if str(row.get("Severity Badge") or "") == "Warning"
+                for row in typed_extra_rows
+                if str(row.values.get("Severity Badge") or "") == "Warning"
             )
             top_blockers = fixplan_df.head(10)[["Issue Type", "Severity", "Affected Count"]]
             seo_health_values: list[float] = []
-            for row in extra_rows:
-                raw_hs = row.get("SEO Health Score")
+            for row in typed_extra_rows:
+                raw_hs = row.values.get("SEO Health Score")
                 if raw_hs is None or str(raw_hs).strip() == "":
                     continue
                 try:
@@ -465,14 +482,29 @@ def execute_export(
                     2,
                 ),
             )
+            summary_metrics = SummaryMetricsPayload(
+                urls_crawled=total_urls,
+                seo_pass_rate_pct=seo_pass_pct,
+                health_score_pct=avg_seo_health_pct,
+                critical_url_count=critical_count,
+                warning_url_count=warning_count,
+                projected_health_score_pct=projected_health_pct,
+                projected_pass_rate_pct=projected_pass_pct,
+            )
             dashboard_rows = [
-                {"Metric": "URLs Crawled", "Value": total_urls},
-                {"Metric": "SEO Pass Rate %", "Value": seo_pass_pct},
-                {"Metric": "Health Score %", "Value": avg_seo_health_pct},
-                {"Metric": "Critical URL Count", "Value": critical_count},
-                {"Metric": "Warning URL Count", "Value": warning_count},
-                {"Metric": "Projected Health Score %", "Value": projected_health_pct},
-                {"Metric": "Projected Pass Rate %", "Value": projected_pass_pct},
+                {"Metric": "URLs Crawled", "Value": summary_metrics.urls_crawled},
+                {"Metric": "SEO Pass Rate %", "Value": summary_metrics.seo_pass_rate_pct},
+                {"Metric": "Health Score %", "Value": summary_metrics.health_score_pct},
+                {"Metric": "Critical URL Count", "Value": summary_metrics.critical_url_count},
+                {"Metric": "Warning URL Count", "Value": summary_metrics.warning_url_count},
+                {
+                    "Metric": "Projected Health Score %",
+                    "Value": summary_metrics.projected_health_score_pct,
+                },
+                {
+                    "Metric": "Projected Pass Rate %",
+                    "Value": summary_metrics.projected_pass_rate_pct,
+                },
             ]
             to_excel_safe(pd.DataFrame(dashboard_rows), writer, "Dashboard", index=False)
             critical_issues_rows = [
@@ -625,8 +657,20 @@ def execute_export(
                 {"Metric": "Previously Fixed But Reopened", "Count": len(current_issue_ids & prev_fixed_issue_ids)},
             ]
             for _, issue_name, _ in summary_rules:
-                current_count = len([row for row in extra_rows if issue_name in str(row.get("Matched Issues") or "").split(" | ")])
-                delta_rows.append({"Metric": f"Issue Delta: {issue_name}", "Count": current_count - int(prev_counts.get(issue_name, 0))})
+                current_count = len(
+                    [
+                        row
+                        for row in typed_extra_rows
+                        if issue_name
+                        in str(row.values.get("Matched Issues") or "").split(" | ")
+                    ]
+                )
+                delta_rows.append(
+                    {
+                        "Metric": f"Issue Delta: {issue_name}",
+                        "Count": current_count - int(prev_counts.get(issue_name, 0)),
+                    }
+                )
             to_excel_safe(pd.DataFrame(delta_rows), writer, "DeltaFromPreviousRun", index=False)
             if (
                 not previous_issue_inventory_df.empty
