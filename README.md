@@ -9,6 +9,17 @@ Concurrent **Python 3.12** pipeline for large-scale URL crawling, structured ext
 - Produces a multi-sheet **audit workbook** (primary inventory, technical and content tabs, optional full suite) with sanitization and governed view state to reduce client corruption risk.
 - Supports checkpointed runs for long crawls and optional comparison against a prior workbook.
 
+## Project structure
+
+| Directory | Ownership | Responsibility |
+|------|-------------------|-------------------|
+| `src/hype_frog/orchestration/` | Entry orchestration layer | Resolves run configuration, coordinates async crawl/enrichment/export flow, and keeps stage control logic out of domain modules. |
+| `src/hype_frog/crawler/` | Crawl runtime | Handles network execution, retries/backoff, fetch-mode selection, and crawl-result assembly into row-ready shapes. |
+| `src/hype_frog/pipeline/` | Enrichment pipeline | Applies post-crawl transforms, scoring glue, sanitization helpers, and separated graph-analysis logic before reporting. |
+| `src/hype_frog/reporter/` | Workbook reporter | Builds Excel sheets and applies formatting, I/O safety, row builders, TOC/navigation, and export guardrails. |
+
+Runtime execution follows this sequence: **`orchestration/` -> `crawler/` -> `pipeline/` -> `reporter/`**.
+
 ## Tech stack
 
 | Area | Libraries / tools |

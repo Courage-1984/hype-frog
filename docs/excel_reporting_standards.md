@@ -1,21 +1,38 @@
 # Excel reporting standards
 
+## Reporter module ownership
+
+Excel reporting no longer relies on a single monolithic engine file. Responsibility is intentionally split across:
+
+- `src/hype_frog/reporter/engine_guardrails.py` — invariant enforcement (Action Required normalization, TOC refresh, freeze policy, tooltip governance).
+- `src/hype_frog/reporter/engine_formatting.py` — visual formatting and conditional format application.
+- `src/hype_frog/reporter/engine_io.py` — workbook-safe I/O, sanitization helpers, and row writing bridges.
+- `src/hype_frog/reporter/engine_rows.py` — report-row assembly and domain-specific row shaping.
+
+`src/hype_frog/reporter/excel_engine.py` remains a compatibility facade/re-export layer, not a monolithic behaviour owner.
+
 ## Integrity first
 
 Workbooks are end-user artifacts. Prefer conservative openpyxl operations: valid merges, freezes compatible with selection panes, and sanitized cell text so worksheet XML remains valid in common desktop clients.
 
 ## Sanitization
 
-- **Strings:** Strip illegal XML control characters and non-printable content before write (`pipeline/export.py` helpers mirror the intent of `main.py` sanitization paths).
+- **Strings:** Strip illegal XML control characters and non-printable content before write (`pipeline/export.py` and `reporter/engine_io.py` sanitization paths must stay aligned).
 - **Numbers:** Replace non-finite floats with blank-safe values for export.
 - **Dates:** Normalize timezone-aware and datetime columns to naive string forms where the export path expects strings.
 
 ## View state and “ghost” panes
 
-- **`sanitize_sheet_view_selection`** enforces that active pane selections match actual split panes (`xSplit` / `ySplit`). Invalid combinations (e.g. `bottomRight` without both splits) are removed to prevent corrupted view state.
+- **`sanitize_sheet_view_selection`** enforces that active pane selections match actual split panes (`xSplit` / `ySplit`). Invalid combinations (for example `bottomRight` without both splits) are removed to prevent corrupted view state.
 - **`apply_optimal_view_state`** applies governed freeze defaults and disables freeze/autofilter on very small non-core sheets to avoid fragile client layouts.
 
-When clearing `freeze_panes`, also clear orphaned `sheetView` selections per the patterns in `reporters/sheets/toc.py` and `view_state.py`.
+When clearing `freeze_panes`, also clear orphaned `sheetView` selections per the shared view-state helper patterns.
+
+These invariants remain absolute after modularization:
+
+- **Ghost pane safety:** pane selections must always match actual split panes.
+- **Nuclear view-state guardrails:** tiny non-core sheets must not retain risky freeze/autofilter combinations.
+- **String sanitization:** all written strings must remain workbook-safe and injection-safe.
 
 ## Table of Contents
 
