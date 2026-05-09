@@ -22,20 +22,19 @@ def _content_ai_header_tooltip(header: str, mapping: dict[str, str]) -> str | No
 
 _CONTENT_AI_HEADER_HELP: dict[str, str] = {
     "AEO Readiness Score": (
-        "Weighted score (0-100) based on Answer Blocks, FAQ Schema, Readability, and AI Bot "
-        "access. 70+ is the target for AI search engines."
+        "Weighted score (0-100) based on Answer Blocks, FAQ Schema, Readability, and AI Bot access. "
+        "70+ is the target for 2026 AI search engines."
     ),
     "AEO Extractability Score": (
         "Measures how easily an LLM can parse this page. High scores indicate clear "
         "Question-Heading to Answer-Paragraph mapping."
     ),
     "Answer Blocks": (
-        "Factual 40-60 word paragraphs placed directly under question-based headings. This is "
-        "the primary format used by SearchGPT and Perplexity for citations."
+        "Factual 40-60 word paragraphs placed directly under question-based headings. This is the "
+        "primary format used by SearchGPT and Perplexity for citations."
     ),
     "Flesch-Kincaid Grade (Est.)": (
-        "Estimated reading grade level. AEO 'Sweet Spot' is grade 7-10 for maximum "
-        "machine-extraction clarity."
+        "AEO 'Sweet Spot' is grade 7-10 for maximum machine-extraction clarity."
     ),
 }
 

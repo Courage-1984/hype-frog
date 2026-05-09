@@ -251,17 +251,23 @@ def row_with_psi_gsc_harden(
     row_values = row.values
     psi = psi_map.get(url_key) or psi_map.get(normalized_key)
     if psi:
+        mobile_lcp = float(psi.get("Mobile LCP") or 0.0)
+        mobile_cls = float(psi.get("Mobile CLS") or 0.0)
+        cwv_lcp = psi.get("CWV LCP (s)")
+        cwv_cls = psi.get("CWV CLS")
+        cwv_inp = psi.get("CWV INP (ms)")
         merged: dict[str, object] = {
             **row_values,
             "Desktop PSI Score": psi.get("Desktop Score", 0),
             "Mobile PSI Score": psi.get("Mobile Score", 0),
-            "Mobile LCP (s)": psi.get("Mobile LCP", 0.0),
-            "Mobile CLS": psi.get("Mobile CLS", 0.0),
+            "Mobile LCP (s)": mobile_lcp,
+            "Mobile CLS": mobile_cls,
             "Mobile TTFB (s)": psi.get("Mobile TTFB", 0.0),
-            "CWV LCP (s)": psi.get("Mobile LCP", 0.0),
-            "CWV CLS": psi.get("Mobile CLS", 0.0),
-            "CWV Data Source": "PSI API",
-            "Field vs Lab": "Lab",
+            "CWV LCP (s)": float(cwv_lcp) if cwv_lcp is not None else mobile_lcp,
+            "CWV CLS": float(cwv_cls) if cwv_cls is not None else mobile_cls,
+            "CWV INP (ms)": float(cwv_inp) if cwv_inp is not None else 0.0,
+            "CWV Data Source": psi.get("CWV Data Source", "PSI API"),
+            "Field vs Lab": psi.get("Field vs Lab", "Lab"),
         }
     else:
         merged = {
@@ -271,6 +277,7 @@ def row_with_psi_gsc_harden(
             "Mobile LCP (s)": 0.0,
             "Mobile CLS": 0.0,
             "Mobile TTFB (s)": 0.0,
+            "CWV INP (ms)": 0.0,
         }
     gsc = gsc_metrics.get(url_key) or gsc_metrics.get(normalized_key)
     if gsc:

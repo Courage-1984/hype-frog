@@ -29,6 +29,9 @@ TECHNICAL_DIAGNOSTICS_COLUMNS: tuple[str, ...] = (
     "Canonical URL",
     "Meta Robots Raw",
     "X-Robots-Tag",
+    "GSC Index Status",
+    "GSC Last Crawl",
+    "GSC Coverage Category",
     "Source Legacy Tab",
 )
 
@@ -223,6 +226,18 @@ def build_technical_diagnostics_rows(
         ):
             categories.append("Performance")
             sources.append("PSI Performance")
+        if any(
+            row.get(key) not in (None, "", False)
+            for key in (
+                "GSC Inspection Verdict",
+                "GSC Inspection Coverage State",
+                "GSC Inspection Last Crawl",
+                "GSC Clicks",
+                "GSC Impressions",
+            )
+        ):
+            categories.append("Search Console")
+            sources.append("Search Console")
 
         pass_flag = "Pass" if severity == "Pass" else "Non-Pass"
 
@@ -254,6 +269,9 @@ def build_technical_diagnostics_rows(
                 "Canonical URL": row.get("Canonical URL"),
                 "Meta Robots Raw": row.get("Meta Robots Raw"),
                 "X-Robots-Tag": row.get("X-Robots-Tag"),
+                "GSC Index Status": _to_str(row.get("GSC Inspection Verdict")),
+                "GSC Last Crawl": _to_str(row.get("GSC Inspection Last Crawl")),
+                "GSC Coverage Category": _to_str(row.get("GSC Inspection Coverage State")),
                 "Source Legacy Tab": _joined(sources),
             }
         )
