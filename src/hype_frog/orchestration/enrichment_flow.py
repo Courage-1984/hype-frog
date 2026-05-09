@@ -10,8 +10,12 @@ from hype_frog.core import get_logger
 from hype_frog.crawler import (
     check_url_status_light_limited,
     create_session,
-    fetch_gsc_page_metrics,
     fetch_psi_metrics_batch,
+)
+from hype_frog.crawler.gsc_engine import (
+    GSCEnrichmentContext,
+    fetch_gsc_url_inspections_batch,
+    load_gsc_enrichment_context,
 )
 from hype_frog.orchestration.crawl_runner import CrawlExecutionResult
 from hype_frog.core.models import CrawlRowPayload, ExtraRowPayload, MainRowPayload
@@ -40,6 +44,54 @@ logger = get_logger(__name__)
 
 def normalize_url_key(url: object, keep_query: bool = True) -> str:
     return normalize_url(url, keep_query=keep_query)
+
+
+def _extra_status_is_200(status: object) -> bool:
+    try:
+        return int(float(status)) == 200
+    except (TypeError, ValueError):
+        return False
+
+
+def _url_passes_gsc_inspection_smart_gate(
+    *,
+    analytics_query_succeeded: bool,
+    main_values: dict[str, object],
+    extra_values: dict[str, object],
+    url_key: str,
+    normalized_key: str,
+    gsc_metrics: dict[str, dict[str, float]],
+) -> bool:
+    """True when URL Inspection should run (indexable + 200 + zero GSC impressions / unknown in bulk)."""
+    if not analytics_query_succeeded:
+        return False
+    if not _extra_status_is_200(extra_values.get("Status Code")):
+        return False
+    if str(main_values.get("Indexability") or "").strip() != "Indexable":
+        return False
+    gsc_row = (
+        gsc_metrics.get(url_key)
+        or gsc_metrics.get(normalized_key)
+        or gsc_metrics.get(normalize_url_key(url_key))
+    )
+    if gsc_row is None:
+        return True
+    try:
+        impressions = float(gsc_row.get("GSC Impressions") or 0.0)
+    except (TypeError, ValueError):
+        impressions = 0.0
+    return impressions <= 0.0
+
+
+def _merge_gsc_url_inspection_row(
+    row: ExtraRowPayload,
+    inspection_fields: dict[str, str | None] | None,
+) -> ExtraRowPayload:
+    if not inspection_fields:
+        return row
+    merged = dict(row.values)
+    merged.update(inspection_fields)
+    return ExtraRowPayload.model_validate(merged)
 
 
 @dataclass(frozen=True)
@@ -113,21 +165,63 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
     sitemap_url_keys = {normalize_url_key(url) for url in crawl_result.sitemap_meta.keys()}
     async with create_session() as session:
         try:
-            gsc_metrics = await asyncio.to_thread(
-                fetch_gsc_page_metrics, crawl_result.target_input
+            gsc_ctx: GSCEnrichmentContext = await asyncio.to_thread(
+                load_gsc_enrichment_context, crawl_result.target_input
             )
         except Exception as exc:
             logger.warning("GSC metrics unavailable due to runtime error: %s", exc)
-            gsc_metrics = {}
-        if gsc_metrics:
+            gsc_ctx = GSCEnrichmentContext({}, False, None, None)
+        gsc_metrics = gsc_ctx.page_metrics
+        if gsc_ctx.analytics_query_succeeded and gsc_metrics:
             logger.info(
-                "Merged GSC metrics for last 30 days: %s URL records.",
+                "GSC bulk Search Analytics (30d, page dimension): %s lookup keys materialized.",
                 len(gsc_metrics),
             )
+        elif gsc_ctx.analytics_query_succeeded:
+            logger.info("GSC bulk Search Analytics returned zero rows for this property (last 30 days).")
         else:
             logger.warning(
-                "GSC metrics unavailable (missing credentials, property mismatch, or no data)."
+                "GSC metrics unavailable (missing credentials, property mismatch, or query error)."
             )
+
+        inspection_targets: list[str] = []
+        for main_row, extra_row in zip(main_rows, extra_rows, strict=True):
+            ev = extra_row.values
+            url_key = str(ev.get("Final URL") or ev.get("URL") or "").strip()
+            if not url_key:
+                continue
+            nk = normalize_url_key(url_key)
+            if _url_passes_gsc_inspection_smart_gate(
+                analytics_query_succeeded=gsc_ctx.analytics_query_succeeded,
+                main_values=main_row.values,
+                extra_values=ev,
+                url_key=url_key,
+                normalized_key=nk,
+                gsc_metrics=gsc_metrics,
+            ):
+                inspection_targets.append(url_key)
+        unique_inspection_urls = list(dict.fromkeys(inspection_targets))
+        inspection_by_url: dict[str, dict[str, str | None]] = {}
+        if (
+            unique_inspection_urls
+            and gsc_ctx.service is not None
+            and gsc_ctx.site_url is not None
+        ):
+            logger.info(
+                "GSC URL Inspection smart gate: %s of %s crawled URLs qualify for inspection API.",
+                len(unique_inspection_urls),
+                len(extra_rows),
+            )
+            try:
+                inspection_by_url = await asyncio.to_thread(
+                    fetch_gsc_url_inspections_batch,
+                    gsc_ctx.service,
+                    gsc_ctx.site_url,
+                    unique_inspection_urls,
+                )
+            except Exception as exc:
+                logger.warning("GSC URL Inspection batch failed: %s", exc)
+                inspection_by_url = {}
 
         if crawl_result.max_psi_urls == 0:
             psi_map: dict[str, dict[str, object]] = {}
@@ -149,18 +243,19 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                 )
 
         extra_work: list[ExtraRowPayload] = []
-        for row in extra_rows:
+        for main_row, row in zip(main_rows, extra_rows, strict=True):
             row_values = row.values
             url_key = str(row_values.get("Final URL") or row_values.get("URL") or "").strip()
-            extra_work.append(
-                row_with_psi_gsc_harden(
-                    row,
-                    url_key=url_key,
-                    normalized_key=normalize_url_key(url_key),
-                    psi_map=psi_map,
-                    gsc_metrics=gsc_metrics,
-                )
+            normalized_key = normalize_url_key(url_key)
+            hardened = row_with_psi_gsc_harden(
+                row,
+                url_key=url_key,
+                normalized_key=normalized_key,
+                psi_map=psi_map,
+                gsc_metrics=gsc_metrics,
             )
+            insp = inspection_by_url.get(url_key) or inspection_by_url.get(normalized_key)
+            extra_work.append(_merge_gsc_url_inspection_row(hardened, insp))
 
         status_by_url: dict[str, object] = {}
         for row in extra_work:
