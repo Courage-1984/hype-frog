@@ -27,6 +27,7 @@ class RunSetup:
     previous_audit_path_preset: str | None
     checkpoint_every_preset: int | None
     resume_checkpoint_mode: ResumeCheckpointMode
+    check_external_link_status: bool
 
 
 def resolve_run_setup(run: RunConfig | None) -> RunSetup:
@@ -51,6 +52,7 @@ def resolve_run_setup(run: RunConfig | None) -> RunSetup:
             previous_audit_path_preset=run.previous_audit_path,
             checkpoint_every_preset=run.checkpoint_every,
             resume_checkpoint_mode=run.resume_checkpoint,
+            check_external_link_status=run.check_external_link_status,
         )
 
     (
@@ -61,6 +63,7 @@ def resolve_run_setup(run: RunConfig | None) -> RunSetup:
         crawl_mode,
         render_wait_ms,
         selector_wait_ms,
+        check_external_link_status,
     ) = get_user_config()
     return RunSetup(
         target_input=target_input,
@@ -76,4 +79,5 @@ def resolve_run_setup(run: RunConfig | None) -> RunSetup:
         previous_audit_path_preset=None,
         checkpoint_every_preset=None,
         resume_checkpoint_mode="prompt",
+        check_external_link_status=check_external_link_status,
     )

@@ -25,6 +25,10 @@ from hype_frog.pipeline.assemble import (
     row_with_psi_gsc_harden,
     row_with_seo_health_enrichment,
 )
+from hype_frog.pipeline.link_inventory import (
+    annotate_link_details_with_status,
+    sniff_external_domains_head,
+)
 from hype_frog.pipeline.enrich import (
     compute_internal_link_intelligence,
 )
@@ -185,6 +189,22 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             )
             for target, status in zip(unresolved_targets, checked_statuses):
                 status_by_url[normalize_url_key(target)] = status
+
+        external_by_netloc: dict[str, int | None] | None = None
+        if crawl_result.check_external_link_status:
+            external_by_netloc = await sniff_external_domains_head(session, extra_work)
+            logger.info(
+                "External domain HEAD checks completed (%s unique hosts).",
+                len(external_by_netloc),
+            )
+
+        annotate_link_details_with_status(
+            extra_work,
+            status_by_url=status_by_url,
+            external_status_by_netloc=external_by_netloc,
+            sniff_external=crawl_result.check_external_link_status,
+            normalize_url_key_fn=normalize_url_key,
+        )
 
     crawled_finals = {
         normalize_url_key(row.values.get("Final URL"))

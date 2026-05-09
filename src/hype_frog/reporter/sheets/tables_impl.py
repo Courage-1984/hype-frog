@@ -240,6 +240,7 @@ def adjust_sheet_format(writer, sheet_name):
             "Technical Diagnostics",
             "Content & AI Readiness",
             "Link Intelligence",
+            "Link Inventory",
             "Issue Register",
             "Template & Duplication Risks",
         ):

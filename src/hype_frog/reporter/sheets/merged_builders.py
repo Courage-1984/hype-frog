@@ -92,7 +92,18 @@ LINK_INTELLIGENCE_COLUMNS: tuple[str, ...] = (
     "Nofollow Internal Links Count",
     "Nofollow External Links Count",
     "Internal Link Statuses",
+    "Actionable Fixes",
     "Source Legacy Tab",
+)
+
+LINK_INVENTORY_COLUMNS: tuple[str, ...] = (
+    "Source URL",
+    "Target URL",
+    "Anchor Text",
+    "Rel Attribute",
+    "Link Type",
+    "Status Code",
+    "Generic Anchor",
 )
 
 TEMPLATE_DUPLICATION_RISKS_COLUMNS: tuple[str, ...] = (
@@ -125,6 +136,26 @@ def _to_float(value: object, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _aeo_extractability_numeric(value: object) -> float:
+    """Map crawl labels or numerics to a 0–100 extractability scale for reporting."""
+    if isinstance(value, bool):
+        return 0.0
+    if isinstance(value, (int, float)):
+        v = float(value)
+        return max(0.0, min(100.0, v))
+    s = str(value or "").strip().lower()
+    if s == "high":
+        return 85.0
+    if s == "medium":
+        return 55.0
+    if s == "low":
+        return 25.0
+    try:
+        return max(0.0, min(100.0, float(value)))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _to_bool(value: object) -> bool:
@@ -281,8 +312,8 @@ def build_content_ai_readiness_rows(
                 "Image Alt Coverage (%)": _to_float(
                     row.get("Image Alt Coverage (%)"), 0.0
                 ),
-                "AEO Extractability Score": _to_float(
-                    row.get("AEO Extractability Score"), 0.0
+                "AEO Extractability Score": _aeo_extractability_numeric(
+                    row.get("AEO Extractability Score")
                 ),
                 "Title Missing": _to_bool(row.get("Title Missing")),
                 "Media Mixed Content Detected": _to_bool(row.get("Mixed Content Detected")),
@@ -353,6 +384,7 @@ def build_link_intelligence_rows(
     rows: list[dict[str, Any]] = []
 
     for row in extra_rows:
+        broken_ct = _to_int(row.get("Broken Internal Links Count"), 0)
         rows.append(
             {
                 "URL": _to_str(row.get("URL")),
@@ -362,9 +394,7 @@ def build_link_intelligence_rows(
                 "Target Status (if crawled)": "",
                 "Crawlable": "",
                 "Internal Links Count": _to_int(row.get("Internal Links Count"), 0),
-                "Broken Internal Links Count": _to_int(
-                    row.get("Broken Internal Links Count"), 0
-                ),
+                "Broken Internal Links Count": broken_ct,
                 "Unresolved Internal Links Count": _to_int(
                     row.get("Unresolved Internal Links Count"), 0
                 ),
@@ -383,6 +413,11 @@ def build_link_intelligence_rows(
                     row.get("Nofollow External Links Count"), 0
                 ),
                 "Internal Link Statuses": _to_str(row.get("Internal Link Statuses")),
+                "Actionable Fixes": (
+                    f"Fix {broken_ct} broken links (See Link Inventory tab for details)."
+                    if broken_ct > 0
+                    else ""
+                ),
                 "Source Legacy Tab": "Links",
             }
         )
@@ -410,6 +445,7 @@ def build_link_intelligence_rows(
                 "Nofollow Internal Links Count": 0,
                 "Nofollow External Links Count": 0,
                 "Internal Link Statuses": "",
+                "Actionable Fixes": "",
                 "Source Legacy Tab": "LinksDetail",
             }
         )
@@ -435,10 +471,47 @@ def build_link_intelligence_rows(
                 "Nofollow Internal Links Count": 0,
                 "Nofollow External Links Count": 0,
                 "Internal Link Statuses": _to_str(row.get("Inlinks URLs")),
+                "Actionable Fixes": "",
                 "Source Legacy Tab": "CrawlGraph",
             }
         )
 
+    return rows
+
+
+def build_link_inventory_rows(extra_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Flatten per-anchor rows for the Link Inventory worksheet."""
+    rows: list[dict[str, Any]] = []
+    for row in extra_rows:
+        source = _to_str(row.get("URL"))
+        for item in row.get("Link Details") or []:
+            code_raw = item.get("Status Code")
+            code_out: int | str = ""
+            if isinstance(code_raw, int):
+                code_out = code_raw
+            elif code_raw is not None and str(code_raw).strip() != "":
+                try:
+                    code_out = int(float(code_raw))
+                except (TypeError, ValueError):
+                    code_out = ""
+            gen = item.get("Generic Anchor")
+            rows.append(
+                {
+                    "Source URL": source,
+                    "Target URL": _to_str(item.get("Target URL")),
+                    "Anchor Text": _to_str(item.get("Anchor Text")),
+                    "Rel Attribute": _to_str(item.get("Rel Attribute") or item.get("Rel")),
+                    "Link Type": _to_str(item.get("Link Type")),
+                    "Status Code": code_out,
+                    "Generic Anchor": (
+                        "TRUE"
+                        if gen is True
+                        else "FALSE"
+                        if gen is False
+                        else ""
+                    ),
+                }
+            )
     return rows
 
 
@@ -526,11 +599,13 @@ __all__ = [
     "CONTENT_AI_READINESS_COLUMNS",
     "ISSUE_REGISTER_COLUMNS",
     "LINK_INTELLIGENCE_COLUMNS",
+    "LINK_INVENTORY_COLUMNS",
     "TEMPLATE_DUPLICATION_RISKS_COLUMNS",
     "build_technical_diagnostics_rows",
     "build_content_ai_readiness_rows",
     "build_issue_register_rows",
     "build_link_intelligence_rows",
+    "build_link_inventory_rows",
     "build_template_duplication_risks_rows",
 ]
 

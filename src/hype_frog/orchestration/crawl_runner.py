@@ -38,6 +38,7 @@ class CrawlExecutionResult:
     previous_audit_path: str
     checkpoint_every: int
     crawl_completed: bool
+    check_external_link_status: bool
 
 
 async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
@@ -264,4 +265,5 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             previous_audit_path=previous_audit_path,
             checkpoint_every=checkpoint_every,
             crawl_completed=True,
+            check_external_link_status=setup.check_external_link_status,
         )

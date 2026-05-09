@@ -160,7 +160,7 @@ def assert_action_required_guardrails(ws: Worksheet) -> None:
 
 def test_friendly_toc_description_known_tabs() -> None:
     assert "Executive overview" in friendly_toc_description("Dashboard")
-    assert "Interactive workspace" in friendly_toc_description(
+    assert "Diagnostic command center" in friendly_toc_description(
         "Content Optimisation Hub"
     )
     assert "Deep-dive diagnostic" in friendly_toc_description("Technical")

@@ -781,6 +781,7 @@ _MERGED_TAB_NAMES: frozenset[str] = frozenset(
         "Technical Diagnostics",
         "Content & AI Readiness",
         "Link Intelligence",
+        "Link Inventory",
         "Issue Register",
         "Template & Duplication Risks",
     }
@@ -967,6 +968,14 @@ def apply_merged_tabs_conditional_formatting(
             start_row,
             end_row,
         )
+    elif sheet_name == "Link Inventory":
+        _add_text_semantic_highlights(
+            worksheet,
+            headers,
+            ("Link Type", "Generic Anchor"),
+            start_row,
+            end_row,
+        )
     elif sheet_name == "Issue Register":
         _add_text_semantic_highlights(
             worksheet,
@@ -1109,6 +1118,30 @@ def apply_dashboard_metric_conditional_rules(worksheet: Worksheet) -> None:
             end_type="num",
             end_value=1,
             end_color="00B050",
+        ),
+    )
+    worksheet.conditional_formatting.add(
+        "B22:B22",
+        ColorScaleRule(
+            start_type="num",
+            start_value=0,
+            start_color="F8696B",
+            mid_type="num",
+            mid_value=0.5,
+            mid_color="FFEB84",
+            end_type="num",
+            end_value=1,
+            end_color="00B050",
+        ),
+    )
+    worksheet.conditional_formatting.add(
+        "B20:B20",
+        CellIsRule(
+            operator="greaterThan",
+            formula=["0"],
+            stopIfTrue=True,
+            fill=PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid"),
+            font=Font(color="FFFFFF", bold=True),
         ),
     )
 
