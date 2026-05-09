@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import coordinate_to_tuple
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.reporter.engine_formatting import (
     apply_fixplan_workflow_formatting,
@@ -30,6 +31,7 @@ from hype_frog.reporter.sheets.config import (
     DISABLE_EXTERNAL_LINKS_AND_IMAGES,
     DISABLE_NON_CORE_FREEZE_PANES,
     STD_BLUE,
+    STD_FROG_GREEN,
     STD_NAVY,
     STD_WHITE,
 )
@@ -69,6 +71,26 @@ from hype_frog.reporter.sheets.view_state import (
     set_freeze_panes_safe,
 )
 from hype_frog.reporter.sheets.style_helpers import header_index
+
+def _apply_link_inventory_client_polish(worksheet: Worksheet) -> None:
+    """Frog-green header row and readable widths for the seven export columns."""
+    header_fill = PatternFill(
+        start_color=STD_FROG_GREEN,
+        end_color=STD_FROG_GREEN,
+        fill_type="solid",
+    )
+    header_font = Font(color=STD_WHITE, bold=True)
+    for col_idx in range(1, 8):
+        cell = worksheet.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(
+            horizontal="center", vertical="center", wrap_text=True
+        )
+    worksheet.column_dimensions["A"].width = 50.0
+    worksheet.column_dimensions["B"].width = 50.0
+    worksheet.column_dimensions["C"].width = 30.0
+
 
 _COPY_HUB_WIDE_HEADERS: frozenset[str] = frozenset(
     {
@@ -247,6 +269,8 @@ def adjust_sheet_format(writer, sheet_name):
             apply_merged_tabs_conditional_formatting(
                 worksheet, sheet_name, header_row=header_row
             )
+        if sheet_name == "Link Inventory":
+            _apply_link_inventory_client_polish(worksheet)
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
         finalize_content_hub_after_normalized_headers(worksheet)
         _apply_content_hub_assigned_owner_validation(worksheet)

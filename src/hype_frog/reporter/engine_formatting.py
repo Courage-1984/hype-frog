@@ -63,7 +63,7 @@ def _legacy_sheet_header_index(worksheet: Worksheet) -> dict[str, int]:
 
 
 def ensure_auto_filter(worksheet: Worksheet) -> None:
-    if worksheet.title not in {"Main", "Dashboard"} and (
+    if worksheet.title not in {"Main", "Dashboard", "Link Inventory"} and (
         worksheet.max_row < 10 or worksheet.max_column < 5
     ):
         worksheet.auto_filter.ref = None
@@ -88,7 +88,7 @@ def _clear_orphaned_selection(worksheet: Worksheet) -> None:
 def ensure_freeze_header(worksheet: Worksheet) -> None:
     if worksheet.title == CONTENT_OPTIMISATION_HUB_SHEET:
         return
-    if worksheet.title not in {"Main", "Dashboard"} and (
+    if worksheet.title not in {"Main", "Dashboard", "Link Inventory"} and (
         worksheet.max_row < 10 or worksheet.max_column < 5
     ):
         worksheet.freeze_panes = None

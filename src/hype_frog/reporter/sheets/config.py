@@ -5,6 +5,7 @@ import os
 STD_NAVY: str = "2F3A4A"
 STD_WHITE: str = "FFFFFF"
 STD_BLUE: str = "2F6FA3"
+STD_FROG_GREEN: str = "92D050"
 
 # Canonical UK spelling for the Content Hub worksheet title (must match workbook-wide).
 CONTENT_OPTIMISATION_HUB_SHEET: str = "Content Optimisation Hub"
@@ -41,6 +42,7 @@ __all__ = [
     "STD_NAVY",
     "STD_WHITE",
     "STD_BLUE",
+    "STD_FROG_GREEN",
     "CONTENT_OPTIMISATION_HUB_SHEET",
     "DATA_HEAVY_TABS",
     "env_bool",

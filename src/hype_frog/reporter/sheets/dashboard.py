@@ -11,6 +11,7 @@ from hype_frog.reporter.dashboard_logic import (
     FixPlanRowPayload,
     compute_dashboard_metrics,
 )
+from hype_frog.reporter.narrative_engine import NarrativeEngine, average_seo_score_pct
 from hype_frog.reporter.sheets.dashboard_config import (
     ALERT_COLOR,
     DASHBOARD_COLUMN_WIDTHS,
@@ -53,6 +54,18 @@ _CONTENT_HUB_DYNAMIC_COLUMN = (
 )
 # Hub data starts row 3 (row 1 banner, row 2 headers); F = Status per preferred column order.
 _CONTENT_HUB_STATUS_RANGE = f"'{CONTENT_OPTIMISATION_HUB_SHEET}'!F3:F10000"
+
+# Dashboard KPI: optional external HEAD sniff ratio (values live on RunMetadata).
+_EXCEL_EXTERNAL_LINK_HEALTH_PCT = (
+    '=IF(IFERROR(INDEX(\'RunMetadata\'!$B:$B,MATCH("External Sniff Performed",'
+    '\'RunMetadata\'!$A:$A,0)),0)=0,"",'
+    'IF(IFERROR(INDEX(\'RunMetadata\'!$B:$B,MATCH("External Link Unique Denominator",'
+    '\'RunMetadata\'!$A:$A,0)),0)=0,"",'
+    'IFERROR(IFERROR(INDEX(\'RunMetadata\'!$B:$B,MATCH("External Link Unique 200 OK",'
+    '\'RunMetadata\'!$A:$A,0)),0)/'
+    'IFERROR(INDEX(\'RunMetadata\'!$B:$B,MATCH("External Link Unique Denominator",'
+    '\'RunMetadata\'!$A:$A,0)),1),0)))'
+)
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -255,10 +268,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet["B21"] = "=SUMIFS('Link Intelligence'!$O:$O,'Link Intelligence'!$B:$B,\"Summary\")"
         worksheet["B21"].number_format = "0"
         worksheet["A22"] = '=HYPERLINK("#\'Link Inventory\'!A1","External Link Health %")'
-        worksheet["B22"] = (
-            "=IF('Link Inventory'!$AC$2=0,\"\","
-            "IF('Link Inventory'!$AA$2=0,\"\",IFERROR('Link Inventory'!$AB$2/'Link Inventory'!$AA$2,0)))"
-        )
+        worksheet["B22"] = _EXCEL_EXTERNAL_LINK_HEALTH_PCT
         worksheet["B22"].number_format = "0.00%"
         for ref in (
             "A5",
@@ -357,7 +367,8 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         )
         worksheet["A22"].comment = Comment(
             "Share of unique external target URLs returning HTTP 200 after optional HEAD sniff "
-            "(Link Inventory helper cells AA2:AC2). Blank when sniff was skipped.",
+            "(RunMetadata keys External Sniff Performed / External Link Unique *). "
+            "Blank when sniff was skipped.",
             "hype-frog",
         )
 
@@ -413,6 +424,27 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         aeo_rows=aeo_rows,
     )
 
+    content_ai_readiness_rows: list[dict[str, Any]] = []
+    if "Content & AI Readiness" in writer.book.sheetnames:
+        content_ai_readiness_rows = _sheet_rows(writer.book["Content & AI Readiness"])
+    link_inventory_rows_narrative: list[dict[str, Any]] = []
+    if "Link Inventory" in writer.book.sheetnames:
+        link_inventory_rows_narrative = _sheet_rows(writer.book["Link Inventory"])
+
+    avg_seo_pct_narrative = average_seo_score_pct(technical_main_rows)
+    business_impact_narrative = NarrativeEngine.build_business_impact(
+        total_urls=summary_metrics.urls_crawled,
+        link_inventory_rows=link_inventory_rows_narrative,
+        technical_extra_rows=technical_extra_rows,
+        content_ai_rows=content_ai_readiness_rows,
+        avg_seo_score_pct=avg_seo_pct_narrative,
+    )
+    strategic_narrative_text = NarrativeEngine.build_strategic_narrative(
+        total_urls=summary_metrics.urls_crawled,
+        avg_seo_score_pct=avg_seo_pct_narrative,
+        critical_url_count=dashboard_metrics.critical_urls,
+    )
+
     status_buckets = dashboard_metrics.status_buckets
     error_count = dashboard_metrics.error_count
     success_count = dashboard_metrics.success_count
@@ -451,10 +483,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     )
     worksheet["B21"] = "=SUMIFS('Link Intelligence'!$O:$O,'Link Intelligence'!$B:$B,\"Summary\")"
     worksheet["B21"].number_format = "0"
-    worksheet["B22"] = (
-        "=IF('Link Inventory'!$AC$2=0,\"\","
-        "IF('Link Inventory'!$AA$2=0,\"\",IFERROR('Link Inventory'!$AB$2/'Link Inventory'!$AA$2,0)))"
-    )
+    worksheet["B22"] = _EXCEL_EXTERNAL_LINK_HEALTH_PCT
     worksheet["B22"].number_format = "0.00%"
     worksheet["B11"] = "=IFERROR((COUNTIFS('Technical Diagnostics'!$C:$C,\">=400\",'Technical Diagnostics'!$C:$C,\"<500\")+COUNTIFS('Technical Diagnostics'!$C:$C,\">=500\",'Technical Diagnostics'!$C:$C,\"<600\"))/COUNTIFS('Technical Diagnostics'!$C:$C,\">0\"),0)"
     worksheet["B11"].number_format = "0.00%"
@@ -607,28 +636,30 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     for col, width in {"G": 25, "H": 25, "I": 30, "J": 30, "K": 30}.items():
         worksheet.column_dimensions[col].width = width
 
-    worksheet["A21"] = "CRAWL METADATA"
-    worksheet["B21"] = "Value"
-    for ref in ("A21", "B21"):
+    # Crawl metadata sits below executive KPIs (rows 5–22) so link metrics on A21:B22
+    # are not overwritten (External Link Health % stays on B22 with RunMetadata lookup).
+    worksheet["A25"] = "CRAWL METADATA"
+    worksheet["B25"] = "Value"
+    for ref in ("A25", "B25"):
         worksheet[ref].fill = table_header_fill
         worksheet[ref].font = table_header_font
         worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
-    worksheet["A22"] = "Run Date"
-    worksheet["B22"] = (
+    worksheet["A26"] = "Run Date"
+    worksheet["B26"] = (
         '=IFERROR(INDEX(\'RunMetadata\'!$B:$B,'
-        'MATCH("Generated At",\'RunMetadata\'!$A:$A,0)),"")'
+        'MATCH("Run Timestamp",\'RunMetadata\'!$A:$A,0)),"")'
     )
-    worksheet["A23"] = "URL Count"
-    worksheet["B23"] = (
+    worksheet["A27"] = "URL Count"
+    worksheet["B27"] = (
         '=IFERROR(INDEX(\'RunMetadata\'!$B:$B,'
-        'MATCH("URLs Crawled",\'RunMetadata\'!$A:$A,0)),B5)'
+        'MATCH("Total URLs",\'RunMetadata\'!$A:$A,0)),B5)'
     )
-    worksheet["A24"] = "Duration"
-    worksheet["B24"] = (
+    worksheet["A28"] = "Duration"
+    worksheet["B28"] = (
         '=IFERROR(INDEX(\'RunMetadata\'!$B:$B,'
         'MATCH("Duration (s)",\'RunMetadata\'!$A:$A,0)),"")'
     )
-    for row in range(22, 25):
+    for row in range(26, 29):
         worksheet[f"A{row}"].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
         worksheet[f"B{row}"].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
         worksheet[f"A{row}"].alignment = Alignment(horizontal="center", vertical="center")
@@ -750,11 +781,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet[f"J{row}"].alignment = Alignment(horizontal="center", vertical="center")
 
     worksheet["I4"] = "BUSINESS IMPACT SUMMARY"
-    worksheet["I5"] = (
-        "=\"Audit identified \"&COUNTIF('Main'!C:C,\">=400\")&"
-        "\" error(s). There are \"&COUNTIF('Main'!J:J,\"Critical\")&"
-        "\" critical URLs requiring immediate attention.\""
-    )
+    worksheet["I5"] = business_impact_narrative
     worksheet.merge_cells("I4:K4")
     worksheet.merge_cells("I5:K10")
     worksheet["I4"].fill = table_header_fill
@@ -791,11 +818,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet[ref].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
         worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
     worksheet["G9"] = "Strategic Narrative"
-    worksheet["G10"] = (
-        "High SEO / low AEO suggests the site is visible to humans but less visible to AI answer engines."
-        if traditional_score >= 70 and aeo_readiness < 60
-        else "SEO and AEO signals are moving together; continue balancing crawl health with answer-first content."
-    )
+    worksheet["G10"] = strategic_narrative_text
     worksheet.merge_cells("G10:H12")
     worksheet["G9"].fill = table_header_fill
     worksheet["G9"].font = table_header_font
