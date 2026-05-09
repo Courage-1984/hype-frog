@@ -239,11 +239,27 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet["B18"].number_format = "0"
         worksheet["A19"] = '=HYPERLINK("#\'Content & AI Readiness\'!A1","AEO Opportunity Gap")'
         worksheet["B19"] = (
-            "=IFERROR(AVERAGE('Content & AI Readiness'!S:S)-AVERAGE('Main'!AZ:AZ),0)"
+            "=MAX(0, IF(IFERROR(AVERAGE('Content & AI Readiness'!$S:$S),0)>0, "
+            "100-IFERROR(AVERAGE('Content & AI Readiness'!$S:$S),0), "
+            "(1-IFERROR(B5,0))*100))"
         )
         worksheet["B19"].number_format = "0.0"
-        worksheet["A20"] = '=HYPERLINK("#\'Link Intelligence\'!A1","Broken Internal Links")'
-        worksheet["B20"] = "=SUMIFS('Link Intelligence'!$H:$H,'Link Intelligence'!$B:$B,\"Summary\")"
+        worksheet["A20"] = '=HYPERLINK("#\'Link Inventory\'!A1","Broken Internal Links")'
+        worksheet["B20"] = (
+            "=SUM(COUNTIFS('Link Inventory'!$E:$E,\"Internal\",'Link Inventory'!$F:$F,404),"
+            "COUNTIFS('Link Inventory'!$E:$E,\"Internal\",'Link Inventory'!$F:$F,\"404\"))"
+        )
+        worksheet["A21"] = (
+            '=HYPERLINK("#\'Link Intelligence\'!A1","Generic Anchor Links (Total)")'
+        )
+        worksheet["B21"] = "=SUMIFS('Link Intelligence'!$O:$O,'Link Intelligence'!$B:$B,\"Summary\")"
+        worksheet["B21"].number_format = "0"
+        worksheet["A22"] = '=HYPERLINK("#\'Link Inventory\'!A1","External Link Health %")'
+        worksheet["B22"] = (
+            "=IF('Link Inventory'!$AC$2=0,\"\","
+            "IF('Link Inventory'!$AA$2=0,\"\",IFERROR('Link Inventory'!$AB$2/'Link Inventory'!$AA$2,0)))"
+        )
+        worksheet["B22"].number_format = "0.00%"
         for ref in (
             "A5",
             "B5",
@@ -277,6 +293,10 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             "B19",
             "A20",
             "B20",
+            "A21",
+            "B21",
+            "A22",
+            "B22",
         ):
             worksheet[ref].fill = value_fill
             worksheet[ref].font = Font(
@@ -298,11 +318,13 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             "A18",
             "A19",
             "A20",
+            "A21",
+            "A22",
         ):
             worksheet[ref].font = Font(
                 color=STD_BLUE, underline="single", bold=True, size=12
             )
-        for row in range(5, 21):
+        for row in range(5, 23):
             worksheet[f"A{row}"].alignment = Alignment(
                 horizontal="center", vertical="center"
             )
@@ -324,7 +346,18 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             "hype-frog",
         )
         worksheet["A19"].comment = Comment(
-            "Gap between average AEO Extractability (Content & AI Readiness) and average Main SEO Score (0–100 scale).",
+            "Room for AEO improvement (0–100): when extractability averages exist, "
+            "100 minus average AEO Extractability Score; otherwise (1 minus Average SEO Score %) × 100.",
+            "hype-frog",
+        )
+        worksheet["A21"].comment = Comment(
+            "Sum of generic anchor-text occurrences per URL (Link Intelligence Summary rows). "
+            "Improve anchors for answer-engine clarity.",
+            "hype-frog",
+        )
+        worksheet["A22"].comment = Comment(
+            "Share of unique external target URLs returning HTTP 200 after optional HEAD sniff "
+            "(Link Inventory helper cells AA2:AC2). Blank when sniff was skipped.",
             "hype-frog",
         )
 
@@ -407,10 +440,22 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     worksheet["B18"] = "=COUNTIF('Main'!Q2:Q10000,TRUE)"
     worksheet["B18"].number_format = "0"
     worksheet["B19"] = (
-        "=IFERROR(AVERAGE('Content & AI Readiness'!S:S)-AVERAGE('Main'!AZ:AZ),0)"
+        "=MAX(0, IF(IFERROR(AVERAGE('Content & AI Readiness'!$S:$S),0)>0, "
+        "100-IFERROR(AVERAGE('Content & AI Readiness'!$S:$S),0), "
+        "(1-IFERROR(B5,0))*100))"
     )
     worksheet["B19"].number_format = "0.0"
-    worksheet["B20"] = "=SUMIFS('Link Intelligence'!$H:$H,'Link Intelligence'!$B:$B,\"Summary\")"
+    worksheet["B20"] = (
+        "=SUM(COUNTIFS('Link Inventory'!$E:$E,\"Internal\",'Link Inventory'!$F:$F,404),"
+        "COUNTIFS('Link Inventory'!$E:$E,\"Internal\",'Link Inventory'!$F:$F,\"404\"))"
+    )
+    worksheet["B21"] = "=SUMIFS('Link Intelligence'!$O:$O,'Link Intelligence'!$B:$B,\"Summary\")"
+    worksheet["B21"].number_format = "0"
+    worksheet["B22"] = (
+        "=IF('Link Inventory'!$AC$2=0,\"\","
+        "IF('Link Inventory'!$AA$2=0,\"\",IFERROR('Link Inventory'!$AB$2/'Link Inventory'!$AA$2,0)))"
+    )
+    worksheet["B22"].number_format = "0.00%"
     worksheet["B11"] = "=IFERROR((COUNTIFS('Technical Diagnostics'!$C:$C,\">=400\",'Technical Diagnostics'!$C:$C,\"<500\")+COUNTIFS('Technical Diagnostics'!$C:$C,\">=500\",'Technical Diagnostics'!$C:$C,\"<600\"))/COUNTIFS('Technical Diagnostics'!$C:$C,\">0\"),0)"
     worksheet["B11"].number_format = "0.00%"
     worksheet["B12"] = "=IFERROR(COUNTIFS('Technical Diagnostics'!$C:$C,\">=200\",'Technical Diagnostics'!$C:$C,\"<300\")/COUNTIFS('Technical Diagnostics'!$C:$C,\">0\"),0)"

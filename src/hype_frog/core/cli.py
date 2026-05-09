@@ -17,7 +17,9 @@ def _resolve_crawl_engine(raw: str) -> str:
     return "accurate"
 
 
-def get_user_config() -> tuple[str, int | None, int | None, list[str], str, int, int]:
+def get_user_config() -> tuple[
+    str, int | None, int | None, list[str], str, int, int, bool
+]:
     target_input = input("Target URL or Sitemap Path: ").strip()
     max_urls_raw = input(
         "Crawl Limit (Max URLs) [leave blank for No Limit]: "
@@ -33,6 +35,10 @@ def get_user_config() -> tuple[str, int | None, int | None, list[str], str, int,
     ).strip()
     render_wait_raw = input("Network Idle Timeout (ms) [default 4000]: ").strip()
     selector_wait_raw = input("Selector Render Wait (ms) [default 3000]: ").strip()
+    external_checks_raw = input(
+        "Perform External Link Status Checks? [y/N, blank skip]: "
+    ).strip().lower()
+    check_external_link_status = external_checks_raw in {"y", "yes"}
 
     max_urls: int | None = None
     max_psi_urls: int | None = None
@@ -73,4 +79,13 @@ def get_user_config() -> tuple[str, int | None, int | None, list[str], str, int,
         except ValueError:
             logger.warning("Invalid selector wait '%s'. Using default 3000ms.", selector_wait_raw)
 
-    return target_input, max_urls, max_psi_urls, high_value_slugs, crawl_mode, render_wait_ms, selector_wait_ms
+    return (
+        target_input,
+        max_urls,
+        max_psi_urls,
+        high_value_slugs,
+        crawl_mode,
+        render_wait_ms,
+        selector_wait_ms,
+        check_external_link_status,
+    )

@@ -43,11 +43,14 @@ from hype_frog.reporter.excel_engine import (
     build_fixplan_rows,
     write_dict_rows_sheet,
 )
+from hype_frog.reporter.engine_io import apply_link_intelligence_summary_broken_formulas
 from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
+from hype_frog.pipeline.link_inventory import unique_external_health_counts
 from hype_frog.reporter.sheets.merged_builders import (
     build_content_ai_readiness_rows,
     build_issue_register_rows,
     build_link_intelligence_rows,
+    build_link_inventory_rows,
     build_technical_diagnostics_rows,
     build_template_duplication_risks_rows,
 )
@@ -200,9 +203,22 @@ def execute_export(
             link_rows = []
             for row in extra_rows:
                 for item in row.get("Link Details", []):
-                    target_status = status_by_url.get(normalize_url_key(item.get("Target URL", "")))
-                    crawlable = target_status is None or (isinstance(target_status, int) and target_status < 400)
-                    link_rows.append({**item, "Target Status (if crawled)": target_status, "Crawlable": crawlable})
+                    raw_code = item.get("Status Code")
+                    target_status = status_by_url.get(
+                        normalize_url_key(item.get("Target URL", ""))
+                    )
+                    if raw_code is not None and raw_code != "":
+                        target_status = raw_code
+                    crawlable = target_status is None or (
+                        isinstance(target_status, int) and target_status < 400
+                    )
+                    link_rows.append(
+                        {
+                            **item,
+                            "Target Status (if crawled)": target_status,
+                            "Crawlable": crawlable,
+                        }
+                    )
             duplicate_rows = build_duplicates_rows(main_rows)
             pattern_rows, template_issue_counts = build_pattern_rows(
                 extra_rows,
@@ -271,6 +287,26 @@ def execute_export(
                 merged_columns["Link Intelligence"],
                 link_intelligence_rows,
             )
+            link_inventory_rows = build_link_inventory_rows(extra_rows)
+            write_dict_rows_sheet(
+                writer,
+                "Link Inventory",
+                merged_columns["Link Inventory"],
+                link_inventory_rows,
+            )
+            ok_unique_ext, total_unique_ext = unique_external_health_counts(
+                link_inventory_rows
+            )
+            inv_ws = writer.book["Link Inventory"]
+            inv_ws["AA1"] = "Unique external URLs (denominator)"
+            inv_ws["AB1"] = "Unique external 200 OK"
+            inv_ws["AC1"] = "External sniff performed"
+            inv_ws["AA2"] = int(total_unique_ext)
+            inv_ws["AB2"] = int(ok_unique_ext)
+            inv_ws["AC2"] = 1 if setup.check_external_link_status else 0
+
+            apply_link_intelligence_summary_broken_formulas(writer.book)
+
             write_dict_rows_sheet(
                 writer,
                 "Template & Duplication Risks",

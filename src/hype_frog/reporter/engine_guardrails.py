@@ -41,6 +41,9 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "Content": "Content depth, readability, headings, and thin-content flags per URL.",
     "Links": "Internal and external link counts and anchor-text quality per URL.",
     "LinksDetail": "Row-level outbound internal links with crawl resolution status.",
+    "Link Inventory": (
+        "Every anchor-level outbound link with type, rel attributes, status codes, and generic-anchor flags."
+    ),
     "Media": "Image inventory, alt coverage, filename quality, and mixed content flags.",
     "Schema & Metadata": "JSON-LD, microdata, Open Graph, and Twitter card signals.",
     "AIOSEO": "Plugin-aligned recommendations and edit links for AIOSEO users.",

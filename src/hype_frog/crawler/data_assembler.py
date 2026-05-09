@@ -6,6 +6,7 @@ from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
+from hype_frog.core.link_constants import GENERIC_ANCHOR_TERMS
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.core.text_utils import (
     image_extension,
@@ -306,7 +307,6 @@ def assemble_from_html(
     nofollow_external = 0
     generic_anchor_text_count = 0
     link_details: list[dict[str, object]] = []
-    generic_anchor_tokens = {"click here", "read more", "learn more", "more", "here"}
     for anchor in soup.find_all("a", href=True):
         href_raw = (anchor.get("href") or "").strip()
         if not href_raw or href_raw.startswith(("#", "mailto:", "tel:", "javascript:")):
@@ -317,7 +317,9 @@ def assemble_from_html(
         rel_tokens = {str(token).lower() for token in (anchor.get("rel") or [])}
         nofollow = "nofollow" in rel_tokens
         anchor_text = anchor.get_text(" ", strip=True)
-        if anchor_text.lower() in generic_anchor_tokens:
+        anchor_norm = anchor_text.strip().lower()
+        is_generic_anchor = anchor_norm in GENERIC_ANCHOR_TERMS
+        if is_generic_anchor:
             generic_anchor_text_count += 1
         target_netloc = urlparse(target_abs).netloc.lower()
         link_type = "Internal" if target_netloc == source_netloc else "External"
@@ -334,9 +336,11 @@ def assemble_from_html(
                 "Source URL": normalize_url_key(resolved_url),
                 "Target URL": target_abs,
                 "Anchor Text": anchor_text or None,
-                "Rel": " ".join(sorted(rel_tokens)) if rel_tokens else None,
+                "Rel Attribute": (" ".join(sorted(rel_tokens)) if rel_tokens else None),
                 "Link Type": link_type,
                 "Nofollow": nofollow,
+                "Generic Anchor": bool(is_generic_anchor),
+                "Status Code": None,
             }
         )
     unique_internal = sorted(set(internal_links))

@@ -25,6 +25,7 @@ class RunConfig:
     previous_audit_path: str
     checkpoint_every: int
     resume_checkpoint: ResumeCheckpointMode
+    check_external_link_status: bool
 
 
 def quick_test_run_config() -> RunConfig:
@@ -43,4 +44,5 @@ def quick_test_run_config() -> RunConfig:
         previous_audit_path="",
         checkpoint_every=0,
         resume_checkpoint="no",
+        check_external_link_status=False,
     )

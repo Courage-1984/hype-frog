@@ -13,6 +13,7 @@ from hype_frog.reporter.sheets.merged_builders import (
     CONTENT_AI_READINESS_COLUMNS,
     ISSUE_REGISTER_COLUMNS,
     LINK_INTELLIGENCE_COLUMNS,
+    LINK_INVENTORY_COLUMNS,
     TECHNICAL_DIAGNOSTICS_COLUMNS,
     TEMPLATE_DUPLICATION_RISKS_COLUMNS,
 )
@@ -116,6 +117,7 @@ _FULL_SUITE_FORMAT_SHEETS: list[str] = [
     "Technical Diagnostics",
     "Content & AI Readiness",
     "Link Intelligence",
+    "Link Inventory",
     "Template & Duplication Risks",
     "Playbook",
     # Deep-audit tail (far right)
@@ -146,6 +148,7 @@ def get_merged_sheet_columns() -> dict[str, list[str]]:
         "Technical Diagnostics": list(TECHNICAL_DIAGNOSTICS_COLUMNS),
         "Content & AI Readiness": list(CONTENT_AI_READINESS_COLUMNS),
         "Link Intelligence": list(LINK_INTELLIGENCE_COLUMNS),
+        "Link Inventory": list(LINK_INVENTORY_COLUMNS),
         "Template & Duplication Risks": list(TEMPLATE_DUPLICATION_RISKS_COLUMNS),
     }
 
