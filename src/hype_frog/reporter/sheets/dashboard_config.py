@@ -61,7 +61,7 @@ DASHBOARD_TOOLTIPS: dict[str, str] = {
     "C14": "Warning URL Rate %. Calculated as Warning URLs / Total URLs.",
     "C15": "Projected Health Score if all current To Do items are completed in this cycle.",
     "C16": "Projected Pass Rate if all current To Do items are completed in this cycle.",
-    "C17": "Content Hub Readiness %. COUNTIF ``Complete`` in Action Required (col C) over URL rows (col F) minus header.",
+    "C17": "Content Hub Readiness %. Share of Hub rows with Status ``Completed`` (column F, data from row 3).",
     "O5": "Most widespread issue from FixPlan by affected URL count (primary blocker).",
     "O6": "Number of URLs impacted by the top blocking issue.",
     "O7": "Total URLs returning client/server errors (4xx + 5xx).",
