@@ -14,6 +14,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
 logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = PROJECT_ROOT.parents[1]
 
 
 def _normalize_url(url: str) -> str:
@@ -57,10 +58,35 @@ def _load_credentials(credentials_path: Path, token_path: Path) -> Credentials:
         else:
             flow = InstalledAppFlow.from_client_secrets_file(str(credentials_path), SCOPES)
             creds = flow.run_local_server(port=0)
+        token_path.parent.mkdir(parents=True, exist_ok=True)
         token_path.write_text(creds.to_json(), encoding="utf-8")
     else:
         logger.info("Loaded existing GSC token")
     return creds
+
+
+def _resolve_credentials_path(filename: str) -> Path:
+    """Resolve OAuth client secrets with ``./secrets`` preferred."""
+    base = Path(filename)
+    if base.is_absolute():
+        return base
+    candidates = (
+        REPO_ROOT / "secrets" / base.name,
+        PROJECT_ROOT / base,
+        REPO_ROOT / base,
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return REPO_ROOT / "secrets" / base.name
+
+
+def _resolve_token_path(filename: str) -> Path:
+    """Resolve OAuth token path with ``./secrets`` as canonical write location."""
+    base = Path(filename)
+    if base.is_absolute():
+        return base
+    return REPO_ROOT / "secrets" / base.name
 
 
 def _resolve_site_url(service, target_url: str) -> str | None:
@@ -84,15 +110,11 @@ def fetch_gsc_page_metrics(
     credentials_file: str = "client_secrets.json",
     token_file: str = "token.json",
 ) -> dict[str, dict[str, float]]:
-    credentials_path = Path(credentials_file)
-    if not credentials_path.is_absolute():
-        credentials_path = PROJECT_ROOT / credentials_path
+    credentials_path = _resolve_credentials_path(credentials_file)
     if not credentials_path.exists():
         return {}
 
-    token_path = Path(token_file)
-    if not token_path.is_absolute():
-        token_path = PROJECT_ROOT / token_path
+    token_path = _resolve_token_path(token_file)
 
     creds = _load_credentials(credentials_path=credentials_path, token_path=token_path)
     service = build("searchconsole", "v1", credentials=creds, cache_discovery=False)
@@ -147,3 +169,26 @@ def fetch_gsc_page_metrics(
         page_metrics[_normalize_url(page)] = payload
         page_metrics[page] = payload
     return page_metrics
+
+
+def ensure_gsc_oauth_token(
+    credentials_file: str = "client_secrets.json",
+    token_file: str = "token.json",
+) -> tuple[bool, str]:
+    """Create or refresh the GSC OAuth token without running a crawl.
+
+    Returns:
+        ``(ok, token_path)`` where ``ok`` indicates whether credentials and token
+        bootstrap succeeded, and ``token_path`` is the resolved token location.
+    """
+    credentials_path = _resolve_credentials_path(credentials_file)
+    token_path = _resolve_token_path(token_file)
+    if not credentials_path.exists():
+        logger.warning("GSC OAuth bootstrap skipped; credentials file missing: %s", credentials_path)
+        return False, str(token_path)
+    try:
+        _load_credentials(credentials_path=credentials_path, token_path=token_path)
+    except Exception as exc:
+        logger.warning("GSC OAuth bootstrap failed: %s", exc)
+        return False, str(token_path)
+    return True, str(token_path)

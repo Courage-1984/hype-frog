@@ -80,7 +80,6 @@ _COPY_HUB_WIDE_HEADERS: frozenset[str] = frozenset(
         "H4",
         "H5",
         "H6",
-        "Current OG-Image URL",
         "Target Keywords",
     }
 )
@@ -115,7 +114,18 @@ def _apply_content_hub_assigned_owner_validation(worksheet) -> None:
 
 def _apply_content_hub_copywriter_column_layout(worksheet) -> None:
     headers = _hub_headers_row2(worksheet)
+    fixed_width_by_header: dict[str, float] = {
+        "Elementor Builder Link": 18.14,
+        "Open in Main": 22.57,
+        "Current OG-Image URL": 15.0,
+        "Assigned Owner": 15.0,
+        "On-Page Optimization Score": 12.0,
+    }
     for name, col_idx in headers.items():
+        if name in fixed_width_by_header:
+            letter = get_column_letter(col_idx)
+            worksheet.column_dimensions[letter].width = fixed_width_by_header[name]
+            continue
         low = name.lower()
         if name in _COPY_HUB_WIDE_HEADERS or "proposed" in low:
             letter = get_column_letter(col_idx)
