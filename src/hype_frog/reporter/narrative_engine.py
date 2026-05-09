@@ -1,0 +1,218 @@
+"""Diagnostic storytelling narratives for the executive Dashboard."""
+
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass
+from typing import Any
+
+from hype_frog.core.models import ExtraRowPayload, MainRowPayload
+
+_DEFAULT_NO_CRAWL = "No data available. Please run a full crawl to generate insights."
+
+
+def _sanitize_cell_text(text: str) -> str:
+    """Strip Excel formula injection prefixes and non-printable controls (keep newlines/tabs)."""
+    s = "".join(ch for ch in text if ord(ch) >= 32 or ch in "\n\t")
+    s = s.lstrip()
+    while s and s[0] in "=+-@":
+        s = s[1:].lstrip()
+    return s
+
+
+def average_seo_score_pct(main_rows: list[MainRowPayload]) -> float:
+    vals: list[float] = []
+    for row in main_rows:
+        raw = row.values.get("SEO Score")
+        try:
+            if raw is not None and str(raw).strip() != "":
+                vals.append(float(raw))
+        except (TypeError, ValueError):
+            continue
+    return sum(vals) / len(vals) if vals else 0.0
+
+
+def _avg_extractability_from_content_rows(rows: list[dict[str, Any]]) -> float:
+    vals: list[float] = []
+    for r in rows:
+        raw = r.get("AEO Extractability Score")
+        try:
+            if raw is not None and str(raw).strip() != "":
+                vals.append(float(raw))
+        except (TypeError, ValueError):
+            continue
+    return sum(vals) / len(vals) if vals else 0.0
+
+
+def _has_psi_lab_data(extra_rows: list[ExtraRowPayload]) -> bool:
+    """True when at least one URL has a non-zero Mobile or Desktop PSI lab score."""
+    for row in extra_rows:
+        v = row.values
+        for key in ("Mobile PSI Score", "Desktop PSI Score"):
+            raw = v.get(key)
+            try:
+                if raw is None or str(raw).strip() == "":
+                    continue
+                if float(raw) > 0.0:
+                    return True
+            except (TypeError, ValueError):
+                continue
+    return False
+
+
+def _break_url_for_cell_wrap(url: str, chunk: int = 52) -> str:
+    """Insert newlines so Excel wraps very long URLs; works with cell wrap_text=True."""
+    u = url.strip()
+    if len(u) <= chunk:
+        return u
+    return "\n".join(u[i : i + chunk] for i in range(0, len(u), chunk))
+
+
+def _psi_variance_mobile_minus_desktop(extra_rows: list[ExtraRowPayload]) -> float:
+    """Match Dashboard B8: AVG(Mobile PSI) − AVG(Desktop PSI) on Technical rows."""
+    mobiles: list[float] = []
+    desktops: list[float] = []
+    for row in extra_rows:
+        v = row.values
+        try:
+            m = v.get("Mobile PSI Score")
+            d = v.get("Desktop PSI Score")
+            if m is not None and str(m).strip() != "":
+                mobiles.append(float(m))
+            if d is not None and str(d).strip() != "":
+                desktops.append(float(d))
+        except (TypeError, ValueError):
+            continue
+    if not mobiles or not desktops:
+        return 0.0
+    return sum(mobiles) / len(mobiles) - sum(desktops) / len(desktops)
+
+
+def _broken_internal_404_stats(link_rows: list[dict[str, Any]]) -> tuple[int, str]:
+    targets: list[str] = []
+    for r in link_rows:
+        if str(r.get("Link Type") or "").strip() != "Internal":
+            continue
+        code = r.get("Status Code")
+        is_404 = False
+        if isinstance(code, int) and code == 404:
+            is_404 = True
+        elif isinstance(code, float) and int(code) == 404:
+            is_404 = True
+        else:
+            s = str(code).strip()
+            if s == "404" or s.startswith("404"):
+                is_404 = True
+        if not is_404:
+            continue
+        t = str(r.get("Target URL") or "").strip()
+        if t:
+            targets.append(t)
+    if not targets:
+        return 0, ""
+    top_url, _count = Counter(targets).most_common(1)[0]
+    return len(targets), top_url
+
+
+def _aeo_opportunity_gap_pct(avg_extractability: float, avg_seo_decimal: float) -> float:
+    """Align with Dashboard B19: extractability branch vs SEO headroom."""
+    bounded = max(0.0, min(1.0, avg_seo_decimal))
+    if avg_extractability > 0.0:
+        return max(0.0, 100.0 - avg_extractability)
+    return max(0.0, (1.0 - bounded) * 100.0)
+
+
+@dataclass(frozen=True)
+class NarrativeEngine:
+    """Generates Business Impact and Strategic Narrative copy from crawl outputs."""
+
+    @staticmethod
+    def build_business_impact(
+        *,
+        total_urls: int,
+        link_inventory_rows: list[dict[str, Any]],
+        technical_extra_rows: list[ExtraRowPayload],
+        content_ai_rows: list[dict[str, Any]],
+        avg_seo_score_pct: float,
+    ) -> str:
+        if total_urls <= 0:
+            return _DEFAULT_NO_CRAWL
+
+        lines: list[str] = []
+        broken_n, top_url = _broken_internal_404_stats(link_inventory_rows)
+        if broken_n > 0 and top_url:
+            url_display = _break_url_for_cell_wrap(top_url)
+            lines.append(
+                f"⚠️ Link Integrity Risk: {broken_n} broken links found. "
+                f"The most impacted destination is {url_display}."
+            )
+
+        has_psi = _has_psi_lab_data(technical_extra_rows)
+        if not has_psi:
+            lines.append(
+                "⚡ Performance Audit: PSI data was not collected in this run. "
+                "A full Performance Pass is recommended to identify mobile load-time bottlenecks."
+            )
+
+        variance = _psi_variance_mobile_minus_desktop(technical_extra_rows)
+        if has_psi and variance < -10.0:
+            lines.append(
+                f"📱 Mobile Performance Penalty: Your site is {variance:.1f} points slower "
+                "on mobile than desktop, likely throttling mobile search rankings."
+            )
+
+        avg_ext = _avg_extractability_from_content_rows(content_ai_rows)
+        gap = _aeo_opportunity_gap_pct(
+            avg_extractability=avg_ext,
+            avg_seo_decimal=max(0.0, min(1.0, avg_seo_score_pct / 100.0)),
+        )
+        if gap > 20.0:
+            if avg_ext > 0.0:
+                score_pct = max(0, min(100, round(avg_ext)))
+                gap_pct = max(0, min(100, round(gap)))
+                lines.append(
+                    f"🤖 AEO Opportunity: Your content is currently {score_pct}% optimized "
+                    f"for AI-Search, leaving a {gap_pct}% opportunity for improvement."
+                )
+            else:
+                lines.append(
+                    f"🤖 AEO Opportunity: Approximately {round(gap)}% headroom remains for "
+                    "AI-Search optimization based on overall SEO signals (extractability data "
+                    "was limited in this run)."
+                )
+
+        if not lines:
+            return _sanitize_cell_text(
+                "No high-priority storytelling gates fired for this crawl. "
+                "Review executive metrics and tab drill-downs for opportunities."
+            )
+        return _sanitize_cell_text("\n\n".join(lines))
+
+    @staticmethod
+    def build_strategic_narrative(
+        *,
+        total_urls: int,
+        avg_seo_score_pct: float,
+        critical_url_count: int,
+    ) -> str:
+        if total_urls <= 0:
+            return _DEFAULT_NO_CRAWL
+
+        if avg_seo_score_pct < 40.0 or critical_url_count > 5:
+            return _sanitize_cell_text(
+                "Critical technical debt is currently the primary barrier to growth."
+            )
+        if avg_seo_score_pct > 75.0:
+            return _sanitize_cell_text(
+                "The site is technically elite. Focus on advanced schema and competitive "
+                "content gaps."
+            )
+        return _sanitize_cell_text(
+            "Technical foundations are solid. Shift focus to PageSpeed and AEO structure."
+        )
+
+
+__all__ = [
+    "NarrativeEngine",
+    "average_seo_score_pct",
+]

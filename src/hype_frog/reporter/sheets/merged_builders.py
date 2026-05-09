@@ -495,23 +495,22 @@ def build_link_inventory_rows(extra_rows: list[dict[str, Any]]) -> list[dict[str
                 except (TypeError, ValueError):
                     code_out = ""
             gen = item.get("Generic Anchor")
-            rows.append(
-                {
-                    "Source URL": source,
-                    "Target URL": _to_str(item.get("Target URL")),
-                    "Anchor Text": _to_str(item.get("Anchor Text")),
-                    "Rel Attribute": _to_str(item.get("Rel Attribute") or item.get("Rel")),
-                    "Link Type": _to_str(item.get("Link Type")),
-                    "Status Code": code_out,
-                    "Generic Anchor": (
-                        "TRUE"
-                        if gen is True
-                        else "FALSE"
-                        if gen is False
-                        else ""
-                    ),
-                }
-            )
+            row_dict: dict[str, Any] = {
+                "Source URL": source,
+                "Target URL": _to_str(item.get("Target URL")),
+                "Anchor Text": _to_str(item.get("Anchor Text")),
+                "Rel Attribute": _to_str(item.get("Rel Attribute") or item.get("Rel")),
+                "Link Type": _to_str(item.get("Link Type")),
+                "Status Code": code_out,
+                "Generic Anchor": (
+                    "TRUE"
+                    if gen is True
+                    else "FALSE"
+                    if gen is False
+                    else ""
+                ),
+            }
+            rows.append({col: row_dict[col] for col in LINK_INVENTORY_COLUMNS})
     return rows
 
 

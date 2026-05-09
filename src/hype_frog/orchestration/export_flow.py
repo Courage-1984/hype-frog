@@ -297,13 +297,6 @@ def execute_export(
             ok_unique_ext, total_unique_ext = unique_external_health_counts(
                 link_inventory_rows
             )
-            inv_ws = writer.book["Link Inventory"]
-            inv_ws["AA1"] = "Unique external URLs (denominator)"
-            inv_ws["AB1"] = "Unique external 200 OK"
-            inv_ws["AC1"] = "External sniff performed"
-            inv_ws["AA2"] = int(total_unique_ext)
-            inv_ws["AB2"] = int(ok_unique_ext)
-            inv_ws["AC2"] = 1 if setup.check_external_link_status else 0
 
             apply_link_intelligence_summary_broken_formulas(writer.book)
 
@@ -544,6 +537,15 @@ def execute_export(
                 {"Key": "Timeout Seconds", "Value": TIMEOUT_SECONDS},
                 {"Key": "Checkpoint Every", "Value": checkpoint_every},
                 {"Key": "Previous Audit Path", "Value": previous_audit_path or "Not supplied"},
+                {
+                    "Key": "External Link Unique Denominator",
+                    "Value": int(total_unique_ext),
+                },
+                {"Key": "External Link Unique 200 OK", "Value": int(ok_unique_ext)},
+                {
+                    "Key": "External Sniff Performed",
+                    "Value": int(1 if setup.check_external_link_status else 0),
+                },
             ]
             to_excel_safe(pd.DataFrame(run_meta_rows), writer, "RunMetadata", index=False)
             delta_rows, resolved_issues_df = build_delta_and_trend_rows(
