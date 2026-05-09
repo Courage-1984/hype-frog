@@ -116,6 +116,13 @@ def compute_seo_technical_copy_scores(
             + (0.25 * copy_score),
         ),
     )
+    # Broken pages should never surface as healthy in executive scoring.
+    try:
+        status_code = int(float(row.get("Status Code") or 0))
+    except (TypeError, ValueError):
+        status_code = 0
+    if status_code >= 400:
+        seo_score = min(seo_score, 5.0)
     return technical_health, copy_score, seo_score
 
 

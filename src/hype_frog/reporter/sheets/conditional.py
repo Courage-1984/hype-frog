@@ -1058,6 +1058,61 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
         )
 
 
+def apply_dashboard_metric_conditional_rules(worksheet: Worksheet) -> None:
+    """Apply at-a-glance color scales to primary dashboard metric values."""
+    if DISABLE_CONDITIONAL_FORMATTING:
+        return
+    if worksheet.title != "Dashboard":
+        return
+    if worksheet.max_row < 8:
+        return
+
+    worksheet.conditional_formatting.add(
+        "B5:B7",
+        ColorScaleRule(
+            start_type="num",
+            start_value=0,
+            start_color="F8696B",
+            mid_type="num",
+            mid_value=0.5,
+            mid_color="FFEB84",
+            end_type="num",
+            end_value=1,
+            end_color="63BE7B",
+        ),
+    )
+    worksheet.conditional_formatting.add(
+        "B8:B8",
+        CellIsRule(
+            operator="lessThan",
+            formula=["-10"],
+            fill=PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid"),
+        ),
+    )
+    worksheet.conditional_formatting.add(
+        "B8:B8",
+        CellIsRule(
+            operator="lessThan",
+            formula=["0"],
+            font=Font(color="9C0006", bold=True),
+        ),
+    )
+    worksheet.conditional_formatting.add(
+        "B17:B17",
+        ColorScaleRule(
+            start_type="num",
+            start_value=0,
+            start_color="F8696B",
+            mid_type="num",
+            mid_value=0.5,
+            mid_color="FFEB84",
+            end_type="num",
+            end_value=1,
+            end_color="00B050",
+        ),
+    )
+
+
 __all__ = [
     "apply_wrapped_row_heights",
     "apply_sheet_text_wrap_columns",
@@ -1067,4 +1122,5 @@ __all__ = [
     "apply_psi_conditional_rules",
     "apply_merged_tabs_conditional_formatting",
     "apply_main_sheet_heatmaps",
+    "apply_dashboard_metric_conditional_rules",
 ]

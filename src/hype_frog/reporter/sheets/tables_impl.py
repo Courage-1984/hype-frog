@@ -145,6 +145,22 @@ def _apply_content_hub_copywriter_column_layout(worksheet) -> None:
             cell.alignment = Alignment(horizontal=h, vertical="top", wrap_text=wrap)
 
 
+def _link_main_technical_health_to_diagnostics(worksheet) -> None:
+    """Keep Main Technical Health synced from Technical Diagnostics by URL lookup."""
+    headers = header_index(worksheet)
+    url_col = headers.get("URL")
+    technical_health_col = headers.get("Technical Health")
+    if not url_col or not technical_health_col:
+        return
+    url_letter = get_column_letter(url_col)
+    technical_health_letter = get_column_letter(technical_health_col)
+    for row_idx in range(2, worksheet.max_row + 1):
+        worksheet[f"{technical_health_letter}{row_idx}"] = (
+            f'=IFERROR(VLOOKUP({url_letter}{row_idx},'
+            "'Technical Diagnostics'!$A:$E,5,FALSE),\"\")"
+        )
+
+
 def adjust_sheet_format(writer, sheet_name):
     worksheet = writer.sheets[sheet_name]
     reorder_columns(worksheet, sheet_name)
@@ -155,6 +171,7 @@ def adjust_sheet_format(writer, sheet_name):
     apply_generic_sheet_coloring(worksheet, sheet_name)
     apply_column_widths(worksheet)
     if sheet_name == "Main":
+        _link_main_technical_health_to_diagnostics(worksheet)
         apply_main_sheet_heatmaps(worksheet)
     apply_wrapped_row_heights(worksheet)
     if sheet_name == "FixPlan":
