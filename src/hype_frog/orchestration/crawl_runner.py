@@ -91,26 +91,41 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             logger.info("1. Gentle (fewer workers, longer delay)")
             logger.info("2. Balanced (default)")
             logger.info("3. Faster (more workers, shorter delay)")
-            profile_choice = input("Select crawl profile (1, 2, or 3): ").strip()
+            profile_choice = input(
+                "Select Crawl Safety Profile [1:Gentle | 2:Balanced | 3:Faster]: "
+            ).strip()
             if profile_choice == "1":
                 workers = 2
                 request_delay = 4.0
             elif profile_choice == "3":
                 workers = 4
                 request_delay = 1.5
+            elif profile_choice == "2" or profile_choice == "":
+                workers = MAX_WORKERS
+                request_delay = DELAY_BETWEEN_REQUESTS
             else:
+                logger.info("> Invalid input, defaulting to Balanced.")
                 workers = MAX_WORKERS
                 request_delay = DELAY_BETWEEN_REQUESTS
 
             suite_choice = input(
-                "Run mode - 1) Main tab only  2) Full SEO suite (all tabs): "
+                "Audit Depth: [1] Main Inventory Only | [2] Full AEO/SEO Suite: "
             ).strip()
-            full_suite = suite_choice == "2"
+            if suite_choice == "1":
+                full_suite = False
+            elif suite_choice == "2":
+                full_suite = True
+            elif suite_choice == "":
+                full_suite = False
+            else:
+                logger.info("> Invalid input, defaulting to Full AEO/SEO Suite.")
+                full_suite = True
+
             previous_audit_path = input(
-                "Optional previous audit .xlsx path for comparison (leave blank to skip): "
+                "Previous Audit Path (.xlsx) for Delta Analysis [leave blank to skip]: "
             ).strip()
             checkpoint_raw = input(
-                "Checkpoint save every N completed URLs (0 to disable): "
+                "Auto-Save Checkpoint Frequency (N URLs) [0 to disable]: "
             ).strip()
             try:
                 checkpoint_every = int(checkpoint_raw or "0")
@@ -128,6 +143,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
         os.makedirs(output_dir, exist_ok=True)
 
         logger.info("Output file: %s", output_filename)
+        print("\n" + "=" * 30)
         logger.info("Starting crawl of %s URLs...", len(urls))
         logger.info(
             f"Max Workers: {workers} | Delay: {request_delay}s | "

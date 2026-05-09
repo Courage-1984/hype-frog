@@ -5,23 +5,39 @@ from hype_frog.core.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _resolve_crawl_engine(raw: str) -> str:
+    """Map CLI choice to fetcher crawl_mode; invalid non-empty input defaults to Precise (2)."""
+    choice = raw.strip()
+    if choice == "1":
+        return "fast"
+    if choice == "2":
+        return "accurate"
+    if choice:
+        logger.info("> Invalid input, defaulting to Precise (Javascript Rendering).")
+    return "accurate"
+
+
 def get_user_config() -> tuple[str, int | None, int | None, list[str], str, int, int]:
-    target_input = input("Enter the target URL or Sitemap: ").strip()
-    max_urls_raw = input("Enter Max URLs to crawl (leave blank for no limit): ").strip()
+    target_input = input("Target URL or Sitemap Path: ").strip()
+    max_urls_raw = input(
+        "Crawl Limit (Max URLs) [leave blank for No Limit]: "
+    ).strip()
     psi_limit_raw = input(
-        "Enter Max URLs for PageSpeed Insights check (PSI is slow; enter a number to limit, or leave blank to check all): "
+        "PSI Performance Limit (Max URLs) [leave blank for all]: "
     ).strip()
     high_value_slugs_raw = input(
-        "Enter high-value URL substrings for this client, comma-separated (e.g., pricing, services). Enter 0 or leave blank to skip: "
+        "High-Priority URL Substrings (comma-separated) [leave blank to skip]: "
     ).strip()
-    crawl_mode_raw = input("Crawl mode - 1) Fast HTTP  2) Accurate Rendered (Playwright): ").strip()
-    render_wait_raw = input("Accurate mode network-idle wait ms (default 4000): ").strip()
-    selector_wait_raw = input("Accurate mode SEO selector wait ms (default 3000): ").strip()
+    crawl_mode_raw = input(
+        "Crawl Engine: [1] Fast (HTTP) | [2] Precise (Javascript Rendering): "
+    ).strip()
+    render_wait_raw = input("Network Idle Timeout (ms) [default 4000]: ").strip()
+    selector_wait_raw = input("Selector Render Wait (ms) [default 3000]: ").strip()
 
     max_urls: int | None = None
     max_psi_urls: int | None = None
     high_value_slugs: list[str] = []
-    crawl_mode = "accurate" if crawl_mode_raw == "2" else "fast"
+    crawl_mode = _resolve_crawl_engine(crawl_mode_raw)
     render_wait_ms = 4000
     selector_wait_ms = 3000
 
