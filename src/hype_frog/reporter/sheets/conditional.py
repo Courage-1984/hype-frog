@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from openpyxl.comments import Comment
@@ -626,14 +627,25 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
         og_url_letter = get_column_letter(og_url_col)
         for r in range(start_row, end_row + 1):
             og_url_cell = worksheet.cell(row=r, column=og_url_col)
-            og_url_cell.value = sanitize_excel_url(og_url_cell.value)
+            og_url_formula = str(og_url_cell.value or "").strip()
+            target_url = ""
+            if og_url_formula.upper().startswith("=HYPERLINK("):
+                m = re.match(r'^=HYPERLINK\("([^"]+)"\s*,', og_url_formula, re.IGNORECASE)
+                if m:
+                    target_url = sanitize_excel_url(m.group(1))
+            else:
+                target_url = sanitize_excel_url(og_url_cell.value)
             worksheet.cell(
                 row=r,
                 column=og_preview_col,
                 value=(
-                    str(og_url_cell.value or "")
+                    str(target_url or "")
                     if (DEBUG_EXCEL_ISOLATION_MODE or DISABLE_EXTERNAL_LINKS_AND_IMAGES)
-                    else f'=IF(LEN({og_url_letter}{r})>0, _xlfn.IMAGE({og_url_letter}{r}), "")'
+                    else (
+                        ""
+                        if not target_url
+                        else f'=IF(LEN("{target_url}")>0, _xlfn.IMAGE("{target_url}"), "")'
+                    )
                 ),
             )
 
@@ -650,6 +662,11 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
         link_font = Font(color="0563C1", underline="single")
         for rr in range(start_row, end_row + 1):
             worksheet.cell(row=rr, column=open_in_main_col_idx).font = link_font
+    og_image_url_col_idx = headers.get("Current OG-Image URL")
+    if og_image_url_col_idx and end_row >= start_row:
+        link_font = Font(color="0563C1", underline="single")
+        for rr in range(start_row, end_row + 1):
+            worksheet.cell(row=rr, column=og_image_url_col_idx).font = link_font
 
     for hdr_name, cidx in headers.items():
         tip = CONTENT_HUB_ROW2_HEADER_COMMENTS.get(hdr_name)

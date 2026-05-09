@@ -148,6 +148,7 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "Assigned Owner",
         "URL",
         "URL Slug Normalization",
+        "Proposed URL Slug",
         "Current Title",
         "Title Health",
         "Current Meta Desc",
@@ -567,7 +568,9 @@ def apply_column_widths(worksheet: Worksheet) -> None:
         "Action Required": 17.43,
         "On-Page Optimization Score": 12.0,
         "Assigned Owner": 15.0,
-        "Open in Main": 9.0,
+        "Elementor Builder Link": 18.14,
+        "Current OG-Image URL": 15.0,
+        "Open in Main": 22.57,
     }.items():
         col_idx = headers.get(header_name)
         if col_idx:

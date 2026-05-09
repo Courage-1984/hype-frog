@@ -15,6 +15,9 @@ uv run hype-frog --quick-test
 
 uv run hype-frog
 
+# Trigger GSC OAuth only (creates/refreshes src/hype_frog/token.json)
+uv run hype-frog --gsc-auth
+
 git rm -r --cached .
 git add .
 git commit -m "Cleanup: Untrack files listed in .gitignore"

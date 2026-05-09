@@ -96,6 +96,24 @@ def _hyperlink_with_label_formula(target_url: str, label: str) -> str:
     return f'=HYPERLINK("{safe_target}","{safe_display}")'
 
 
+def _og_image_hyperlink_formula(raw_url: object) -> str:
+    """Excel HYPERLINK for OG image URLs with compact display label."""
+    target = str(_sanitize_excel_url(raw_url) or "").strip()
+    if not target:
+        return ""
+    safe_target = target.replace('"', '""')
+    return f'=HYPERLINK("{safe_target}","View Image")'
+
+
+def _proposed_slug_value(seed_text: str) -> str:
+    """Generate a clean slug suggestion from normalized keyword guidance."""
+    text = str(seed_text or "").strip().lower()
+    if not text:
+        return ""
+    text = re.sub(r"[^a-z0-9]+", "-", text)
+    return text.strip("-")
+
+
 def _fallback_keyword(url: str, h1_text: str) -> str:
     slug_parts = [p for p in urlparse(url).path.strip("/").split("/") if p]
     if slug_parts:
@@ -254,6 +272,7 @@ CONTENT_HUB_EXPORT_COLUMNS: tuple[str, ...] = (
     "Assigned Owner",
     "URL",
     "URL Slug Normalization",
+    "Proposed URL Slug",
     "Current Title",
     "Title Health",
     "Current Meta Desc",
@@ -488,14 +507,14 @@ def build_content_optimisation_hub_rows(
         )
         # Live linter formulas: driven by visible H-tag cells so edits recalculate instantly.
         h1_health = (
-            f'=IF(OR(TRIM({k_l}{excel_row})="",ISNUMBER(SEARCH("|",{k_l}{excel_row}))),'
+            f'=IF(OR(ISBLANK({k_l}{excel_row}),ISNUMBER(SEARCH("|",{k_l}{excel_row}))),'
             f'"FIX: MULTIPLE/MISSING","OK")'
         )
-        h2_health = f'=IF(TRIM({m_l}{excel_row})="","MISSING","OK")'
-        h3_health = f'=IF(TRIM({o_l}{excel_row})="","MISSING","OK")'
-        h4_health = f'=IF(TRIM({q_l}{excel_row})="","MISSING","OK")'
-        h5_health = f'=IF(TRIM({s_l}{excel_row})="","MISSING","OK")'
-        h6_health = f'=IF(TRIM({u_l}{excel_row})="","MISSING","OK")'
+        h2_health = f'=IF(ISBLANK({m_l}{excel_row}),"MISSING","OK")'
+        h3_health = f'=IF(ISBLANK({o_l}{excel_row}),"MISSING","OK")'
+        h4_health = f'=IF(ISBLANK({q_l}{excel_row}),"MISSING","OK")'
+        h5_health = f'=IF(ISBLANK({s_l}{excel_row}),"MISSING","OK")'
+        h6_health = f'=IF(ISBLANK({u_l}{excel_row}),"MISSING","OK")'
         on_page_score = _content_hub_on_page_score_from_health_formula(excel_row)
         action_formula = f'=IF({w_l}{excel_row}>=85,"Complete","Needs Copy")'
         open_main_formula = _content_hub_open_in_main_formula(f_l, excel_row)
@@ -512,6 +531,7 @@ def build_content_optimisation_hub_rows(
                 "URL Slug Normalization": _hyperlink_with_label_formula(
                     raw_url, target_keywords
                 ),
+                "Proposed URL Slug": _proposed_slug_value(target_keywords),
                 "Current Title": str(m.get("Title") or "").strip() or "MISSING TITLE",
                 "Title Health": title_health,
                 "Current Meta Desc": str(m.get("Meta Description") or "").strip()
@@ -531,7 +551,7 @@ def build_content_optimisation_hub_rows(
                 "H6 Health": h6_health,
                 "On-Page Optimization Score": on_page_score,
                 "Elementor Builder Link": elementor_cell,
-                "Current OG-Image URL": _sanitize_excel_url(e.get("OG Image")),
+                "Current OG-Image URL": _og_image_hyperlink_formula(e.get("OG Image")),
                 "OG Image Preview": "",
                 "Open in Main": open_main_formula,
             }
