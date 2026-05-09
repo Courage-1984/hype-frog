@@ -404,7 +404,7 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
     worksheet["A1"].font = Font(color=STD_NAVY, bold=True)
     worksheet["A1"].alignment = Alignment(horizontal="left", vertical="center")
     worksheet.row_dimensions[1].height = 28
-    set_freeze_panes_safe(worksheet, "G3")
+    set_freeze_panes_safe(worksheet, "H3")
     headers = {
         str(cell.value): idx
         for idx, cell in enumerate(worksheet[2], start=1)
@@ -645,6 +645,11 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
             uv = ucell.value
             if isinstance(uv, str) and uv.strip().upper().startswith("=HYPERLINK("):
                 ucell.font = link_font
+    open_in_main_col_idx = headers.get("Open in Main")
+    if open_in_main_col_idx and end_row >= start_row:
+        link_font = Font(color="0563C1", underline="single")
+        for rr in range(start_row, end_row + 1):
+            worksheet.cell(row=rr, column=open_in_main_col_idx).font = link_font
 
     for hdr_name, cidx in headers.items():
         tip = CONTENT_HUB_ROW2_HEADER_COMMENTS.get(hdr_name)
@@ -667,6 +672,8 @@ def finalize_content_hub_after_normalized_headers(worksheet: Worksheet) -> None:
                 hdr.style = "Normal"
         except (AttributeError, TypeError):
             pass
+    # Reassert Content Hub freeze target after downstream header normalization passes.
+    set_freeze_panes_safe(worksheet, "H3")
 
 
 def apply_psi_conditional_rules(worksheet: Worksheet) -> None:

@@ -85,6 +85,17 @@ def _hyperlink_url_formula(display_url: str) -> str:
     return f'=HYPERLINK("{safe}","{safe}")'
 
 
+def _hyperlink_with_label_formula(target_url: str, label: str) -> str:
+    """Excel HYPERLINK using supplied label as display text."""
+    target = str(target_url or "").strip()
+    display = str(label or "").strip()
+    if not target:
+        return display
+    safe_target = target.replace('"', '""')
+    safe_display = (display or target).replace('"', '""')
+    return f'=HYPERLINK("{safe_target}","{safe_display}")'
+
+
 def _fallback_keyword(url: str, h1_text: str) -> str:
     slug_parts = [p for p in urlparse(url).path.strip("/").split("/") if p]
     if slug_parts:
@@ -242,6 +253,7 @@ CONTENT_HUB_EXPORT_COLUMNS: tuple[str, ...] = (
     "Status",
     "Assigned Owner",
     "URL",
+    "URL Slug Normalization",
     "Current Title",
     "Title Health",
     "Current Meta Desc",
@@ -259,7 +271,6 @@ CONTENT_HUB_EXPORT_COLUMNS: tuple[str, ...] = (
     "H6",
     "H6 Health",
     "Elementor Builder Link",
-    "URL Slug Normalization",
     "Current OG-Image URL",
     "OG Image Preview",
     "Open in Main",
@@ -477,9 +488,8 @@ def build_content_optimisation_hub_rows(
         )
         # Live linter formulas: driven by visible H-tag cells so edits recalculate instantly.
         h1_health = (
-            f'=IF(TRIM({k_l}{excel_row})="","FIX: MULTIPLE/MISSING",'
-            f'IF((LEN({k_l}{excel_row})-LEN(SUBSTITUTE({k_l}{excel_row},"|",""))+1)=1,'
-            f'"OK","FIX: MULTIPLE/MISSING"))'
+            f'=IF(OR(TRIM({k_l}{excel_row})="",ISNUMBER(SEARCH("|",{k_l}{excel_row}))),'
+            f'"FIX: MULTIPLE/MISSING","OK")'
         )
         h2_health = f'=IF(TRIM({m_l}{excel_row})="","MISSING","OK")'
         h3_health = f'=IF(TRIM({o_l}{excel_row})="","MISSING","OK")'
@@ -499,6 +509,9 @@ def build_content_optimisation_hub_rows(
                 "Status": "To Do",
                 "Assigned Owner": "Copy Writer",
                 "URL": _hyperlink_url_formula(raw_url),
+                "URL Slug Normalization": _hyperlink_with_label_formula(
+                    raw_url, target_keywords
+                ),
                 "Current Title": str(m.get("Title") or "").strip() or "MISSING TITLE",
                 "Title Health": title_health,
                 "Current Meta Desc": str(m.get("Meta Description") or "").strip()
@@ -518,7 +531,6 @@ def build_content_optimisation_hub_rows(
                 "H6 Health": h6_health,
                 "On-Page Optimization Score": on_page_score,
                 "Elementor Builder Link": elementor_cell,
-                "URL Slug Normalization": target_keywords,
                 "Current OG-Image URL": _sanitize_excel_url(e.get("OG Image")),
                 "OG Image Preview": "",
                 "Open in Main": open_main_formula,

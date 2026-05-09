@@ -96,7 +96,7 @@ def apply_optimal_view_state(worksheet: Worksheet, sheet_name: str) -> None:
         return
 
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
-        set_freeze_panes_safe(worksheet, "G3")
+        set_freeze_panes_safe(worksheet, "H3")
         sanitize_sheet_view_selection(worksheet)
         return
 
