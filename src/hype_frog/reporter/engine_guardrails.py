@@ -6,6 +6,11 @@ from openpyxl.workbook.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
+from hype_frog.reporter.sheets.layout import (
+    CONTENT_HUB_HEADER_COMMENT_OG_IMAGE_PREVIEW,
+    CONTENT_HUB_HEADER_COMMENT_SEO_SCORE,
+    CONTENT_HUB_HEADER_COMMENT_TECHNICAL_HEALTH,
+)
 
 _BANNED_TOC_FALLBACK = "Detailed URL diagnostic data"
 
@@ -15,7 +20,7 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
         "Executive overview of site-wide SEO performance and critical alerts."
     ),
     CONTENT_OPTIMISATION_HUB_SHEET: (
-        "Interactive workspace for drafting SEO titles, descriptions, and AEO content."
+        "Diagnostic command center: live title, meta, and H1–H6 health plus on-page score."
     ),
     "FixPlan": (
         "Prioritized list of technical and content fixes with estimated effort."
@@ -89,8 +94,7 @@ _HEADER_TOOLTIP_MESSAGES: dict[str, str] = {
         "Groups pages by topical relevance (e.g. /about-us/) for bulk template editing."
     ),
     "Action Required": (
-        "Automation: Flips to 'Complete' once projected SEO and copy scores reach "
-        "90 or above."
+        "Formula-driven: shows Complete when On-Page Optimization Score reaches 85+."
     ),
     "Assigned Owner": (
         "Select from dropdown: Copy Writer (Content), Developer (Technical), or "
@@ -119,7 +123,10 @@ _HEADER_TOOLTIP_MESSAGES: dict[str, str] = {
     ),
     "URL": ("Canonical audited URL. Use links to open the live page or related tabs."),
     "Target Keywords": (
-        "Primary and supporting phrases to align title, meta, and body copy with intent."
+        "Enter one primary phrase plus optional supporting terms (comma- or pipe-separated). "
+        "Use the same wording you want reflected in Title, Meta, and H1 so reviewers can "
+        "spot intent drift. Keep phrases short; avoid stuffing. This column is editorial "
+        "only and does not change crawl scores until you publish and re-audit."
     ),
     "Current Page Copy Snippet": (
         "Extracted body preview from the crawl. Reference when drafting changes."
@@ -146,18 +153,10 @@ _HEADER_TOOLTIP_MESSAGES: dict[str, str] = {
     "Current OG-Image URL": (
         "Open Graph image URL detected on the page. Used for preview and sharing QA."
     ),
-    "OG Image Preview": (
-        "In-workbook image preview when external content is enabled in Excel."
-    ),
+    "OG Image Preview": CONTENT_HUB_HEADER_COMMENT_OG_IMAGE_PREVIEW,
     "Social Share Note": ("Optional note for social snippets or share messaging."),
-    "SEO Score": (
-        "Composite SEO score from the crawl-era model. Shown for reference next to "
-        "live projected SEO."
-    ),
-    "Technical Health": (
-        "Technical-health subscore from the crawl. Used as a static input to "
-        "projected SEO."
-    ),
+    "SEO Score": CONTENT_HUB_HEADER_COMMENT_SEO_SCORE,
+    "Technical Health": CONTENT_HUB_HEADER_COMMENT_TECHNICAL_HEALTH,
     "Copy Score": (
         "Live copy readiness from proposed title and meta description length checks."
     ),

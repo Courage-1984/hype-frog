@@ -9,6 +9,21 @@ from typing import Any
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.rules import owner_for_issue, stable_issue_id
 
+_LEGACY_TO_MERGED_REFERENCE_TAB: dict[str, str] = {
+    "Technical": "Technical Diagnostics",
+    "Indexability": "Technical Diagnostics",
+    "Links": "Link Intelligence",
+    "AEO": "Content & AI Readiness",
+    "Schema & Metadata": "Content & AI Readiness",
+    "Pattern and Template Issues": "Template & Duplication Risks",
+}
+
+
+def reference_tab_for_merged_workbook(legacy_tab: str) -> str:
+    """Map pre-merge tab labels to current worksheet names for hyperlinks / INDIRECT."""
+    key = str(legacy_tab or "").strip()
+    return _LEGACY_TO_MERGED_REFERENCE_TAB.get(key, key)
+
 
 def safe_rule(rule_fn: Callable[..., Any], row: Mapping[str, Any]) -> bool:
     try:
@@ -55,17 +70,19 @@ def build_summary_rows(
                 "Severity": severity,
                 "Issue": issue_name,
                 "Affected URL Count": len(affected_urls),
-                "Reference Tab": "Indexability"
-                if "Canonical" in issue_name or "Noindex" in issue_name
-                else "Links"
-                if "Links" in issue_name
-                else "AEO"
-                if "AEO" in issue_name
-                or "Question" in issue_name
-                or "FAQ" in issue_name
-                else "Technical",
+                "Reference Tab": reference_tab_for_merged_workbook(
+                    "Indexability"
+                    if "Canonical" in issue_name or "Noindex" in issue_name
+                    else "Links"
+                    if "Links" in issue_name
+                    else "AEO"
+                    if "AEO" in issue_name
+                    or "Question" in issue_name
+                    or "FAQ" in issue_name
+                    else "Technical"
+                ),
                 "Affected URLs (sample)": " | ".join([u for u in affected_urls[:25] if u])
-                + " || Full list: see Technical/Links/Indexability tabs",
+                + " || Full list: see Technical Diagnostics / Link Intelligence tabs",
             }
         )
     summary_rows.append(
@@ -74,7 +91,7 @@ def build_summary_rows(
             "Severity": None,
             "Issue": None,
             "Affected URL Count": None,
-            "Affected URLs (sample)": "Detailed rows: see AEO tab",
+            "Affected URLs (sample)": "Detailed rows: see Content & AI Readiness tab",
         }
     )
     for severity, issue_name, rule_fn in summary_rules:
@@ -91,9 +108,9 @@ def build_summary_rows(
                 "Severity": severity,
                 "Issue": issue_name,
                 "Affected URL Count": len(affected_urls),
-                "Reference Tab": "AEO",
+                "Reference Tab": reference_tab_for_merged_workbook("AEO"),
                 "Affected URLs (sample)": " | ".join([u for u in affected_urls[:25] if u])
-                + " || Full list: see AEO tab",
+                + " || Full list: see Content & AI Readiness tab",
             }
         )
     severity_order = {"Critical": 0, "Warning": 1, "Observation": 2}
@@ -163,7 +180,9 @@ def build_summary_rows(
                 "Severity": "Observation",
                 "Issue": f"{seg} -> {issue_name}",
                 "Affected URL Count": issue_count,
-                "Reference Tab": "Pattern and Template Issues",
+                "Reference Tab": reference_tab_for_merged_workbook(
+                    "Pattern and Template Issues"
+                ),
                 "Affected URLs (sample)": None,
             }
         )
@@ -193,7 +212,7 @@ def build_issue_inventory_rows(
                 if issue in warning_names
                 else "Observation"
             )
-            reference_tab = (
+            legacy_ref = (
                 "Indexability"
                 if ("Canonical" in issue or "Noindex" in issue)
                 else "Links"
@@ -208,7 +227,7 @@ def build_issue_inventory_rows(
                     "Issue": issue,
                     "Stable Issue ID": stable_issue_id(url, issue),
                     "Severity": issue_severity,
-                    "Reference Tab": reference_tab,
+                    "Reference Tab": reference_tab_for_merged_workbook(legacy_ref),
                     "Owner": owner_for_issue(issue, issue_severity),
                     "Sprint": "",
                     "Status": "Open",
@@ -220,5 +239,6 @@ def build_issue_inventory_rows(
 __all__ = [
     "build_issue_inventory_rows",
     "build_summary_rows",
+    "reference_tab_for_merged_workbook",
     "safe_rule",
 ]

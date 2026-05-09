@@ -23,7 +23,14 @@ def score_url_health(
                 matched[severity].append(issue_name)
         except Exception:
             continue
-    score = max(0, 100 - (25 * len(matched["Critical"])) - (10 * len(matched["Warning"])) - (3 * len(matched["Observation"])))
+    observation_penalty = min(10, 3 * len(matched["Observation"]))
+    score = max(
+        0,
+        100
+        - (25 * len(matched["Critical"]))
+        - (10 * len(matched["Warning"]))
+        - observation_penalty,
+    )
     if matched["Critical"]:
         badge = "Critical"
         icon = "FAIL 🔴"

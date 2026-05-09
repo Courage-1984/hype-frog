@@ -42,9 +42,9 @@ SEVERITY_ROW_STYLE: list[tuple[str, str]] = [
 QUICK_LINKS: list[tuple[str, str]] = [
     ("Fix Plan", "#FixPlan!A1"),
     ("Main URL Data", "#Main!A1"),
-    ("Technical Diagnostics", "#Technical!A1"),
-    ("Indexability", "#Indexability!A1"),
-    ("AEO Opportunities", "#AEO!A1"),
+    ("Technical Diagnostics", "#'Technical Diagnostics'!A1"),
+    ("Indexability", "#'Technical Diagnostics'!A1"),
+    ("AEO Opportunities", "#'Content & AI Readiness'!A1"),
     ("AIOSEO Action Queue", "#AIOSEO!A1"),
 ]
 
@@ -61,7 +61,7 @@ DASHBOARD_TOOLTIPS: dict[str, str] = {
     "C14": "Warning URL Rate %. Calculated as Warning URLs / Total URLs.",
     "C15": "Projected Health Score if all current To Do items are completed in this cycle.",
     "C16": "Projected Pass Rate if all current To Do items are completed in this cycle.",
-    "C17": "Content Hub Readiness %. Count of literal ``Complete`` in Action Required divided by URLs tracked in column E.",
+    "C17": "Content Hub Readiness %. COUNTIF ``Complete`` in Action Required (col C) over URL rows (col F) minus header.",
     "O5": "Most widespread issue from FixPlan by affected URL count (primary blocker).",
     "O6": "Number of URLs impacted by the top blocking issue.",
     "O7": "Total URLs returning client/server errors (4xx + 5xx).",

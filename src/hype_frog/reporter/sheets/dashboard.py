@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload, SummaryMetricsPayload
@@ -34,6 +34,9 @@ from hype_frog.reporter.sheets.config import (
 )
 from hype_frog.reporter.sheets.style_helpers import header_index, to_int
 from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
+
+# Technical Diagnostics row 1 is the header; data rows only for URL-based denominators.
+_TD_URL_ROWS = "(COUNTA('Technical Diagnostics'!$A:$A)-1)"
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -153,51 +156,60 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
 
         worksheet["A5"] = '=HYPERLINK("#\'Main\'!A1","Total URLs")'
         worksheet["B5"] = total_urls
-        worksheet["A6"] = '=HYPERLINK("#\'Summary\'!A1","Overall Health Score")'
-        worksheet["B6"] = "=IFERROR(0,0)"
+        worksheet["A6"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Overall Health Score")'
+        worksheet["B6"] = "=IFERROR(AVERAGE('Technical Diagnostics'!$E:$E)/100,0)"
         worksheet["B6"].number_format = "0.00%"
-        worksheet["A7"] = '=HYPERLINK("#\'Summary\'!A1","SEO Pass Rate %")'
-        worksheet["B7"] = "=IFERROR(0,0)"
+        worksheet["A7"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","SEO Pass Rate %")'
+        worksheet["B7"] = (
+            f"=IFERROR(COUNTIFS('Technical Diagnostics'!$F:$F,\"Pass\")/{_TD_URL_ROWS},0)"
+        )
         worksheet["B7"].number_format = "0.00%"
-        worksheet["A8"] = '=HYPERLINK("#\'Technical\'!A1","Pass URLs")'
-        worksheet["B8"] = 0
+        worksheet["A8"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Pass URLs")'
+        worksheet["B8"] = "=COUNTIFS('Technical Diagnostics'!$F:$F,\"Pass\")"
         worksheet["A9"] = '=HYPERLINK("#\'Priority URLs\'!A1","Critical URLs")'
-        worksheet["B9"] = critical_urls
-        worksheet["A10"] = '=HYPERLINK("#\'Technical\'!A1","Warning URLs")'
-        worksheet["B10"] = warning_urls
-        worksheet["A11"] = '=HYPERLINK("#\'Technical\'!A1","Error Rate % (4xx/5xx)")'
-        worksheet["B11"] = "=IFERROR(0,0)"
+        worksheet["B9"] = "=COUNTIFS('Technical Diagnostics'!$D:$D,\"Critical\")"
+        worksheet["A10"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Warning URLs")'
+        worksheet["B10"] = (
+            "=COUNTIFS('Technical Diagnostics'!$D:$D,\"Warning\")"
+            "+COUNTIFS('Technical Diagnostics'!$D:$D,\"Needs Work\")"
+        )
+        worksheet["A11"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Error Rate % (4xx/5xx)")'
+        worksheet["B11"] = "=IFERROR((COUNTIFS('Technical Diagnostics'!$C:$C,\">=400\",'Technical Diagnostics'!$C:$C,\"<500\")+COUNTIFS('Technical Diagnostics'!$C:$C,\">=500\",'Technical Diagnostics'!$C:$C,\"<600\"))/COUNTIFS('Technical Diagnostics'!$C:$C,\">0\"),0)"
         worksheet["B11"].number_format = "0.00%"
         worksheet["A12"] = (
-            '=HYPERLINK("#\'Technical\'!A1","Crawl Success Rate % (2xx)")'
+            '=HYPERLINK("#\'Technical Diagnostics\'!A1","Crawl Success Rate % (2xx)")'
         )
-        worksheet["B12"] = "=IFERROR(0,0)"
+        worksheet["B12"] = "=IFERROR(COUNTIFS('Technical Diagnostics'!$C:$C,\">=200\",'Technical Diagnostics'!$C:$C,\"<300\")/COUNTIFS('Technical Diagnostics'!$C:$C,\">0\"),0)"
         worksheet["B12"].number_format = "0.00%"
-        worksheet["A13"] = '=HYPERLINK("#\'Technical\'!A1","Critical URL Rate %")'
-        worksheet["B13"] = "=IFERROR(0,0)"
+        worksheet["A13"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Critical URL Rate %")'
+        worksheet["B13"] = f"=IFERROR(B9/{_TD_URL_ROWS},0)"
         worksheet["B13"].number_format = "0.00%"
-        worksheet["A14"] = '=HYPERLINK("#\'Technical\'!A1","Warning URL Rate %")'
-        worksheet["B14"] = "=IFERROR(0,0)"
+        worksheet["A14"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Warning URL Rate %")'
+        worksheet["B14"] = f"=IFERROR(B10/{_TD_URL_ROWS},0)"
         worksheet["B14"].number_format = "0.00%"
         worksheet["A15"] = "Projected Health Score % (if all To Do done)"
-        worksheet["B15"] = "=IFERROR(0,0)"
+        worksheet["B15"] = (
+            f"=MIN(1,B6+(1-B6)*IFERROR(COUNTIFS('Issue Register'!$J:$J,\"Open\")/{_TD_URL_ROWS},0)*0.9)"
+        )
         worksheet["B15"].number_format = "0.00%"
         worksheet["A16"] = "Projected Pass Rate % (if all To Do done)"
-        worksheet["B16"] = "=IFERROR(0,0)"
+        worksheet["B16"] = (
+            f"=MIN(1,B7+(1-B7)*IFERROR(COUNTIFS('Issue Register'!$J:$J,\"Open\")/{_TD_URL_ROWS},0)*0.85)"
+        )
         worksheet["B16"].number_format = "0.00%"
         worksheet["A17"] = (
             f'=HYPERLINK("#\'{CONTENT_OPTIMISATION_HUB_SHEET}\'!A1",'
             f'"Content Hub Readiness (%)")'
         )
         worksheet["B17"] = (
-            f"=IFERROR(COUNTIF('{CONTENT_OPTIMISATION_HUB_SHEET}'!A:A,\"Complete\")/"
-            f"COUNTA('{CONTENT_OPTIMISATION_HUB_SHEET}'!D:D),0)"
+            f"=IFERROR(COUNTIF('{CONTENT_OPTIMISATION_HUB_SHEET}'!C:C,\"Complete\")/"
+            f"(COUNTA('{CONTENT_OPTIMISATION_HUB_SHEET}'!F:F)-1),0)"
         )
         worksheet["B17"].number_format = "0.00%"
-        worksheet["A18"] = '=HYPERLINK("#\'Schema & Metadata\'!A1","URLs with Schema")'
-        worksheet["B18"] = 0
-        worksheet["A19"] = '=HYPERLINK("#\'Links\'!A1","Broken Internal Links")'
-        worksheet["B19"] = 0
+        worksheet["A18"] = '=HYPERLINK("#\'Content & AI Readiness\'!A1","URLs with Schema")'
+        worksheet["B18"] = "=COUNTIFS('Content & AI Readiness'!$K:$K,\">0\")"
+        worksheet["A19"] = '=HYPERLINK("#\'Link Intelligence\'!A1","Broken Internal Links")'
+        worksheet["B19"] = "=SUMIFS('Link Intelligence'!$H:$H,'Link Intelligence'!$B:$B,\"Summary\")"
         for ref in (
             "A5",
             "B5",
@@ -318,37 +330,32 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     pass_rate_pct = dashboard_metrics.pass_rate_pct
     critical_rate_pct = dashboard_metrics.critical_rate_pct
     warning_rate_pct = dashboard_metrics.warning_rate_pct
-    worksheet["B8"] = dashboard_metrics.pass_urls
-    worksheet["B9"] = dashboard_metrics.critical_urls
-    worksheet["B10"] = dashboard_metrics.warning_urls
-    worksheet["B18"] = dashboard_metrics.schema_urls
-    worksheet["B19"] = dashboard_metrics.broken_links_total
-    worksheet["B11"] = f"=IFERROR({error_count}/{crawl_denominator},0)"
-    worksheet["B11"].number_format = "0.00%"
-    worksheet["B12"] = f"=IFERROR({success_count}/{crawl_denominator},0)"
-    worksheet["B12"].number_format = "0.00%"
-    worksheet["B13"] = (
-        f"=IFERROR({dashboard_metrics.critical_urls}/{crawl_denominator},0)"
+    worksheet["B8"] = "=COUNTIFS('Technical Diagnostics'!$F:$F,\"Pass\")"
+    worksheet["B9"] = "=COUNTIFS('Technical Diagnostics'!$D:$D,\"Critical\")"
+    worksheet["B10"] = (
+        "=COUNTIFS('Technical Diagnostics'!$D:$D,\"Warning\")"
+        "+COUNTIFS('Technical Diagnostics'!$D:$D,\"Needs Work\")"
     )
+    worksheet["B18"] = "=COUNTIFS('Content & AI Readiness'!$K:$K,\">0\")"
+    worksheet["B19"] = "=SUMIFS('Link Intelligence'!$H:$H,'Link Intelligence'!$B:$B,\"Summary\")"
+    worksheet["B11"] = "=IFERROR((COUNTIFS('Technical Diagnostics'!$C:$C,\">=400\",'Technical Diagnostics'!$C:$C,\"<500\")+COUNTIFS('Technical Diagnostics'!$C:$C,\">=500\",'Technical Diagnostics'!$C:$C,\"<600\"))/COUNTIFS('Technical Diagnostics'!$C:$C,\">0\"),0)"
+    worksheet["B11"].number_format = "0.00%"
+    worksheet["B12"] = "=IFERROR(COUNTIFS('Technical Diagnostics'!$C:$C,\">=200\",'Technical Diagnostics'!$C:$C,\"<300\")/COUNTIFS('Technical Diagnostics'!$C:$C,\">0\"),0)"
+    worksheet["B12"].number_format = "0.00%"
+    worksheet["B13"] = f"=IFERROR(B9/{_TD_URL_ROWS},0)"
     worksheet["B13"].number_format = "0.00%"
-    worksheet["B14"] = f"=IFERROR({dashboard_metrics.warning_urls}/{crawl_denominator},0)"
+    worksheet["B14"] = f"=IFERROR(B10/{_TD_URL_ROWS},0)"
     worksheet["B14"].number_format = "0.00%"
-    if seo_pass_rate_from_run is not None:
-        worksheet["B7"] = seo_pass_rate_from_run / 100.0
-    else:
-        worksheet["B7"] = f"=IFERROR({dashboard_metrics.pass_urls}/{crawl_denominator},0)"
+    worksheet["B7"] = (
+        f"=IFERROR(COUNTIFS('Technical Diagnostics'!$F:$F,\"Pass\")/{_TD_URL_ROWS},0)"
+    )
     worksheet["B7"].number_format = "0.00%"
     for row in range(5, 15):
         worksheet[f"A{row}"].alignment = Alignment(horizontal="left", vertical="center")
         worksheet.row_dimensions[row].height = 24
 
     avg_health_score = dashboard_metrics.avg_health_score
-    if health_from_feed is not None:
-        worksheet["B6"] = f"=IFERROR({round(health_from_feed, 4)}/100,0)"
-    elif avg_health_score is not None:
-        worksheet["B6"] = f"=IFERROR({round(avg_health_score, 2)}/100,0)"
-    else:
-        worksheet["B6"] = f"=IFERROR({pass_rate_pct}/100,0)"
+    worksheet["B6"] = "=IFERROR(AVERAGE('Technical Diagnostics'!$E:$E)/100,0)"
     worksheet["B6"].number_format = "0.00%"
 
     table_header_fill = PatternFill("solid", fgColor=TABLE_HEADER_COLOR)
@@ -517,17 +524,13 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     )
     projected_pass_rate_pct = dashboard_metrics.projected_pass_rate_pct
     projected_health_pct = dashboard_metrics.projected_health_pct
-    if projected_health_from_feed is not None:
-        ph_use = min(100.0, max(0.0, projected_health_from_feed))
-        worksheet["B15"] = ph_use / 100.0
-    else:
-        worksheet["B15"] = projected_health_pct / 100.0
+    worksheet["B15"] = (
+        f"=MIN(1,B6+(1-B6)*IFERROR(COUNTIFS('Issue Register'!$J:$J,\"Open\")/{_TD_URL_ROWS},0)*0.9)"
+    )
     worksheet["B15"].number_format = "0.00%"
-    if projected_pass_from_feed is not None:
-        pp_use = min(100.0, max(0.0, projected_pass_from_feed))
-        worksheet["B16"] = pp_use / 100.0
-    else:
-        worksheet["B16"] = projected_pass_rate_pct / 100.0
+    worksheet["B16"] = (
+        f"=MIN(1,B7+(1-B7)*IFERROR(COUNTIFS('Issue Register'!$J:$J,\"Open\")/{_TD_URL_ROWS},0)*0.85)"
+    )
     worksheet["B16"].number_format = "0.00%"
     worksheet["B15"].fill = PatternFill(
         "solid",
@@ -569,7 +572,13 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet[ref].fill = quick_nav_fill
         worksheet[ref].font = Font(color="000000", bold=True, size=11)
         worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
+    target_remap = {
+        "#Technical!A1": "#'Technical Diagnostics'!A1",
+        "#Indexability!A1": "#'Technical Diagnostics'!A1",
+        "#AEO!A1": "#'Content & AI Readiness'!A1",
+    }
     for idx, (label, target) in enumerate(QUICK_LINKS, start=13):
+        target = target_remap.get(target, target)
         worksheet[f"I{idx}"] = label
         worksheet[f"I{idx}"].alignment = Alignment(
             horizontal="left", vertical="center", wrap_text=True
@@ -641,13 +650,9 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     )
 
     for ref, message in DASHBOARD_TOOLTIPS.items():
-        dv = DataValidation(
-            type="custom", formula1="TRUE", showInputMessage=True, allow_blank=True
-        )
-        dv.promptTitle = f"KPI {ref}"
-        dv.prompt = message
-        worksheet.add_data_validation(dv)
-        dv.add(ref)
+        cell = worksheet[ref]
+        title = f"KPI {ref}"
+        cell.comment = Comment(f"{title}\n\n{message}", "hype-frog")
     for row_idx in range(4, 60):
         if row_idx in (15, 16):
             continue

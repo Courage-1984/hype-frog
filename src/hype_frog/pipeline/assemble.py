@@ -28,6 +28,50 @@ def normalize_url_key(url: object, keep_query: bool = True) -> str:
     return normalize_url(url, keep_query=keep_query)
 
 
+_AEO_SCORABLE_EXTRACTION: frozenset[str] = frozenset({"complete", "partial"})
+
+
+def compute_aeo_readiness_score(row: Mapping[str, Any]) -> tuple[float, str]:
+    """0–100 AEO readiness from on-page signals (schema, headings, extractability, answer blocks).
+
+    Returns:
+        Tuple of (score, badge). For rows without scorable HTML extraction, returns a neutral
+        score that does not trigger the ``Low AEO Readiness Score`` rule threshold.
+    """
+    extraction = str(row.get("Extraction State") or "").strip().lower()
+    if extraction not in _AEO_SCORABLE_EXTRACTION:
+        return 61.0, "Unmeasured"
+
+    base = 10.0
+    schema_count = int(float(row.get("Schema Types Count") or 0))
+    schema_pts = 20.0 if schema_count > 0 else 0.0
+
+    qh = int(float(row.get("Question Heading Count") or 0))
+    question_pts = min(30.0, float(qh) * 10.0)
+
+    ext = str(row.get("AEO Extractability Score") or "").strip().lower()
+    para_n = int(float(row.get("Paragraphs 40-60 Words Count") or 0))
+    if ext == "high" or para_n > 0:
+        extract_pts = 40.0
+    elif ext == "medium":
+        extract_pts = 20.0
+    else:
+        extract_pts = 0.0
+
+    total = base + schema_pts + question_pts + extract_pts
+    score = max(0.0, min(100.0, round(total, 2)))
+
+    if score >= 80.0:
+        badge = "Strong"
+    elif score >= 60.0:
+        badge = "Good"
+    elif score >= 40.0:
+        badge = "Fair"
+    else:
+        badge = "Needs Work"
+    return score, badge
+
+
 def compute_seo_technical_copy_scores(
     row: Mapping[str, Any],
 ) -> tuple[float, float, float]:
@@ -48,6 +92,11 @@ def compute_seo_technical_copy_scores(
             - (10 if lcp_value > 4.0 else 5 if lcp_value > 2.5 else 0),
         ),
     )
+    wc = float(value_or_default(row.get("Word Count"), 0.0))
+    if wc >= 300.0:
+        thin_penalty = 0.0
+    else:
+        thin_penalty = min(25.0, ((300.0 - wc) / 300.0) * 25.0)
     copy_score = max(
         0.0,
         min(
@@ -55,7 +104,7 @@ def compute_seo_technical_copy_scores(
             100.0
             - (30 if bool(row.get("Missing H1 Flag")) else 0)
             - (20 if bool(row.get("Meta Description Missing")) else 0)
-            - (25 if value_or_default(row.get("Word Count"), 0.0) < 300 else 0),
+            - thin_penalty,
         ),
     )
     seo_score = max(
@@ -356,11 +405,14 @@ def enrich_extra_rows_with_composite_scores(
     for r in rows:
         row_values = r.values
         th, cs, seo = compute_seo_technical_copy_scores(row_values)
+        aeo_score, aeo_badge = compute_aeo_readiness_score(row_values)
         merged: dict[str, object] = {
             **row_values,
             "Technical Health": round(th, 2),
             "Copy Score": round(cs, 2),
             "SEO Score": round(seo, 2),
+            "AEO Readiness Score": aeo_score,
+            "AEO Badge": aeo_badge,
         }
         if main_by_url is not None:
             m = main_by_url.get(str(row_values.get("URL") or "").strip())
@@ -422,6 +474,7 @@ __all__ = [
     "assemble_enriched_row",
     "build_inlinks_map",
     "build_title_meta_segment_maps",
+    "compute_aeo_readiness_score",
     "compute_seo_technical_copy_scores",
     "enrich_extra_rows_with_composite_scores",
     "main_by_url_map",

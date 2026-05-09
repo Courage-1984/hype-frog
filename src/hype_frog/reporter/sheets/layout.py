@@ -9,6 +9,297 @@ from openpyxl.worksheet.worksheet import Worksheet
 from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 from hype_frog.reporter.sheets.style_helpers import header_index, to_int
 
+# Canonical post-``reorder_columns`` layouts (single source for column helpers).
+_PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
+    "Main": [
+        "Health Icon",
+        "URL",
+        "Status Code",
+        "Indexability",
+        "Load Time (s)",
+        "Title",
+        "Meta Description",
+        "Word Count (Body)",
+        "SEO Health Score",
+        "Severity Badge",
+        "Action Needed",
+        "Owner",
+        "Status",
+        "Sprint",
+    ],
+    "Technical": [
+        "URL",
+        "Content Cluster ID",
+        "Status Code",
+        "Status Class",
+        "SEO Health Score",
+        "Severity Badge",
+        "Action Needed",
+        "Indexability Reason",
+        "TTFB (ms)",
+        "Total Request Time (ms)",
+        "Final URL",
+        "Canonical URL",
+        "Canonical Type",
+        "Owner",
+        "Status",
+        "Sprint",
+    ],
+    "FixPlan": [
+        "Issue Type",
+        "Severity",
+        "Priority Score",
+        "Affected Count",
+        "Affected URLs",
+        "Detail Reference Tab",
+        "Resolution Type",
+        "URL",
+        "Recommended Fix",
+        "Likely Root Cause",
+        "Owner",
+        "Agency Owner",
+        "Effort",
+        "Est. Hours",
+        "Est. Sprint Points",
+        "Aging/Priority",
+        "Status",
+        "Verified By",
+        "Date Resolved",
+        "Revenue Risk",
+        "Action Needed",
+        "Jump to Details",
+        "View Details",
+        "Sprint",
+    ],
+    "Summary": [
+        "Section",
+        "Severity",
+        "Issue",
+        "Affected URL Count",
+        "Reference Tab",
+        "Affected URLs (sample)",
+    ],
+    "Priority URLs": [
+        "URL",
+        "Business Risk Score",
+        "Severity Badge",
+        "SEO Health Score",
+        "GSC Impressions",
+        "GSC CTR",
+        "Revenue Intent",
+        "Critical Issues Count",
+        "Warning Issues Count",
+        "Action Needed",
+        "Why Prioritized",
+        "Owner",
+        "Status",
+        "Sprint",
+    ],
+    "Content": [
+        "URL",
+        "Word Count",
+        "Word Count Band",
+        "Readability (Rough Flesch)",
+        "H1 Count",
+        "Missing H1 Flag",
+        "Multiple H1 Flag",
+        "Title Missing",
+        "Meta Description Missing",
+        "Thin Content Flag",
+    ],
+    "Links": [
+        "URL",
+        "Internal Links Count",
+        "Unique Internal Links Count",
+        "Broken Internal Links Count",
+        "Unresolved Internal Links Count",
+        "Generic Anchor Text Count",
+        "External Links Count",
+        "Nofollow Internal Links Count",
+        "Nofollow External Links Count",
+        "Internal Link Statuses",
+    ],
+    "AIOSEO": [
+        "URL",
+        "WordPress Post ID",
+        "Direct Edit Link",
+        "AIOSEO Panel",
+        "Severity",
+        "Issue",
+        "Priority Score",
+        "Current Value",
+        "Recommended Target",
+        "How to Fix in AIOSEO",
+        "Reference Tab",
+        "Reference Field",
+        "Action Needed",
+        "Owner",
+        "Status",
+        "Est. Hours",
+        "Stable Issue ID",
+    ],
+    CONTENT_OPTIMISATION_HUB_SHEET: [
+        "Action Required",
+        "On-Page Optimization Score",
+        "SEO Score",
+        "Technical Health",
+        "Copy Score",
+        "Status",
+        "Assigned Owner",
+        "URL",
+        "Current Title",
+        "Title Health",
+        "Current Meta Desc",
+        "Meta Health",
+        "H1",
+        "H1 Health",
+        "H2",
+        "H2 Health",
+        "H3",
+        "H3 Health",
+        "H4",
+        "H4 Health",
+        "H5",
+        "H5 Health",
+        "H6",
+        "H6 Health",
+        "Elementor Builder Link",
+        "URL Slug Normalization",
+        "Current OG-Image URL",
+        "OG Image Preview",
+        "Open in Main",
+    ],
+    "AEO": [
+        "URL",
+        "AEO Readiness Score",
+        "AEO Badge",
+        "Why It Matters",
+        "FAQ Section Count",
+        "Question Heading Count",
+        "Paragraphs 40-60 Words Count",
+        "QAPage/FAQ Schema Present",
+        "Speakable Schema Present",
+        "HowTo Signal",
+        "Definition Signal",
+        "List/Table Answer Signal",
+    ],
+    "Indexability": [
+        "URL",
+        "Status Code",
+        "Status Class",
+        "Indexability Reason",
+        "Canonical URL",
+        "Canonical Type",
+        "Canonical Matches Final URL",
+        "Canonical in Sitemap Match",
+        "Meta Robots Raw",
+        "X-Robots-Tag",
+        "Final URL",
+    ],
+    "IssueInventory": [
+        "URL",
+        "Issue",
+        "Severity",
+        "Reference Tab",
+        "Stable Issue ID",
+        "Owner",
+        "Status",
+        "Sprint",
+        "Open in Main",
+        "Open in Reference",
+    ],
+}
+
+# Deep header copy for Content Optimisation Hub (cell comments; see ``apply_header_tooltips``).
+CONTENT_HUB_HEADER_COMMENT_SEO_SCORE: str = (
+    "SEO Score (0–100) is the blended on-page and technical-quality signal from the crawl. "
+    "It summarises how well this URL satisfied the audit model at export time: headings, "
+    "metadata coverage, thin-content risk, and issue severity baked into the pipeline score. "
+    "Use it as a triage anchor, not a live CMS measurement. When you rewrite titles or body "
+    "copy here, watch Title Health and On-Page Optimization Score for live feedback; expect "
+    "SEO Score to stay flat until you re-crawl. Interpret bands roughly as: 80+ strong "
+    "baseline, 60–79 tune content and internal links, below 60 treat as a rewrite or "
+    "template-level fix candidate."
+)
+
+CONTENT_HUB_HEADER_COMMENT_TECHNICAL_HEALTH: str = (
+    "Technical Health (0–100) isolates crawl and response hygiene: status class, indexability, "
+    "redirect behaviour, canonical consistency, and similar hard signals. High values mean "
+    "fewer blocking technical defects; low values mean the page may be losing equity to "
+    "errors, chains, or conflicting directives even when copy looks fine. Pair this column "
+    "with Technical Diagnostics for evidence. It is intentionally decoupled from editorial "
+    "drafts in this hub so copywriters can see whether engineering work is still a gate "
+    "before declaring a page production-ready."
+)
+
+CONTENT_HUB_HEADER_COMMENT_OG_IMAGE_PREVIEW: str = (
+    "Specs: 1200x630px, <300KB. Content: Use a high-contrast brand image with a centered "
+    "focal point. Avoid placing text near the edges as it will be cropped on mobile social feeds."
+)
+
+# Row-2 header cell comments for Content Optimisation Hub (openpyxl Comment; not Data Validation).
+CONTENT_HUB_ROW2_HEADER_COMMENTS: dict[str, str] = {
+    "SEO Score": CONTENT_HUB_HEADER_COMMENT_SEO_SCORE,
+    "Technical Health": CONTENT_HUB_HEADER_COMMENT_TECHNICAL_HEALTH,
+    "Copy Score": (
+        "Copy Score (0-100) reflects readability and copy hygiene from the crawl model. "
+        "It is a directional quality signal and updates on re-crawl after publication."
+    ),
+    "Action Required": (
+        "Dynamic decision output: if On-Page Optimization Score is below 85 this row returns "
+        "'Needs Copy'; otherwise it returns 'Complete'. Use it as the primary work queue."
+    ),
+    "On-Page Optimization Score": (
+        "Live weighted formula (0-100) derived from Title Health, Meta Health, and H1-H6 Health. "
+        "Any edit to those source cells recalculates this score immediately."
+    ),
+    "Status": (
+        "Workflow: To Do → In Progress → Review → Completed. Use the list validation on each row."
+    ),
+    "Assigned Owner": (
+        "Pick Copy Writer, Developer, or Server/Host. Aligns with conditional row coloring."
+    ),
+    "URL": "Live audited URL. Click the cell to open the page (HYPERLINK). TRIM is used when jumping to Main.",
+    "Current Title": "Title text from the crawl. Edit in CMS; health column updates from this cell.",
+    "Title Health": (
+        "Live formula: length vs 50–60 character target. Green when OK band; red when missing; "
+        "orange for short/long."
+    ),
+    "Current Meta Desc": "Meta description from crawl. Target 120–160 characters in the health column.",
+    "Meta Health": "Live formula for meta length vs target band (same semantics as Title Health).",
+    "H1": "Primary heading text from crawl (H1 line in Current H-Tag Structure when main H1 is absent).",
+    "H1 Health": "Live formula: missing H1, long block warning, or OK when present.",
+    "H2": "First H2 text from heading outline when not present on Main row.",
+    "H2 Health": "Live formula: optional/tip/present states for section headings.",
+    "H3": "First H3 from heading outline.",
+    "H3 Health": "Optional heading guidance; Present when text exists.",
+    "H4": "Parsed when present in heading outline.",
+    "H4 Health": "Optional H4 guidance.",
+    "H5": "Parsed when present in heading outline.",
+    "H5 Health": "Optional H5 guidance.",
+    "H6": "Parsed when present in heading outline.",
+    "H6 Health": "Optional H6 guidance.",
+    "Elementor Builder Link": "Opens the WordPress Elementor editor when a Post ID was detected.",
+    "URL Slug Normalization": (
+        "Editorial slug guidance field. Capture normalized slug wording you want reflected in URL, "
+        "title, and heading language before publishing."
+    ),
+    "Current OG-Image URL": "Sanitized Open Graph image URL from the crawl.",
+    "OG Image Preview": CONTENT_HUB_HEADER_COMMENT_OG_IMAGE_PREVIEW,
+    "Open in Main": "Jumps to Main (URL column) or Technical Diagnostics column A for this URL.",
+}
+
+
+def main_sheet_url_column_letter() -> str:
+    """Excel column letter for ``URL`` on Main after :func:`reorder_columns`.
+
+    Returns:
+        Column letter (for example ``B`` when ``Health Icon`` occupies column A).
+    """
+    order = _PREFERRED_COLUMN_ORDERS["Main"]
+    return get_column_letter(order.index("URL") + 1)
+
+
 MAIN_COLUMN_GROUP_DEFINITIONS: dict[str, list[str]] = {
     "Metadata Group": [
         "Title",
@@ -186,203 +477,7 @@ def reorder_columns(worksheet: Worksheet, sheet_name: str) -> None:
         worksheet: Worksheet to mutate.
         sheet_name: Canonical sheet name used to pick a preferred ordering.
     """
-    preferred_orders: dict[str, list[str]] = {
-        "Main": [
-            "Health Icon",
-            "URL",
-            "Status Code",
-            "Indexability",
-            "Load Time (s)",
-            "Title",
-            "Meta Description",
-            "Word Count (Body)",
-            "SEO Health Score",
-            "Severity Badge",
-            "Action Needed",
-            "Owner",
-            "Status",
-            "Sprint",
-        ],
-        "Technical": [
-            "URL",
-            "Content Cluster ID",
-            "Status Code",
-            "Status Class",
-            "SEO Health Score",
-            "Severity Badge",
-            "Action Needed",
-            "Indexability Reason",
-            "TTFB (ms)",
-            "Total Request Time (ms)",
-            "Final URL",
-            "Canonical URL",
-            "Canonical Type",
-            "Owner",
-            "Status",
-            "Sprint",
-        ],
-        "FixPlan": [
-            "Issue Type",
-            "Severity",
-            "Priority Score",
-            "Affected Count",
-            "Affected URLs",
-            "Detail Reference Tab",
-            "Resolution Type",
-            "URL",
-            "Recommended Fix",
-            "Likely Root Cause",
-            "Owner",
-            "Agency Owner",
-            "Effort",
-            "Est. Hours",
-            "Est. Sprint Points",
-            "Aging/Priority",
-            "Status",
-            "Verified By",
-            "Date Resolved",
-            "Revenue Risk",
-            "Action Needed",
-            "Jump to Details",
-            "View Details",
-            "Sprint",
-        ],
-        "Summary": [
-            "Section",
-            "Severity",
-            "Issue",
-            "Affected URL Count",
-            "Reference Tab",
-            "Affected URLs (sample)",
-        ],
-        "Priority URLs": [
-            "URL",
-            "Business Risk Score",
-            "Severity Badge",
-            "SEO Health Score",
-            "GSC Impressions",
-            "GSC CTR",
-            "Revenue Intent",
-            "Critical Issues Count",
-            "Warning Issues Count",
-            "Action Needed",
-            "Why Prioritized",
-            "Owner",
-            "Status",
-            "Sprint",
-        ],
-        "Content": [
-            "URL",
-            "Word Count",
-            "Word Count Band",
-            "Readability (Rough Flesch)",
-            "H1 Count",
-            "Missing H1 Flag",
-            "Multiple H1 Flag",
-            "Title Missing",
-            "Meta Description Missing",
-            "Thin Content Flag",
-        ],
-        "Links": [
-            "URL",
-            "Internal Links Count",
-            "Unique Internal Links Count",
-            "Broken Internal Links Count",
-            "Unresolved Internal Links Count",
-            "Generic Anchor Text Count",
-            "External Links Count",
-            "Nofollow Internal Links Count",
-            "Nofollow External Links Count",
-            "Internal Link Statuses",
-        ],
-        "AIOSEO": [
-            "URL",
-            "WordPress Post ID",
-            "Direct Edit Link",
-            "AIOSEO Panel",
-            "Severity",
-            "Issue",
-            "Priority Score",
-            "Current Value",
-            "Recommended Target",
-            "How to Fix in AIOSEO",
-            "Reference Tab",
-            "Reference Field",
-            "Action Needed",
-            "Owner",
-            "Status",
-            "Est. Hours",
-            "Stable Issue ID",
-        ],
-        CONTENT_OPTIMISATION_HUB_SHEET: [
-            "Action Required",
-            "Status",
-            "Assigned Owner",
-            "URL",
-            "Current SEO Score",
-            "Projected SEO Score",
-            "Elementor Builder Link",
-            "Target Keywords",
-            "Current Page Copy Snippet",
-            "Current Title",
-            "Proposed Title (50-60 Chars)",
-            "Title Count",
-            "Current Meta Desc",
-            "Proposed Meta Desc (120-160 Chars)",
-            "Desc Count",
-            "Current H-Tag Structure",
-            "Proposed H-Tag Fixes",
-            "AEO Answer Block Draft",
-            "FAQ/QA Draft",
-            "Current OG-Image URL",
-            "OG Image Preview",
-            "Social Share Note",
-            "SEO Score",
-            "Technical Health",
-            "Copy Score",
-            "Open in Main",
-        ],
-        "AEO": [
-            "URL",
-            "AEO Readiness Score",
-            "AEO Badge",
-            "Why It Matters",
-            "FAQ Section Count",
-            "Question Heading Count",
-            "Paragraphs 40-60 Words Count",
-            "QAPage/FAQ Schema Present",
-            "Speakable Schema Present",
-            "HowTo Signal",
-            "Definition Signal",
-            "List/Table Answer Signal",
-        ],
-        "Indexability": [
-            "URL",
-            "Status Code",
-            "Status Class",
-            "Indexability Reason",
-            "Canonical URL",
-            "Canonical Type",
-            "Canonical Matches Final URL",
-            "Canonical in Sitemap Match",
-            "Meta Robots Raw",
-            "X-Robots-Tag",
-            "Final URL",
-        ],
-        "IssueInventory": [
-            "URL",
-            "Issue",
-            "Severity",
-            "Reference Tab",
-            "Stable Issue ID",
-            "Owner",
-            "Status",
-            "Sprint",
-            "Open in Main",
-            "Open in Reference",
-        ],
-    }
-    preferred = preferred_orders.get(sheet_name)
+    preferred = _PREFERRED_COLUMN_ORDERS.get(sheet_name)
     if not preferred or worksheet.max_row < 1:
         return
     current_headers = [

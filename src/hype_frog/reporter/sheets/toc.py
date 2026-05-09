@@ -132,11 +132,10 @@ def apply_workbook_toc_and_links(
     _rebuild_toc_body(toc_ws, wb)
 
     link_map = {
-        "Summary": "Reference Tab",
+        "Issue Register": "Reference Area",
         "FixPlan": "Detail Reference Tab",
         "Dashboard": "Target Tab",
         "AIOSEO": "Reference Tab",
-        "IssueInventory": "Reference Tab",
     }
     for sheet_name, col_header in link_map.items():
         if sheet_name not in wb.sheetnames:
@@ -173,6 +172,7 @@ def apply_workbook_toc_and_links(
         wide_sheets = {
             "Main",
             "Technical",
+            "Technical Diagnostics",
             CONTENT_OPTIMISATION_HUB_SHEET,
             "FixPlan",
             "Content",
@@ -192,6 +192,11 @@ def apply_workbook_toc_and_links(
             "Duplicates",
             "PSI Performance",
             "IssueInventory",
+            "Issue Register",
+            "Content & AI Readiness",
+            "Link Intelligence",
+            "Template & Duplication Risks",
+            "Playbook",
             "RunMetadata",
             "DeltaFromPreviousRun",
             "ResolvedIssues",
@@ -206,7 +211,7 @@ def apply_workbook_toc_and_links(
             "Priority URLs",
         }
         if tab_name == CONTENT_OPTIMISATION_HUB_SHEET:
-            target_freeze = "F3" if ws.max_row >= 3 and ws.max_column >= 5 else None
+            target_freeze = "G3" if ws.max_row >= 3 and ws.max_column >= 5 else None
             _set_freeze_panes_safe(ws, target_freeze)
         elif tab_name in standard_data_sheets:
             target_freeze = "B2" if ws.max_row >= 2 and ws.max_column >= 2 else None

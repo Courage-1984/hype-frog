@@ -108,7 +108,7 @@ def apply_mock_table_styling(
 
     if max_row >= min_row:
         if worksheet.title == CONTENT_OPTIMISATION_HUB_SHEET:
-            set_freeze_panes_safe(worksheet, "F3")
+            set_freeze_panes_safe(worksheet, "G3")
         else:
             set_freeze_panes_safe(worksheet, "A2")
 

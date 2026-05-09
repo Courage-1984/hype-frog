@@ -27,15 +27,16 @@ from hype_frog.orchestration.export_registry import (
     build_duplicates_rows,
     build_pattern_rows,
     build_priority_rows,
-    build_schema_and_snippets_rows,
     build_sitemapqa_rows,
     get_finalization_steps,
+    get_merged_sheet_columns,
     get_sheet_sequence,
     get_standard_sheet_columns,
 )
 from hype_frog.orchestration.run_setup import RunSetup
 from hype_frog.pipeline.export import sanitize_rows, to_excel_safe
 from hype_frog.reporter import adjust_sheet_format, apply_tab_hyperlinks
+from hype_frog.reporter.engine_rows import CONTENT_HUB_EXPORT_COLUMNS
 from hype_frog.reporter.excel_engine import (
     apply_workbook_export_guardrails,
     build_content_optimisation_hub_rows,
@@ -43,6 +44,13 @@ from hype_frog.reporter.excel_engine import (
     write_dict_rows_sheet,
 )
 from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
+from hype_frog.reporter.sheets.merged_builders import (
+    build_content_ai_readiness_rows,
+    build_issue_register_rows,
+    build_link_intelligence_rows,
+    build_technical_diagnostics_rows,
+    build_template_duplication_risks_rows,
+)
 from hype_frog.reporter.summary_builder import (
     build_issue_inventory_rows,
     build_summary_rows,
@@ -170,33 +178,9 @@ def execute_export(
         adjust_sheet_format(writer, "Main")
         if full_suite:
             sheet_columns = get_standard_sheet_columns()
-            for sheet_name in (
-                "Technical",
-                "Content",
-                "Links",
-                "Media",
-                "Schema & Metadata",
-            ):
-                write_dict_rows_sheet(
-                    writer,
-                    sheet_name,
-                    sheet_columns[sheet_name],
-                    typed_extra_rows,
-                )
-            schema_and_snippet_rows = build_schema_and_snippets_rows(
-                extra_rows=extra_rows,
-                build_aeo_rows_fn=build_aeo_rows_fn,
-            )
-            aeo_rows = schema_and_snippet_rows["AEO"]
-            write_dict_rows_sheet(writer, "AEO", sheet_columns["AEO"], aeo_rows)
+            merged_columns = get_merged_sheet_columns()
             aioseo_rows = build_aioseo_rows_fn(extra_rows, main_by_url, DEFAULT_OWNER_BY_SEVERITY)
             write_dict_rows_sheet(writer, "AIOSEO", sheet_columns["AIOSEO"], aioseo_rows)
-            write_dict_rows_sheet(writer, "Security", sheet_columns["Security"], typed_extra_rows)
-            psi_rows = schema_and_snippet_rows["PSI Performance"]
-            to_excel_safe(pd.DataFrame(psi_rows), writer, "PSI Performance", index=False)
-            write_dict_rows_sheet(
-                writer, "Indexability", sheet_columns["Indexability"], typed_extra_rows
-            )
             redirects_rows = []
             for row in extra_rows:
                 redirects_rows.append({
@@ -213,34 +197,16 @@ def execute_export(
                         and int(row.get("Redirect Chain Length") or 0) > 0
                     ),
                 })
-            write_dict_rows_sheet(
-                writer, "Redirects",
-                sheet_columns["Redirects"],
-                redirects_rows,
-            )
             link_rows = []
             for row in extra_rows:
                 for item in row.get("Link Details", []):
                     target_status = status_by_url.get(normalize_url_key(item.get("Target URL", "")))
                     crawlable = target_status is None or (isinstance(target_status, int) and target_status < 400)
                     link_rows.append({**item, "Target Status (if crawled)": target_status, "Crawlable": crawlable})
-            to_excel_safe(pd.DataFrame(link_rows), writer, "LinksDetail", index=False)
             duplicate_rows = build_duplicates_rows(main_rows)
-            to_excel_safe(pd.DataFrame(duplicate_rows), writer, "Duplicates", index=False)
             pattern_rows, template_issue_counts = build_pattern_rows(
                 extra_rows,
                 extract_subfolder_fn=extract_subfolder_fn,
-            )
-            to_excel_safe(
-                pd.DataFrame(pattern_rows),
-                writer,
-                "Pattern and Template Issues",
-                index=False,
-                startrow=1,
-            )
-            writer.book["Pattern and Template Issues"]["A1"] = (
-                "WHAT IS THIS? This tab detects structural flaws coded into your page templates. "
-                "Fixing one template here can instantly fix hundreds of pages."
             )
             aeo_issue_names = {
                 "Low AEO Readiness Score",
@@ -256,14 +222,61 @@ def execute_export(
                 value_or_default_fn,
                 main_rows=typed_main_rows,
             )
-            to_excel_safe(pd.DataFrame(summary_rows), writer, "Summary", index=False)
             issue_inventory_rows = build_issue_inventory_rows(
                 summary_rules,
                 typed_extra_rows,
                 main_rows=typed_main_rows,
             )
             issue_inventory_df = pd.DataFrame(issue_inventory_rows)
-            to_excel_safe(issue_inventory_df, writer, "IssueInventory", index=False)
+            technical_diagnostics_rows = build_technical_diagnostics_rows(extra_rows)
+            content_ai_rows = build_content_ai_readiness_rows(extra_rows)
+            issue_register_rows = build_issue_register_rows(
+                summary_rows=summary_rows,
+                issue_inventory_rows=issue_inventory_rows,
+            )
+            graph_rows = build_crawlgraph_rows(
+                main_urls=[str(row.get("URL") or "") for row in main_rows if row.get("URL")],
+                extra_rows=extra_rows,
+            )
+            link_intelligence_rows = build_link_intelligence_rows(
+                extra_rows=extra_rows,
+                link_detail_rows=link_rows,
+                crawlgraph_rows=graph_rows,
+            )
+            template_duplication_rows = build_template_duplication_risks_rows(
+                duplicate_rows=duplicate_rows,
+                pattern_rows=pattern_rows,
+            )
+            write_dict_rows_sheet(
+                writer,
+                "Issue Register",
+                merged_columns["Issue Register"],
+                issue_register_rows,
+            )
+            write_dict_rows_sheet(
+                writer,
+                "Technical Diagnostics",
+                merged_columns["Technical Diagnostics"],
+                technical_diagnostics_rows,
+            )
+            write_dict_rows_sheet(
+                writer,
+                "Content & AI Readiness",
+                merged_columns["Content & AI Readiness"],
+                content_ai_rows,
+            )
+            write_dict_rows_sheet(
+                writer,
+                "Link Intelligence",
+                merged_columns["Link Intelligence"],
+                link_intelligence_rows,
+            )
+            write_dict_rows_sheet(
+                writer,
+                "Template & Duplication Risks",
+                merged_columns["Template & Duplication Risks"],
+                template_duplication_rows,
+            )
             fixplan_rows = build_fixplan_rows(
                 summary_rules, typed_extra_rows, aeo_issue_names, root_cause_and_fix,
                 DEFAULT_EFFORT_BY_SEVERITY, DEFAULT_OWNER_BY_SEVERITY,
@@ -273,22 +286,10 @@ def execute_export(
             hub_base_rows = build_content_optimisation_hub_rows(
                 typed_main_rows, typed_extra_rows, fixplan_rows
             )
-            extra_by_url = {
-                str(row.values.get("URL") or ""): row.values for row in typed_extra_rows
-            }
-            content_hub_rows: list[dict[str, object]] = []
-            for hub_row in hub_base_rows:
-                metrics = extra_by_url.get(str(hub_row.get("URL") or ""), {})
-                content_hub_rows.append({**hub_row, "SEO Score": metrics.get("SEO Score", 0.0), "Technical Health": metrics.get("Technical Health", 0.0)})
-            content_hub_cols = [
-                "Action Required", "Status", "Assigned Owner", "URL", "Current SEO Score", "Projected SEO Score",
-                "Elementor Builder Link", "Target Keywords", "Current Page Copy Snippet", "Current Title",
-                "Proposed Title (50-60 Chars)", "Title Count", "Current Meta Desc",
-                "Proposed Meta Desc (120-160 Chars)", "Desc Count", "Current H-Tag Structure",
-                "Proposed H-Tag Fixes", "AEO Answer Block Draft", "FAQ/QA Draft", "Current OG-Image URL",
-                "OG Image Preview", "Social Share Note", "SEO Score", "Technical Health", "Copy Score", "Open in Main",
-            ]
-            write_dict_rows_sheet(writer, CONTENT_OPTIMISATION_HUB_SHEET, content_hub_cols, content_hub_rows)
+            content_hub_cols = list(CONTENT_HUB_EXPORT_COLUMNS)
+            write_dict_rows_sheet(
+                writer, CONTENT_OPTIMISATION_HUB_SHEET, content_hub_cols, hub_base_rows
+            )
             # Remaining dashboard/delta/report tabs preserved from prior flow
             priority_rows = build_priority_rows(
                 extra_rows,
@@ -496,7 +497,7 @@ def execute_export(
                     "Why It Matters": "Improves engagement by matching platform context.",
                 },
             ]
-            to_excel_safe(pd.DataFrame(quick_reference_rows), writer, "Quick Reference Guide", index=False)
+            playbook_rows = list(quick_reference_rows)
             run_meta_rows = [
                 {"Key": "Run Timestamp", "Value": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")},
                 {"Key": "Total URLs", "Value": len(urls)},
@@ -529,12 +530,32 @@ def execute_export(
                 {"Section": "Color Key", "Term": "Orange", "Meaning": "Warning / in progress / medium-priority attention needed.", "Values/Threshold": "Medium risk", "Related Tabs": "All"},
                 {"Section": "Color Key", "Term": "Red", "Meaning": "Failure / high-priority issue or to-do critical task.", "Values/Threshold": "High risk", "Related Tabs": "All"},
             ]
-            to_excel_safe(pd.DataFrame(legend_rows), writer, "Glossary & Legend", index=False)
-            graph_rows = build_crawlgraph_rows(
-                main_urls=[str(row.get("URL") or "") for row in main_rows if row.get("URL")],
-                extra_rows=extra_rows,
+            playbook_rows.extend(
+                [
+                    {
+                        "Section": "",
+                        "Item": "",
+                        "Guideline": "",
+                        "Why It Matters": "",
+                    },
+                    {
+                        "Section": "[Glossary & Legend]",
+                        "Item": "",
+                        "Guideline": "",
+                        "Why It Matters": "",
+                    },
+                ]
             )
-            to_excel_safe(pd.DataFrame(graph_rows), writer, "CrawlGraph", index=False)
+            for row in legend_rows:
+                playbook_rows.append(
+                    {
+                        "Section": row.get("Section", ""),
+                        "Item": row.get("Term", ""),
+                        "Guideline": row.get("Values/Threshold", ""),
+                        "Why It Matters": row.get("Meaning", ""),
+                    }
+                )
+            to_excel_safe(pd.DataFrame(playbook_rows), writer, "Playbook", index=False)
             sitemap_rows = build_sitemapqa_rows(
                 sitemap_meta=sitemap_meta,
                 extra_rows=extra_rows,
@@ -559,6 +580,12 @@ def execute_export(
                         )
             elif final_step == "apply_workbook_export_guardrails":
                 apply_workbook_export_guardrails(writer.book)
+        if full_suite:
+            desired_order = ["Table of Contents"] + get_sheet_sequence(registry_config)
+            wb = writer.book
+            for idx, tab_name in enumerate(desired_order):
+                if tab_name in wb.sheetnames:
+                    wb.move_sheet(wb[tab_name], offset=-wb.index(wb[tab_name]) + idx)
         logger.info("Audit complete! Report saved to %s", output_filename)
     finally:
         if writer is not None:

@@ -9,6 +9,18 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.core.url_normalization import normalize_url
 from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
+from hype_frog.reporter.sheets.layout import main_sheet_url_column_letter
+
+TECHNICAL_DIAGNOSTICS_SHEET = "Technical Diagnostics"
+
+
+def _technical_diagnostics_jump_formula(url_col_letter: str, row: int, *, link_label: str) -> str:
+    """Build a HYPERLINK+MATCH formula targeting the merged Technical Diagnostics sheet."""
+    td = TECHNICAL_DIAGNOSTICS_SHEET
+    return (
+        f'=IFERROR(HYPERLINK("#\'{td}\'!A"&MATCH({url_col_letter}{row},\'{td}\'!A:A,0),'
+        f'"{link_label}"),HYPERLINK("#\'{td}\'!A1","{link_label}"))'
+    )
 
 
 def normalize_url_key(url: object, keep_query: bool = True) -> str:
@@ -121,11 +133,15 @@ def add_url_navigation_links(
             new_col = worksheet.max_column + 1
             worksheet.cell(row=1, column=new_col, value="Open in Main")
             url_col_letter = get_column_letter(url_col)
+            main_u = main_sheet_url_column_letter()
             for r in range(2, worksheet.max_row + 1):
                 worksheet.cell(
                     row=r,
                     column=new_col,
-                    value=f'=IFERROR(HYPERLINK("#Main!A"&MATCH({url_col_letter}{r},Main!A:A,0),"Open"),HYPERLINK("#Main!A1","Open"))',
+                    value=(
+                        f'=IFERROR(HYPERLINK("#\'Main\'!{main_u}"&MATCH(TRIM({url_col_letter}{r}),'
+                        f'\'Main\'!{main_u}:{main_u},0),"Open"),HYPERLINK("#\'Main\'!{main_u}1","Open"))'
+                    ),
                 )
 
 
@@ -149,7 +165,7 @@ def apply_cross_sheet_links(
     if debug_excel_isolation_mode:
         return
     headers = header_index_fn(worksheet)
-    if sheet_name == "Summary":
+    if sheet_name in {"Summary", "Issue Register"}:
         issue_col = headers.get("Issue")
         fix_ws = writer.book["FixPlan"] if "FixPlan" in writer.book.sheetnames else None
         fix_headers = header_index_fn(fix_ws) if fix_ws else {}
@@ -181,7 +197,9 @@ def apply_cross_sheet_links(
                 worksheet.cell(
                     row=r,
                     column=target_col,
-                    value=f'=IFERROR(HYPERLINK("#Technical!A"&MATCH({col_letter}{r},Technical!A:A,0),"Open Technical"),HYPERLINK("#Technical!A1","Open Technical"))',
+                    value=_technical_diagnostics_jump_formula(
+                        col_letter, r, link_label="Open Technical"
+                    ),
                 )
     if sheet_name == "Priority URLs":
         url_col = headers.get("URL")
@@ -195,23 +213,31 @@ def apply_cross_sheet_links(
                 worksheet.cell(
                     row=r,
                     column=new_col,
-                    value=f'=IFERROR(HYPERLINK("#Technical!A"&MATCH({url_letter}{r},Technical!A:A,0),"Open"),HYPERLINK("#Technical!A1","Open"))',
+                    value=_technical_diagnostics_jump_formula(
+                        url_letter, r, link_label="Open"
+                    ),
                 )
-    if sheet_name == "IssueInventory":
+    if sheet_name in {"IssueInventory", "Issue Register"}:
         url_col = headers.get("URL")
         issue_col = headers.get("Issue")
-        reference_tab_col = headers.get("Reference Tab")
+        reference_tab_col = headers.get("Reference Tab") or headers.get(
+            "Reference Area"
+        )
         if url_col:
             new_col = headers.get("Open in Main")
             if not new_col:
                 new_col = worksheet.max_column + 1
                 worksheet.cell(row=1, column=new_col, value="Open in Main")
             url_letter = get_column_letter(url_col)
+            main_u = main_sheet_url_column_letter()
             for r in range(2, worksheet.max_row + 1):
                 worksheet.cell(
                     row=r,
                     column=new_col,
-                    value=f'=IFERROR(HYPERLINK("#Main!A"&MATCH({url_letter}{r},Main!A:A,0),"Open"),HYPERLINK("#Main!A1","Open"))',
+                    value=(
+                        f'=IFERROR(HYPERLINK("#\'Main\'!{main_u}"&MATCH(TRIM({url_letter}{r}),'
+                        f'\'Main\'!{main_u}:{main_u},0),"Open"),HYPERLINK("#\'Main\'!{main_u}1","Open"))'
+                    ),
                 )
         if reference_tab_col:
             open_ref_col = headers.get("Open in Reference")
@@ -259,7 +285,9 @@ def apply_cross_sheet_links(
                 worksheet.cell(
                     row=r,
                     column=technical_col,
-                    value=f'=IFERROR(HYPERLINK("#Technical!A"&MATCH({url_letter}{r},Technical!A:A,0),"Open"),HYPERLINK("#Technical!A1","Open"))',
+                    value=_technical_diagnostics_jump_formula(
+                        url_letter, r, link_label="Open"
+                    ),
                 )
     if sheet_name == "FixPlan" and CONTENT_OPTIMISATION_HUB_SHEET in writer.book.sheetnames:
         headers = header_index_fn(worksheet)
@@ -277,8 +305,8 @@ def apply_cross_sheet_links(
                     row=r,
                     column=hub_status_col,
                     value=(
-                        f"=IFERROR(INDEX('{CONTENT_OPTIMISATION_HUB_SHEET}'!A:A,"
-                        f"MATCH({u_letter}{r},'{CONTENT_OPTIMISATION_HUB_SHEET}'!D:D,0)),"
+                        f"=IFERROR(INDEX('{CONTENT_OPTIMISATION_HUB_SHEET}'!C:C,"
+                        f"MATCH({u_letter}{r},'{CONTENT_OPTIMISATION_HUB_SHEET}'!F:F,0)),"
                         '"Not in Hub")'
                     ),
                 )
