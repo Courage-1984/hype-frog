@@ -20,13 +20,43 @@ def _sanitize_cell_text(text: str) -> str:
     return s
 
 
+def _normalize_row_seo_value(raw: float) -> float:
+    """Map per-URL SEO metrics to a 0–100 scale (handles 0–1 fractions vs 0–100 points)."""
+    try:
+        x = float(raw)
+    except (TypeError, ValueError):
+        return 0.0
+    if x <= 1.5:
+        return min(100.0, max(0.0, x * 100.0))
+    return min(100.0, max(0.0, x))
+
+
 def average_seo_score_pct(main_rows: list[MainRowPayload]) -> float:
+    """Mean SEO signal across rows (``SEO Score`` when present; else ``SEO Health Score``).
+
+    Technical Diagnostics rows often populate ``SEO Health Score`` while ``SEO Score`` stays
+    at the default zero until merged enrichment—treat literal zero as missing so averages
+    reflect diagnostics health instead of zero-padding.
+    """
     vals: list[float] = []
     for row in main_rows:
-        raw = row.values.get("SEO Score")
+        v = row.values
+        raw = v.get("SEO Score")
+        if raw is None or str(raw).strip() == "":
+            raw = v.get("SEO Health Score")
+        else:
+            try:
+                if float(raw) == 0.0:
+                    alt = v.get("SEO Health Score")
+                    if alt is not None and str(alt).strip() != "":
+                        raw = alt
+            except (TypeError, ValueError):
+                pass
+            if raw is None or str(raw).strip() == "":
+                raw = v.get("SEO Health Score")
         try:
             if raw is not None and str(raw).strip() != "":
-                vals.append(float(raw))
+                vals.append(_normalize_row_seo_value(float(raw)))
         except (TypeError, ValueError):
             continue
     return sum(vals) / len(vals) if vals else 0.0
@@ -198,17 +228,21 @@ class NarrativeEngine:
         if total_urls <= 0:
             return _DEFAULT_NO_CRAWL
 
-        if avg_seo_score_pct < 40.0 or critical_url_count > 5:
+        seo_pct = max(0.0, min(100.0, float(avg_seo_score_pct)))
+
+        # Triage: critical mass OR average SEO below 50%. Optimization: 50–74%. Dominance: 75%+.
+        if critical_url_count > 5 or seo_pct < 50.0:
             return _sanitize_cell_text(
-                "Critical technical debt is currently the primary barrier to growth."
+                "Critical technical debt is the primary barrier to growth. Stabilize crawl "
+                "health, critical coverage, and indexing fundamentals before optimization work."
             )
-        if avg_seo_score_pct > 75.0:
+        if seo_pct < 75.0:
             return _sanitize_cell_text(
-                "The site is technically elite. Focus on advanced schema and competitive "
-                "content gaps."
+                "Technical foundations are solid. Shift focus to PageSpeed and AEO structure."
             )
         return _sanitize_cell_text(
-            "Technical foundations are solid. Shift focus to PageSpeed and AEO structure."
+            "The site is technically elite. Focus on advanced schema and competitive "
+            "content gaps."
         )
 
 

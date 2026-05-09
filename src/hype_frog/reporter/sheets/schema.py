@@ -18,7 +18,10 @@ def add_schema_header_tooltips(
     author = "hype-frog"
     tooltip_messages = {
         "TTFB (ms)": "Time to First Byte. Measures server responsiveness. Fix: Optimise server-side code or use a CDN.",
-        "AEO Readiness Score": "Composite Answer Engine Optimisation quality score. Fix: Add concise answer sections, FAQ schema, and clear question headings.",
+        "AEO Readiness Score": (
+            "Weighted 0–100 score (answer blocks, FAQ/HowTo/Speakable schema, FK grade 7–10, "
+            "lists/tables, robots AI-bot coverage). Target 70+ for strong extraction odds."
+        ),
         "Indexability Reason": "Primary reason this URL may not be indexed. Fix: Resolve noindex directives, non-200 responses, and canonical mismatches.",
         "Status Code": "HTTP status returned for the URL. Fix: Resolve 4xx/5xx errors and remove unnecessary redirect chains.",
         "SEO Health Score": "Weighted technical SEO quality score for this URL. Fix: Prioritize critical issues and improve warnings in FixPlan.",

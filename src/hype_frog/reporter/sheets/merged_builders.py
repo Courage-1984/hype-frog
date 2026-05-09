@@ -37,6 +37,7 @@ CONTENT_AI_READINESS_COLUMNS: tuple[str, ...] = (
     "Content Category",  # B
     "Word Count",
     "Readability (Rough Flesch)",
+    "Flesch-Kincaid Grade (Est.)",
     "Thin Content Flag",
     "H1 Count",
     "Missing H1 Flag",
@@ -47,6 +48,7 @@ CONTENT_AI_READINESS_COLUMNS: tuple[str, ...] = (
     "Schema Types Found",
     "Schema Parse Errors",
     "Question Heading Count",
+    "Answer Blocks",
     "FAQ Section Count",
     "Image Count",
     "Images Missing Alt",
@@ -96,6 +98,8 @@ LINK_INTELLIGENCE_COLUMNS: tuple[str, ...] = (
     "Source Legacy Tab",
 )
 
+# Strict seven-column client export (no sparse ``Column_N`` headers); rows built in
+# ``build_link_inventory_rows`` and written via ``write_dict_rows_sheet``.
 LINK_INVENTORY_COLUMNS: tuple[str, ...] = (
     "Source URL",
     "Target URL",
@@ -259,7 +263,11 @@ def build_technical_diagnostics_rows(
 def build_content_ai_readiness_rows(
     extra_rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Build merged rows for the 'Content & AI Readiness' worksheet."""
+    """Build merged rows for the 'Content & AI Readiness' worksheet.
+
+    ``AEO Readiness Score`` is produced upstream by
+    ``hype_frog.pipeline.assemble.compute_aeo_readiness_score`` (weighted 0–100 model).
+    """
     rows: list[dict[str, Any]] = []
     for row in extra_rows:
         categories: list[str] = ["Content"]
@@ -296,6 +304,7 @@ def build_content_ai_readiness_rows(
                 "Readability (Rough Flesch)": _to_float(
                     row.get("Readability (Rough Flesch)"), 0.0
                 ),
+                "Flesch-Kincaid Grade (Est.)": row.get("Flesch-Kincaid Grade (Est.)"),
                 "Thin Content Flag": _to_bool(row.get("Thin Content Flag")),
                 "H1 Count": _to_int(row.get("H1 Count"), 0),
                 "Missing H1 Flag": _to_bool(row.get("Missing H1 Flag")),
@@ -306,6 +315,7 @@ def build_content_ai_readiness_rows(
                 "Schema Types Found": row.get("Schema Types Found"),
                 "Schema Parse Errors": _to_int(row.get("Schema Parse Errors"), 0),
                 "Question Heading Count": _to_int(row.get("Question Heading Count"), 0),
+                "Answer Blocks": _to_int(row.get("Paragraphs 40-60 Words Count"), 0),
                 "FAQ Section Count": _to_int(row.get("FAQ Section Count"), 0),
                 "Image Count": _to_int(row.get("Image Count"), 0),
                 "Images Missing Alt": _to_int(row.get("Images Missing Alt"), 0),

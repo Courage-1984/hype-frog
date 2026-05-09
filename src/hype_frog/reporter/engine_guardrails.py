@@ -82,8 +82,9 @@ _HEADER_TOOLTIP_MESSAGES: dict[str, str] = {
     "Internal PageRank": ("Authority score based on internal linking structure."),
     "Click Depth": ("Number of clicks required to reach this URL from the homepage."),
     "AEO Readiness Score": (
-        "Proprietary score (0-100) measuring how likely an AI engine is to extract "
-        "a direct answer from this URL."
+        "Weighted 0–100 score: answer paragraphs under question H2/H3, FAQ/HowTo/Speakable "
+        "schema, Flesch–Kincaid grade band 7–10, list/table structure, and robots.txt "
+        "coverage for GPTBot/PerplexityBot/CCBot. 70+ targets high extraction probability."
     ),
     "Orphan Pages": (
         "Pages with zero internal incoming links; difficult for search engines to "
