@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from openpyxl.comments import Comment
+from openpyxl.formatting.rule import CellIsRule
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -55,6 +56,25 @@ _CONTENT_HUB_DYNAMIC_COLUMN = (
 # Hub data starts row 3 (row 1 banner, row 2 headers); F = Status per preferred column order.
 _CONTENT_HUB_STATUS_RANGE = f"'{CONTENT_OPTIMISATION_HUB_SHEET}'!F3:F10000"
 
+DASHBOARD_BRAND_A1 = "🐸 HYPE FROG: SEO & AEO Intelligence Report"
+
+# KPI cells hold 0–1 fractions (or formulas yielding 0–1); Excel ``0%`` displays e.g. 0.6657 as 67%.
+_DASHBOARD_PERCENT_KPI_CELLS: tuple[str, ...] = (
+    "B5",  # Average SEO Score
+    "B6",  # Technical Health
+    "B12",  # Crawl Success Rate % (2xx)
+    "B19",  # AEO Opportunity Gap (executive metrics row 19)
+)
+
+# Narrative/metrics read merged technical rows from this sheet (legacy alias: "Technical").
+_TECHNICAL_SOURCE_SHEET_NAMES: tuple[str, ...] = ("Technical Diagnostics", "Technical")
+
+# Average numeric AEO Extractability column without hard-coded column letters (headers may shift).
+_CONTENT_AI_AEO_EXTRACTABILITY_AVG = (
+    "IFERROR(AVERAGE(INDEX('Content & AI Readiness'!$1:$1048576,0,"
+    'MATCH("AEO Extractability Score",\'Content & AI Readiness\'!$1:$1,0))),0)'
+)
+
 # Dashboard KPI: optional external HEAD sniff ratio (values live on RunMetadata).
 _EXCEL_EXTERNAL_LINK_HEALTH_PCT = (
     '=IF(IFERROR(INDEX(\'RunMetadata\'!$B:$B,MATCH("External Sniff Performed",'
@@ -73,6 +93,18 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return float(value or default)
     except (TypeError, ValueError):
         return default
+
+
+def _technical_sheet_rows(writer: Any) -> list[dict[str, Any]]:
+    """Return data rows from Technical Diagnostics (preferred) or legacy Technical sheet."""
+    try:
+        names = list(writer.book.sheetnames)
+    except Exception:
+        return []
+    for sheet_title in _TECHNICAL_SOURCE_SHEET_NAMES:
+        if sheet_title in names:
+            return _sheet_rows(writer.book[sheet_title])
+    return []
 
 
 def _sheet_rows(worksheet: Worksheet) -> list[dict[str, Any]]:
@@ -165,7 +197,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             projected_pass_from_feed = None
 
         title = worksheet["A1"]
-        title.value = "Executive SEO & AEO Performance Report"
+        title.value = DASHBOARD_BRAND_A1
         worksheet["A2"] = "Executive SEO & AEO Dashboard"
         worksheet["A2"].font = Font(color=STD_NAVY, bold=True, size=12)
         title.font = Font(color=STD_NAVY, bold=True, size=16)
@@ -190,9 +222,10 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             f'=IFERROR(AVERAGE({_MAIN_DYNAMIC_COLUMN.format(header="SEO Score")}),'
             f'IFERROR(AVERAGE({_MAIN_DYNAMIC_COLUMN.format(header="SEO Health Score")}),0))/100'
         )
+        worksheet["B5"].number_format = "0%"
         worksheet["A6"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Technical Health")'
         worksheet["B6"] = "=AVERAGE('Technical Diagnostics'!E:E)/100"
-        worksheet["B6"].number_format = "0.00%"
+        worksheet["B6"].number_format = "0%"
         worksheet["A7"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Performance (PSI)")'
         worksheet["B7"] = (
             f'=IFERROR(('
@@ -200,7 +233,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             f'IFERROR(AVERAGE({_TD_DYNAMIC_COLUMN.format(header="Desktop PSI Score")}),0)'
             f')/2,0)/100'
         )
-        worksheet["B7"].number_format = "0.00%"
+        worksheet["B7"].number_format = "0%"
         worksheet["A8"] = (
             '=HYPERLINK("#\'Technical Diagnostics\'!A1","Mobile vs. Desktop Variance")'
         )
@@ -219,24 +252,24 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         )
         worksheet["A11"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Error Rate % (4xx/5xx)")'
         worksheet["B11"] = "=IFERROR((COUNTIFS('Technical Diagnostics'!$C:$C,\">=400\",'Technical Diagnostics'!$C:$C,\"<500\")+COUNTIFS('Technical Diagnostics'!$C:$C,\">=500\",'Technical Diagnostics'!$C:$C,\"<600\"))/COUNTIFS('Technical Diagnostics'!$C:$C,\">0\"),0)"
-        worksheet["B11"].number_format = "0.00%"
+        worksheet["B11"].number_format = "0%"
         worksheet["A12"] = (
             '=HYPERLINK("#\'Technical Diagnostics\'!A1","Crawl Success Rate % (2xx)")'
         )
         worksheet["B12"] = "=IFERROR(COUNTIFS('Technical Diagnostics'!$C:$C,\">=200\",'Technical Diagnostics'!$C:$C,\"<300\")/COUNTIFS('Technical Diagnostics'!$C:$C,\">0\"),0)"
-        worksheet["B12"].number_format = "0.00%"
+        worksheet["B12"].number_format = "0%"
         worksheet["A13"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Critical URL Rate %")'
         worksheet["B13"] = f"=IFERROR(B9/{_TD_URL_ROWS},0)"
-        worksheet["B13"].number_format = "0.00%"
+        worksheet["B13"].number_format = "0%"
         worksheet["A14"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Warning URL Rate %")'
         worksheet["B14"] = f"=IFERROR(B10/{_TD_URL_ROWS},0)"
-        worksheet["B14"].number_format = "0.00%"
+        worksheet["B14"].number_format = "0%"
         worksheet["A15"] = "Projected Health Score % (if all To Do done)"
         worksheet["B15"] = "=MIN(1,B5+(B9*0.01))"
-        worksheet["B15"].number_format = "0.00%"
+        worksheet["B15"].number_format = "0%"
         worksheet["A16"] = "Projected Pass Rate % (if all To Do done)"
         worksheet["B16"] = "=MIN(1,B7+(B9*0.01))"
-        worksheet["B16"].number_format = "0.00%"
+        worksheet["B16"].number_format = "0%"
         worksheet["A17"] = (
             f'=HYPERLINK("#\'{CONTENT_OPTIMISATION_HUB_SHEET}\'!A1",'
             f'"Content Hub Readiness (%)")'
@@ -246,17 +279,17 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             f'COUNTIF({_CONTENT_HUB_STATUS_RANGE},"Completed")/'
             f"COUNTA({_CONTENT_HUB_STATUS_RANGE}))"
         )
-        worksheet["B17"].number_format = "0.00%"
+        worksheet["B17"].number_format = "0%"
         worksheet["A18"] = '=HYPERLINK("#\'Main\'!A1","URLs with Schema")'
         worksheet["B18"] = "=COUNTIF('Main'!Q2:Q10000,TRUE)"
         worksheet["B18"].number_format = "0"
         worksheet["A19"] = '=HYPERLINK("#\'Content & AI Readiness\'!A1","AEO Opportunity Gap")'
         worksheet["B19"] = (
-            "=MAX(0, IF(IFERROR(AVERAGE('Content & AI Readiness'!$S:$S),0)>0, "
-            "100-IFERROR(AVERAGE('Content & AI Readiness'!$S:$S),0), "
-            "(1-IFERROR(B5,0))*100))"
+            f"=MAX(0, IF({_CONTENT_AI_AEO_EXTRACTABILITY_AVG}>0, "
+            f"(100-{_CONTENT_AI_AEO_EXTRACTABILITY_AVG})/100, "
+            f"1-IFERROR(B5,0)))"
         )
-        worksheet["B19"].number_format = "0.0"
+        worksheet["B19"].number_format = "0%"
         worksheet["A20"] = '=HYPERLINK("#\'Link Inventory\'!A1","Broken Internal Links")'
         worksheet["B20"] = (
             "=SUM(COUNTIFS('Link Inventory'!$E:$E,\"Internal\",'Link Inventory'!$F:$F,404),"
@@ -269,7 +302,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet["B21"].number_format = "0"
         worksheet["A22"] = '=HYPERLINK("#\'Link Inventory\'!A1","External Link Health %")'
         worksheet["B22"] = _EXCEL_EXTERNAL_LINK_HEALTH_PCT
-        worksheet["B22"].number_format = "0.00%"
+        worksheet["B22"].number_format = "0%"
         for ref in (
             "A5",
             "B5",
@@ -392,8 +425,8 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
 
     technical_main_rows: list[MainRowPayload] = []
     technical_extra_rows: list[ExtraRowPayload] = []
-    if "Technical" in writer.book.sheetnames:
-        technical_rows = _sheet_rows(writer.book["Technical"])
+    technical_rows = _technical_sheet_rows(writer)
+    if technical_rows:
         technical_main_rows = [
             MainRowPayload.model_validate(row_dict) for row_dict in technical_rows
         ]
@@ -432,6 +465,12 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         link_inventory_rows_narrative = _sheet_rows(writer.book["Link Inventory"])
 
     avg_seo_pct_narrative = average_seo_score_pct(technical_main_rows)
+    if (
+        not technical_main_rows
+        and summary_metrics.urls_crawled > 0
+        and summary_metrics.health_score_pct > 0.0
+    ):
+        avg_seo_pct_narrative = summary_metrics.health_score_pct
     business_impact_narrative = NarrativeEngine.build_business_impact(
         total_urls=summary_metrics.urls_crawled,
         link_inventory_rows=link_inventory_rows_narrative,
@@ -468,15 +507,15 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         f'COUNTIF({_CONTENT_HUB_STATUS_RANGE},"Completed")/'
         f"COUNTA({_CONTENT_HUB_STATUS_RANGE}))"
     )
-    worksheet["B17"].number_format = "0.00%"
+    worksheet["B17"].number_format = "0%"
     worksheet["B18"] = "=COUNTIF('Main'!Q2:Q10000,TRUE)"
     worksheet["B18"].number_format = "0"
     worksheet["B19"] = (
-        "=MAX(0, IF(IFERROR(AVERAGE('Content & AI Readiness'!$S:$S),0)>0, "
-        "100-IFERROR(AVERAGE('Content & AI Readiness'!$S:$S),0), "
-        "(1-IFERROR(B5,0))*100))"
+        f"=MAX(0, IF({_CONTENT_AI_AEO_EXTRACTABILITY_AVG}>0, "
+        f"(100-{_CONTENT_AI_AEO_EXTRACTABILITY_AVG})/100, "
+        f"1-IFERROR(B5,0)))"
     )
-    worksheet["B19"].number_format = "0.0"
+    worksheet["B19"].number_format = "0%"
     worksheet["B20"] = (
         "=SUM(COUNTIFS('Link Inventory'!$E:$E,\"Internal\",'Link Inventory'!$F:$F,404),"
         "COUNTIFS('Link Inventory'!$E:$E,\"Internal\",'Link Inventory'!$F:$F,\"404\"))"
@@ -484,34 +523,34 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     worksheet["B21"] = "=SUMIFS('Link Intelligence'!$O:$O,'Link Intelligence'!$B:$B,\"Summary\")"
     worksheet["B21"].number_format = "0"
     worksheet["B22"] = _EXCEL_EXTERNAL_LINK_HEALTH_PCT
-    worksheet["B22"].number_format = "0.00%"
+    worksheet["B22"].number_format = "0%"
     worksheet["B11"] = "=IFERROR((COUNTIFS('Technical Diagnostics'!$C:$C,\">=400\",'Technical Diagnostics'!$C:$C,\"<500\")+COUNTIFS('Technical Diagnostics'!$C:$C,\">=500\",'Technical Diagnostics'!$C:$C,\"<600\"))/COUNTIFS('Technical Diagnostics'!$C:$C,\">0\"),0)"
-    worksheet["B11"].number_format = "0.00%"
+    worksheet["B11"].number_format = "0%"
     worksheet["B12"] = "=IFERROR(COUNTIFS('Technical Diagnostics'!$C:$C,\">=200\",'Technical Diagnostics'!$C:$C,\"<300\")/COUNTIFS('Technical Diagnostics'!$C:$C,\">0\"),0)"
-    worksheet["B12"].number_format = "0.00%"
+    worksheet["B12"].number_format = "0%"
     worksheet["B13"] = f"=IFERROR(B9/{_TD_URL_ROWS},0)"
-    worksheet["B13"].number_format = "0.00%"
+    worksheet["B13"].number_format = "0%"
     worksheet["B14"] = f"=IFERROR(B10/{_TD_URL_ROWS},0)"
-    worksheet["B14"].number_format = "0.00%"
+    worksheet["B14"].number_format = "0%"
     worksheet["B7"] = (
         f'=IFERROR(('
         f'IFERROR(AVERAGE({_TD_DYNAMIC_COLUMN.format(header="Mobile PSI Score")}),0)+'
         f'IFERROR(AVERAGE({_TD_DYNAMIC_COLUMN.format(header="Desktop PSI Score")}),0)'
         f')/2,0)/100'
     )
-    worksheet["B7"].number_format = "0.00%"
+    worksheet["B7"].number_format = "0%"
     for row in range(5, 15):
         worksheet[f"A{row}"].alignment = Alignment(horizontal="left", vertical="center")
         worksheet.row_dimensions[row].height = 24
 
     avg_health_score = dashboard_metrics.avg_health_score
     worksheet["B6"] = "=AVERAGE('Technical Diagnostics'!E:E)/100"
-    worksheet["B6"].number_format = "0.00%"
+    worksheet["B6"].number_format = "0%"
     worksheet["B5"] = (
         f'=IFERROR(AVERAGE({_MAIN_DYNAMIC_COLUMN.format(header="SEO Score")}),'
         f'IFERROR(AVERAGE({_MAIN_DYNAMIC_COLUMN.format(header="SEO Health Score")}),0))/100'
     )
-    worksheet["B5"].number_format = "0.00%"
+    worksheet["B5"].number_format = "0%"
 
     table_header_fill = PatternFill("solid", fgColor=TABLE_HEADER_COLOR)
     table_header_font = Font(color="000000", bold=True, size=11)
@@ -709,9 +748,9 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     projected_pass_rate_pct = dashboard_metrics.projected_pass_rate_pct
     projected_health_pct = dashboard_metrics.projected_health_pct
     worksheet["B15"] = "=MIN(1,B5+(B9*0.01))"
-    worksheet["B15"].number_format = "0.00%"
+    worksheet["B15"].number_format = "0%"
     worksheet["B16"] = "=MIN(1,B7+(B9*0.01))"
-    worksheet["B16"].number_format = "0.00%"
+    worksheet["B16"].number_format = "0%"
     worksheet["B15"].fill = PatternFill(
         "solid",
         fgColor=(
@@ -810,10 +849,10 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     aeo_readiness = dashboard_metrics.aeo_readiness
     worksheet["G6"] = "Traditional SEO"
     worksheet["H6"] = traditional_score / 100.0
-    worksheet["H6"].number_format = "0.00%"
+    worksheet["H6"].number_format = "0%"
     worksheet["G7"] = "2026 AEO Readiness"
     worksheet["H7"] = aeo_readiness / 100.0
-    worksheet["H7"].number_format = "0.00%"
+    worksheet["H7"].number_format = "0%"
     for ref in ("G6", "H6", "G7", "H7"):
         worksheet[ref].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
         worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
@@ -835,7 +874,27 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         cell = worksheet[ref]
         title = f"KPI {ref}"
         cell.comment = Comment(f"{title}\n\n{message}", "hype-frog")
+    worksheet.conditional_formatting.add(
+        "B20",
+        CellIsRule(
+            operator="greaterThan",
+            formula=["0"],
+            stopIfTrue=True,
+            fill=PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid"),
+            font=Font(color="FFFFFF", bold=True),
+        ),
+    )
     apply_dashboard_metric_conditional_rules(worksheet)
+    # Lock percentage display for executive KPIs (0–1 → ``67%`` via ``0%`` format).
+    for addr in _DASHBOARD_PERCENT_KPI_CELLS:
+        worksheet[addr].number_format = "0%"
+    banner = worksheet["A1"]
+    banner.value = DASHBOARD_BRAND_A1
+    banner.font = Font(color=STD_NAVY, bold=True, size=16)
+    banner.alignment = Alignment(horizontal="left", vertical="center")
+    worksheet.row_dimensions[1].height = max(
+        float(worksheet.row_dimensions[1].height or 0), 45.0
+    )
     for row_idx in range(4, 60):
         if row_idx in (15, 16):
             continue
@@ -885,4 +944,4 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
                 )
 
 
-__all__ = ["style_dashboard"]
+__all__ = ["DASHBOARD_BRAND_A1", "style_dashboard"]

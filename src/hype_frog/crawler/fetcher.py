@@ -38,6 +38,10 @@ def normalize_url_key(url: object, keep_query: bool = True) -> str:
     return normalize_url(url, keep_query=keep_query)
 
 
+_AEO_ENGINE_BOTS: tuple[str, ...] = ("gptbot", "perplexitybot", "ccbot")
+_LEGACY_AI_BOTS: tuple[str, ...] = ("gptbot", "claudebot", "perplexitybot")
+
+
 async def _populate_robots_cache(
     *,
     session: aiohttp.ClientSession,
@@ -47,6 +51,7 @@ async def _populate_robots_cache(
 ) -> None:
     llms_present = False
     ai_allowed = None
+    aeo_engine_bot_coverage: float | None = None
     try:
         async with session.get(f"{domain_key}/llms.txt", timeout=timeout) as llms_resp:
             llms_present = llms_resp.status == 200
@@ -56,13 +61,17 @@ async def _populate_robots_cache(
         async with session.get(f"{domain_key}/robots.txt", timeout=timeout) as robots_resp:
             if robots_resp.status == 200:
                 robots_text = (await robots_resp.text()).lower()
-                ai_allowed = all(
-                    bot.lower() in robots_text
-                    for bot in ["gptbot", "claudebot", "perplexitybot"]
-                )
+                ai_allowed = all(bot in robots_text for bot in _LEGACY_AI_BOTS)
+                hits = sum(1 for bot in _AEO_ENGINE_BOTS if bot in robots_text)
+                aeo_engine_bot_coverage = hits / float(len(_AEO_ENGINE_BOTS))
     except Exception:
         ai_allowed = None
-    robots_cache[domain_key] = {"llms_present": llms_present, "ai_allowed": ai_allowed}
+        aeo_engine_bot_coverage = None
+    robots_cache[domain_key] = {
+        "llms_present": llms_present,
+        "ai_allowed": ai_allowed,
+        "aeo_engine_bot_coverage": aeo_engine_bot_coverage,
+    }
 
 
 async def fetch_and_parse(
@@ -160,6 +169,9 @@ async def fetch_and_parse(
             extra_values["AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)"] = (
                 robots_cache.get(domain_key, {}).get("ai_allowed")
             )
+            extra_values["AEO Robots AI Bot Coverage"] = robots_cache.get(
+                domain_key, {}
+            ).get("aeo_engine_bot_coverage")
 
         if isinstance(status_code, int) and status_code == 200 and html is not None:
             extraction_source = "raw_http"

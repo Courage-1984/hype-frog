@@ -441,7 +441,7 @@ def _build_aioseo_rows(
             )
 
         aeo_score = _to_int(row.get("AEO Readiness Score"), 100)
-        if aeo_score < 60:
+        if aeo_score < 70:
             add_issue(
                 url=url,
                 issue="Low AEO readiness score",

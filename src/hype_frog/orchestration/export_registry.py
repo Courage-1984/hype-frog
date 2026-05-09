@@ -46,7 +46,9 @@ STANDARD_SHEET_COLUMNS: dict[str, list[str]] = {
         "Last Updated", "Change Frequency", "Priority", "Indexability Reason",
         "Schema Types Count", "Schema Types Found", "Internal Links Count",
         "Unique Internal Links Count", "External Links Count",
-        "AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)", "llms.txt Present",
+        "AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)",
+        "AEO Robots AI Bot Coverage",
+        "llms.txt Present",
         "Desktop PSI Score", "Mobile PSI Score", "Mobile LCP (s)", "Mobile CLS",
         "Mobile TTFB (s)", "CWV LCP (s)", "CWV CLS", "CWV Data Source",
         "Field vs Lab", "GSC Clicks", "GSC Impressions", "GSC CTR",
@@ -61,7 +63,8 @@ STANDARD_SHEET_COLUMNS: dict[str, list[str]] = {
     "Content": [
         "URL", "H1 Count", "Missing H1 Flag", "Multiple H1 Flag", "Title Missing",
         "Meta Description Missing", "Word Count", "Word Count Band", "Sentence Count",
-        "Body Text-to-HTML Ratio", "Readability (Rough Flesch)", "Thin Content Flag",
+        "Body Text-to-HTML Ratio", "Readability (Rough Flesch)", "Flesch-Kincaid Grade (Est.)",
+        "Thin Content Flag",
     ],
     "Links": [
         "URL", "Internal Links Count", "Unique Internal Links Count", "External Links Count",

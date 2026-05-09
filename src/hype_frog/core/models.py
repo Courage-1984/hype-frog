@@ -251,6 +251,8 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "Word Count Band": None,
     "Sentence Count": 0,
     "Readability (Rough Flesch)": None,
+    "Flesch-Kincaid Grade (Est.)": None,
+    "AEO Robots AI Bot Coverage": None,
     "Last-Modified": None,
     "Published Date": None,
     "Modified Date": None,

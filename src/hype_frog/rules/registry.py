@@ -42,7 +42,7 @@ def get_summary_rules() -> list[tuple[str, str, RuleFn]]:
         ("Observation", "No Cache-Control Header", lambda r: not bool(r.get("Cache-Control"))),
         ("Observation", "No ETag Header", lambda r: not bool(r.get("ETag"))),
         ("Observation", "Thin Content", lambda r: to_bool(r.get("Thin Content Flag"))),
-        ("Warning", "Low AEO Readiness Score", lambda r: (r.get("AEO Readiness Score") or 0) < 60),
+        ("Warning", "Low AEO Readiness Score", lambda r: (r.get("AEO Readiness Score") or 0) < 70),
         ("Observation", "No Question Headings", lambda r: (r.get("Question Heading Count") or 0) == 0),
         ("Observation", "No Answer-Friendly Structure", lambda r: not to_bool(r.get("List/Table Answer Signal"))),
         ("Observation", "No 40-60 Word Answer Paragraphs", lambda r: (r.get("Paragraphs 40-60 Words Count") or 0) == 0),
@@ -69,11 +69,26 @@ def root_cause_and_fix(issue_name: str) -> tuple[str, str]:
         "Missing Title": ("Template/page missing title tag.", "Add unique descriptive title on affected template/page type."),
         "Missing Meta Description": ("Meta description missing or empty.", "Add concise unique description aligned with user intent."),
         "Thin Content": ("Insufficient body content for indexing confidence.", "Expand page with helpful, unique, intent-matching content."),
-        "Low AEO Readiness Score": ("Page lacks concise answer-oriented signals and structured answer patterns.", "Add short direct answer blocks, question-led headings, and answer-ready formatting."),
-        "Missing FAQ/QA Schema": ("No FAQPage/QAPage schema found for likely Q&A style content.", "Add valid FAQPage or QAPage JSON-LD where appropriate and ensure on-page parity."),
-        "No Question Headings": ("Headings are not phrased as user questions.", "Add clear question-style headings (especially H2/H3) for key intents."),
-        "No Answer-Friendly Structure": ("Page lacks lists/tables that help concise answer extraction.", "Introduce structured bullets, ordered steps, or tables for key answers."),
-        "No 40-60 Word Answer Paragraphs": ("No concise answer-length paragraph detected.", "Add a direct 30-60 word answer summary near question headings."),
+        "Low AEO Readiness Score": (
+            "Weighted AEO score is below the 70-point extraction-confidence band.",
+            "Raise the weighted mix: add a 40–60 word factual paragraph under each question H2/H3, add FAQPage/HowTo/Speakable JSON-LD, tune copy to FK grade 7–10, add ul/ol/table for key facts, and ensure robots.txt explicitly allows GPTBot, PerplexityBot, and CCBot.",
+        ),
+        "Missing FAQ/QA Schema": (
+            "Question-style content without matching FAQPage/QAPage JSON-LD.",
+            "Publish machine-readable FAQPage or QAPage JSON-LD that mirrors visible Q&A text so answer engines can treat schema as a stable API surface.",
+        ),
+        "No Question Headings": (
+            "Headings are not phrased as user questions.",
+            "Rewrite priority H2/H3 headings into natural-language questions (Who/What/How) so the following paragraph can serve as a direct extractable answer.",
+        ),
+        "No Answer-Friendly Structure": (
+            "Dense prose without lists or tables where facts could be chunked.",
+            "Break data-heavy explanations into ul/ol steps or a comparison table so LLMs can cite discrete facts without re-parsing long paragraphs.",
+        ),
+        "No 40-60 Word Answer Paragraphs": (
+            "No 40–60 word definitional paragraph directly under a question-style H2/H3.",
+            "Refactor each target section to lead with a ~45-word factual definition (no fluff) immediately under the question heading to improve LLM Position Zero retrieval.",
+        ),
         "Mixed Content": ("HTTPS page references insecure HTTP assets.", "Serve all assets over HTTPS and update hardcoded URLs."),
     }
     return mapping.get(issue_name, ("Template/technical implementation quality issue.", "Apply fix based on issue type and re-run audit."))

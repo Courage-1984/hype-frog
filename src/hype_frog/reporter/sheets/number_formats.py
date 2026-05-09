@@ -34,6 +34,8 @@ def apply_south_african_formats(worksheet: Worksheet) -> None:
     decimal_headers: set[str] = {
         "SEO Health Score",
         "AEO Readiness Score",
+        "Flesch-Kincaid Grade (Est.)",
+        "AEO Robots AI Bot Coverage",
         "TTFB (ms)",
         "Total Request Time (ms)",
         "Avg TTFB (ms)",

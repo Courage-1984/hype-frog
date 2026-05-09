@@ -512,6 +512,49 @@ def execute_export(
                     "Why It Matters": "Increases comprehension and snippet usability.",
                 },
                 {"Section": "", "Item": "", "Guideline": "", "Why It Matters": ""},
+                {
+                    "Section": "[2025 AEO STRATEGY & STANDARDS]",
+                    "Item": "",
+                    "Guideline": "",
+                    "Why It Matters": "",
+                },
+                {
+                    "Section": "",
+                    "Item": "The 'Nugget' Rule",
+                    "Guideline": (
+                        "The direct answer to a query must be located within the first 100 words "
+                        "of the relevant section."
+                    ),
+                    "Why It Matters": "Answer engines surface the earliest concise fact block; burying the answer loses extraction priority.",
+                },
+                {
+                    "Section": "",
+                    "Item": "Objective Fact-Density",
+                    "Guideline": (
+                        "Avoid subjective adjectives ('award-winning', 'best'). LLMs prioritize "
+                        "objective nouns and verified data points."
+                    ),
+                    "Why It Matters": "Verifiable, concrete phrasing is easier to quote and less likely to be filtered as promotional noise.",
+                },
+                {
+                    "Section": "",
+                    "Item": "Inverted Pyramid Structure",
+                    "Guideline": (
+                        "Question Heading > Concise 50-word Answer > Supporting Data/List > "
+                        "Detailed Context."
+                    ),
+                    "Why It Matters": "Mirrors how models chunk content: lead with the extractable answer, then evidence, then depth.",
+                },
+                {
+                    "Section": "",
+                    "Item": "Schema as an API",
+                    "Guideline": (
+                        "View Schema not just for Google snippets, but as a direct data-feed for "
+                        "AI Answer Engines."
+                    ),
+                    "Why It Matters": "Structured types (FAQ, HowTo, Speakable) become machine-addressable facts when kept in sync with visible copy.",
+                },
+                {"Section": "", "Item": "", "Guideline": "", "Why It Matters": ""},
                 {"Section": "[Visual & Social Branding]", "Item": "", "Guideline": "", "Why It Matters": ""},
                 {
                     "Section": "",

@@ -20,7 +20,7 @@ from hype_frog.rules import (
     score_url_health,
     stable_issue_id,
 )
-from hype_frog.core.text_utils import normalize_text_hash
+from hype_frog.core.text_utils import normalize_text_hash, to_bool
 from hype_frog.core.url_normalization import normalize_url
 
 
@@ -31,41 +31,86 @@ def normalize_url_key(url: object, keep_query: bool = True) -> str:
 _AEO_SCORABLE_EXTRACTION: frozenset[str] = frozenset({"complete", "partial"})
 
 
+def _answer_paragraph_aeo_points(row: Mapping[str, Any]) -> float:
+    """Up to 30 points: 40–60 word paragraphs directly under question H2/H3."""
+    n = int(float(row.get("Paragraphs 40-60 Words Count") or 0))
+    if n <= 0:
+        return 0.0
+    return min(30.0, 15.0 * float(n))
+
+
+def _answer_focused_schema_aeo_points(row: Mapping[str, Any]) -> float:
+    """Up to 25 points: FAQPage/QAPage, HowTo, or Speakable-style JSON-LD."""
+    if bool(row.get("QAPage/FAQ Schema Present")):
+        return 25.0
+    if bool(row.get("HowTo Signal")):
+        return 25.0
+    if bool(row.get("Speakable Schema Present")):
+        return 25.0
+    return 0.0
+
+
+def _fk_readability_aeo_points(row: Mapping[str, Any]) -> float:
+    """Up to 20 points: Flesch–Kincaid grade in the AEO 'sweet spot' (7–10)."""
+    raw = row.get("Flesch-Kincaid Grade (Est.)")
+    if raw is None or raw == "":
+        return 10.0
+    try:
+        grade = float(raw)
+    except (TypeError, ValueError):
+        return 10.0
+    if 7.0 <= grade <= 10.0:
+        return 20.0
+    if grade < 7.0:
+        return max(0.0, 20.0 * (grade / 7.0))
+    return max(0.0, 20.0 - 3.0 * (grade - 10.0))
+
+
+def _structured_fragments_aeo_points(row: Mapping[str, Any]) -> float:
+    """Up to 15 points: lists or tables for scannable, data-heavy sections."""
+    return 15.0 if to_bool(row.get("List/Table Answer Signal")) else 0.0
+
+
+def _ai_bot_robots_aeo_points(row: Mapping[str, Any]) -> float:
+    """Up to 10 points: robots.txt mentions GPTBot, PerplexityBot, and CCBot (naive text match)."""
+    raw = row.get("AEO Robots AI Bot Coverage")
+    if raw is None or raw == "":
+        return 5.0
+    try:
+        ratio = max(0.0, min(1.0, float(raw)))
+    except (TypeError, ValueError):
+        return 5.0
+    return 10.0 * ratio
+
+
 def compute_aeo_readiness_score(row: Mapping[str, Any]) -> tuple[float, str]:
-    """0–100 AEO readiness from on-page signals (schema, headings, extractability, answer blocks).
+    """0–100 weighted AEO readiness (answer blocks, schema, readability, structure, robots).
+
+    Weights: answer paragraphs 30%, answer-focused schema 25%, FK grade 20%,
+    list/table structure 15%, robots AI-bot coverage 10%.
 
     Returns:
         Tuple of (score, badge). For rows without scorable HTML extraction, returns a neutral
-        score that does not trigger the ``Low AEO Readiness Score`` rule threshold.
+        score above the ``Low AEO Readiness Score`` rule threshold (70).
     """
     extraction = str(row.get("Extraction State") or "").strip().lower()
     if extraction not in _AEO_SCORABLE_EXTRACTION:
-        return 61.0, "Unmeasured"
+        return 71.0, "Unmeasured"
 
-    base = 10.0
-    schema_count = int(float(row.get("Schema Types Count") or 0))
-    schema_pts = 20.0 if schema_count > 0 else 0.0
-
-    qh = int(float(row.get("Question Heading Count") or 0))
-    question_pts = min(30.0, float(qh) * 10.0)
-
-    ext = str(row.get("AEO Extractability Score") or "").strip().lower()
-    para_n = int(float(row.get("Paragraphs 40-60 Words Count") or 0))
-    if ext == "high" or para_n > 0:
-        extract_pts = 40.0
-    elif ext == "medium":
-        extract_pts = 20.0
-    else:
-        extract_pts = 0.0
-
-    total = base + schema_pts + question_pts + extract_pts
+    total = (
+        _answer_paragraph_aeo_points(row)
+        + _answer_focused_schema_aeo_points(row)
+        + _fk_readability_aeo_points(row)
+        + _structured_fragments_aeo_points(row)
+        + _ai_bot_robots_aeo_points(row)
+    )
     score = max(0.0, min(100.0, round(total, 2)))
 
     if score >= 80.0:
         badge = "Strong"
-    elif score >= 60.0:
+    elif score >= 70.0:
         badge = "Good"
-    elif score >= 40.0:
+    elif score >= 50.0:
         badge = "Fair"
     else:
         badge = "Needs Work"

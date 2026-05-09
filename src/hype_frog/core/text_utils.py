@@ -50,3 +50,56 @@ def sanitize_filename_part(value: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "_", str(value or "").strip().lower())
     cleaned = re.sub(r"_+", "_", cleaned).strip("._-")
     return cleaned or "audit"
+
+
+def estimate_syllables_for_word(word: str) -> int:
+    """Heuristic syllable count for readability formulas (English-oriented).
+
+    Args:
+        word: Single token (letters and apostrophes only are counted).
+
+    Returns:
+        Estimated syllable count, at least ``1`` for non-empty alphabetic tokens.
+    """
+    w = re.sub(r"[^a-z']+", "", word.lower())
+    if not w:
+        return 0
+    if w.endswith("e") and len(w) > 2:
+        w = w[:-1]
+    groups = len(re.findall(r"[aeiouy]+", w))
+    return max(1, groups)
+
+
+def count_syllables_approx(text: str) -> int:
+    """Approximate total syllables in running text for Flesch–Kincaid grade.
+
+    Args:
+        text: Plain text (e.g. main body extract).
+
+    Returns:
+        Sum of per-word syllable estimates.
+    """
+    return sum(estimate_syllables_for_word(tok) for tok in str(text or "").split())
+
+
+def flesch_kincaid_grade_level(
+    *, word_count: int, sentence_count: int, syllable_count: int
+) -> float | None:
+    """Flesch–Kincaid grade level (higher = harder to read).
+
+    Args:
+        word_count: Words in the analysed passage.
+        sentence_count: Sentence count (must be >= 1 for a defined score).
+        syllable_count: Estimated syllable count for the same passage.
+
+    Returns:
+        Grade level rounded to two decimals, or ``None`` when undefined.
+    """
+    if word_count <= 0 or sentence_count <= 0:
+        return None
+    return round(
+        0.39 * (word_count / sentence_count)
+        + 11.8 * (syllable_count / word_count)
+        - 15.59,
+        2,
+    )

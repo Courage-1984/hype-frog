@@ -10,6 +10,36 @@ from hype_frog.reporter.sheets.schema import add_schema_header_tooltips
 from hype_frog.reporter.sheets.style_helpers import header_index
 
 
+def _content_ai_header_tooltip(header: str, mapping: dict[str, str]) -> str | None:
+    """Resolve Content & AI Readiness header text to curated tooltip body."""
+    if header in mapping:
+        return mapping[header]
+    h = (header or "").strip()
+    if h.startswith("Flesch-Kincaid Grade"):
+        return mapping.get("Flesch-Kincaid Grade (Est.)")
+    return None
+
+
+_CONTENT_AI_HEADER_HELP: dict[str, str] = {
+    "AEO Readiness Score": (
+        "Weighted score (0-100) based on Answer Blocks, FAQ Schema, Readability, and AI Bot "
+        "access. 70+ is the target for AI search engines."
+    ),
+    "AEO Extractability Score": (
+        "Measures how easily an LLM can parse this page. High scores indicate clear "
+        "Question-Heading to Answer-Paragraph mapping."
+    ),
+    "Answer Blocks": (
+        "Factual 40-60 word paragraphs placed directly under question-based headings. This is "
+        "the primary format used by SearchGPT and Perplexity for citations."
+    ),
+    "Flesch-Kincaid Grade (Est.)": (
+        "Estimated reading grade level. AEO 'Sweet Spot' is grade 7-10 for maximum "
+        "machine-extraction clarity."
+    ),
+}
+
+
 def friendly_metric_label(header: str) -> str:
     """Return a user-facing metric label used in validation prompt titles.
 
@@ -93,10 +123,21 @@ def add_all_header_tooltips(worksheet: Worksheet) -> None:
         return
     headers = header_index(worksheet)
     author = "hype-frog"
+    content_ai_help = (
+        _CONTENT_AI_HEADER_HELP if worksheet.title == "Content & AI Readiness" else None
+    )
     for header, col_idx in headers.items():
         cell = worksheet.cell(row=1, column=col_idx)
         title = friendly_metric_label(header)[:32] or "Column"
-        body = tooltip_for_header(header)
+        curated = (
+            _content_ai_header_tooltip(header, content_ai_help)
+            if content_ai_help
+            else None
+        )
+        if curated is not None:
+            body = curated
+        else:
+            body = tooltip_for_header(header)
         text = f"{title}\n\n{body}" if title else body
         cell.comment = Comment(text, author)
 

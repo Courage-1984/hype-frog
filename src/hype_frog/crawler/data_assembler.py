@@ -9,6 +9,8 @@ from bs4 import BeautifulSoup
 from hype_frog.core.link_constants import GENERIC_ANCHOR_TERMS
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.core.text_utils import (
+    count_syllables_approx,
+    flesch_kincaid_grade_level,
     image_extension,
     looks_generic_image_filename,
     status_class,
@@ -164,6 +166,8 @@ def assemble_from_html(
     extra_values["Missing H1 Flag"] = extra_values["H1 Count"] == 0
     extra_values["Multiple H1 Flag"] = extra_values["H1 Count"] > 1
 
+    has_list = False
+    has_table = False
     if soup.body:
         content_soup = BeautifulSoup(html, "lxml")
         for tag in content_soup.select("nav, header, footer, aside, script"):
@@ -186,7 +190,16 @@ def assemble_from_html(
         extra_values["Word Count Band"] = word_count_band(word_count)
         sentence_count = max(1, len([s for s in body_text.split(".") if s.strip()]))
         extra_values["Sentence Count"] = sentence_count
-        extra_values["Readability (Rough Flesch)"] = readability_flesch(word_count, sentence_count)
+        extra_values["Readability (Rough Flesch)"] = readability_flesch(
+            word_count, sentence_count
+        )
+        syllables = count_syllables_approx(body_text)
+        fk_grade = flesch_kincaid_grade_level(
+            word_count=word_count,
+            sentence_count=sentence_count,
+            syllable_count=syllables,
+        )
+        extra_values["Flesch-Kincaid Grade (Est.)"] = fk_grade
 
     aeo_snippets = extract_aeo_snippets(html)
     extra_values["aeo_snippets"] = aeo_snippets
@@ -297,7 +310,12 @@ def assemble_from_html(
         t.lower() in {"faqpage", "qapage"} for t in schema_types
     )
     extra_values["Speakable Schema Present"] = any(
-        t.lower() == "speakablespecification" for t in schema_types
+        "speakable" in t.lower() for t in schema_types
+    )
+    extra_values["HowTo Signal"] = any(t.lower() == "howto" for t in schema_types)
+    extra_values["List/Table Answer Signal"] = bool(has_list or has_table)
+    extra_values["Definition Signal"] = bool(
+        extra_values.get("Answer Block Detected (First 60 Words)")
     )
 
     source_netloc = urlparse(resolved_url).netloc.lower()
