@@ -32,14 +32,16 @@ Concurrent **Python 3.12** pipeline for large-scale URL crawling, structured ext
 - Produces a multi-sheet **audit workbook** (primary inventory, technical and content tabs, optional full suite) with sanitization and governed view state to reduce client corruption risk.
 - Supports checkpointed runs for long crawls and optional comparison against a prior workbook.
 
-## Project structure
+## Project structure (Wave 2 modular)
 
 | Directory | Ownership | Responsibility |
 |------|-------------------|-------------------|
-| `src/hype_frog/orchestration/` | Entry orchestration layer | Resolves run configuration, coordinates async crawl/enrichment/export flow, and keeps stage control logic out of domain modules. |
-| `src/hype_frog/crawler/` | Crawl runtime | Handles network execution, retries/backoff, fetch-mode selection, and crawl-result assembly into row-ready shapes. |
-| `src/hype_frog/pipeline/` | Enrichment pipeline | Applies post-crawl transforms, scoring glue, sanitization helpers, and separated graph-analysis logic before reporting. |
-| `src/hype_frog/reporter/` | Workbook reporter | Builds Excel sheets and applies formatting, I/O safety, row builders, TOC/navigation, and export guardrails. |
+| `src/hype_frog/core/` | Foundation contracts | Shared models (`core/models.py`), logging, URL normalisation, CLI/run helpers, and cross-layer primitives. |
+| `src/hype_frog/orchestration/` | Flow layer | Resolves run configuration and coordinates async crawl -> enrich -> export stages. |
+| `src/hype_frog/crawler/` | Crawl engine | Handles network execution, retries/backoff, fetch-mode selection, and typed crawl-result assembly. |
+| `src/hype_frog/pipeline/` | Enrichment engine | Applies post-crawl transforms, scoring glue, sanitisation helpers, and graph analysis before reporting. |
+| `src/hype_frog/reporter/` | Reporting engine | Builds Excel sheets with separate I/O, formatting, row-shaping, TOC/navigation, and guardrails modules. |
+| `src/hype_frog/checkpoint/` | Durable state | Stores resumable crawl progress for long-running jobs. |
 
 Runtime execution follows this sequence: **`orchestration/` -> `crawler/` -> `pipeline/` -> `reporter/`**.
 
@@ -50,7 +52,7 @@ Runtime execution follows this sequence: **`orchestration/` -> `crawler/` -> `pi
 | Async HTTP | `aiohttp` |
 | Optional rendering | `playwright.async_api` (install browser binaries separately when using accurate mode) |
 | Parsing | `beautifulsoup4`, `lxml` |
-| Data | `pandas`, `pydantic` (validation for select row shapes) |
+| Data | `pandas`, `pydantic` (row/state contracts enforced via `core/models.py`) |
 | Workbooks | `openpyxl` (via pandas ExcelWriter and post-processing) |
 | Graph / analysis | `networkx`, `numpy` |
 | Config | `python-dotenv` |
@@ -98,6 +100,12 @@ uv run python -m hype_frog.main
 
 Follow CLI prompts for target URL or sitemap, limits, and profiles.
 
+## Type-safe philosophy
+
+- Hype Frog uses a **Chain of Trust** model: row/state payloads are validated through Pydantic models in `src/hype_frog/core/models.py` before they move between engine boundaries.
+- Contracts are **additive-first**: introduce new fields instead of renaming/removing established keys that scoring, checkpoints, or reporting rely on.
+- Reporter modules treat incoming payload dictionaries as read-only and focus on workbook layout/format integrity.
+
 ### Non-interactive quick test (10 URLs)
 
 Smoke-test the full pipeline (sitemap cap, faster profile, full workbook suite, PSI disabled, no checkpoint prompts) without typing at the console:
@@ -131,7 +139,7 @@ Detailed breakdown lives under **`./docs/`** (modular markdown only):
 
 ## Governance
 
-Cursor rules live in **`.cursor/rules/`** as scoped `.mdc` modules (`crawler_agent.mdc`, `excel_agent.mdc`). The root **`.cursorrules`** file summarizes stack and safety expectations; deeper reporting and crawler invariants are documented under **`./docs/`** and should stay consistent with those rules.
+Cursor rules live in **`.cursor/rules/`** as scoped `.mdc` modules. The root **`.cursorrules`** file is the global governance contract (modular ownership, Pydantic chain-of-trust, logic vs layout separation, and `uv` workflow). Keep `README`, rules, and `docs/` aligned as architecture evolves.
 
 ## Policy notes
 
