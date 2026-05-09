@@ -9,6 +9,13 @@ import pandas as pd
 from hype_frog.core.models import ExtraRowPayload
 from hype_frog.core.text_utils import normalize_text_hash
 from hype_frog.core.url_normalization import normalize_url
+from hype_frog.reporter.sheets.merged_builders import (
+    CONTENT_AI_READINESS_COLUMNS,
+    ISSUE_REGISTER_COLUMNS,
+    LINK_INTELLIGENCE_COLUMNS,
+    TECHNICAL_DIAGNOSTICS_COLUMNS,
+    TEMPLATE_DUPLICATION_RISKS_COLUMNS,
+)
 
 
 def normalize_url_key(url: object, keep_query: bool = True) -> str:
@@ -101,11 +108,23 @@ STANDARD_SHEET_COLUMNS: dict[str, list[str]] = {
 }
 
 _FULL_SUITE_FORMAT_SHEETS: list[str] = [
-    "Dashboard", "Content Optimisation Hub", "Quick Reference Guide", "Summary", "FixPlan",
-    "Content", "Main", "Priority URLs", "AIOSEO", "Technical", "PSI Performance", "AEO",
-    "Indexability", "Redirects", "Security", "Schema & Metadata", "Links", "LinksDetail",
-    "Media", "Duplicates", "Pattern and Template Issues", "CrawlGraph", "SitemapQA",
-    "IssueInventory", "ResolvedIssues", "DeltaFromPreviousRun", "RunMetadata", "Glossary & Legend",
+    "Dashboard",
+    "FixPlan",
+    "Priority URLs",
+    "Content Optimisation Hub",
+    "Issue Register",
+    "Technical Diagnostics",
+    "Content & AI Readiness",
+    "Link Intelligence",
+    "Template & Duplication Risks",
+    "Playbook",
+    # Deep-audit tail (far right)
+    "AIOSEO",
+    "SitemapQA",
+    "ResolvedIssues",
+    "DeltaFromPreviousRun",
+    "RunMetadata",
+    "Main",
 ]
 
 _BASE_SHEETS: list[str] = ["Main"]
@@ -114,11 +133,21 @@ _BASE_SHEETS: list[str] = ["Main"]
 def get_sheet_sequence(config: ExportRegistryConfig) -> list[str]:
     if not config.full_suite:
         return list(_BASE_SHEETS)
-    return list(_BASE_SHEETS) + list(_FULL_SUITE_FORMAT_SHEETS)
+    return list(_FULL_SUITE_FORMAT_SHEETS)
 
 
 def get_standard_sheet_columns() -> dict[str, list[str]]:
     return {name: list(columns) for name, columns in STANDARD_SHEET_COLUMNS.items()}
+
+
+def get_merged_sheet_columns() -> dict[str, list[str]]:
+    return {
+        "Issue Register": list(ISSUE_REGISTER_COLUMNS),
+        "Technical Diagnostics": list(TECHNICAL_DIAGNOSTICS_COLUMNS),
+        "Content & AI Readiness": list(CONTENT_AI_READINESS_COLUMNS),
+        "Link Intelligence": list(LINK_INTELLIGENCE_COLUMNS),
+        "Template & Duplication Risks": list(TEMPLATE_DUPLICATION_RISKS_COLUMNS),
+    }
 
 
 def get_finalization_steps() -> tuple[str, ...]:
@@ -481,6 +510,7 @@ __all__ = [
     "get_finalization_steps",
     "get_sheet_sequence",
     "get_standard_sheet_columns",
+    "get_merged_sheet_columns",
     "build_delta_and_trend_rows",
     "build_duplicates_rows",
     "build_pattern_rows",

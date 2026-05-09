@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from openpyxl.comments import Comment
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.worksheet import Worksheet
@@ -80,23 +81,24 @@ def tooltip_for_header(header: str) -> str:
 
 
 def add_all_header_tooltips(worksheet: Worksheet) -> None:
-    """Attach generic header input-message tooltips across row-one headers.
+    """Attach generic header guidance as cell comments on row-one headers.
+
+    Cell comments render above the grid and avoid freeze-pane clipping that affects
+    Data Validation input messages.
 
     Args:
-        worksheet: Worksheet where prompts are added.
+        worksheet: Worksheet where comments are added.
     """
     if DISABLE_DATA_VALIDATION:
         return
     headers = header_index(worksheet)
+    author = "hype-frog"
     for header, col_idx in headers.items():
-        ref = f"{get_column_letter(col_idx)}1"
-        dv = DataValidation(
-            type="custom", formula1="TRUE", showInputMessage=True, allow_blank=True
-        )
-        dv.promptTitle = friendly_metric_label(header)[:32] or "Column"
-        dv.prompt = tooltip_for_header(header)
-        worksheet.add_data_validation(dv)
-        dv.add(ref)
+        cell = worksheet.cell(row=1, column=col_idx)
+        title = friendly_metric_label(header)[:32] or "Column"
+        body = tooltip_for_header(header)
+        text = f"{title}\n\n{body}" if title else body
+        cell.comment = Comment(text, author)
 
 
 def add_header_tooltips(worksheet: Worksheet) -> None:

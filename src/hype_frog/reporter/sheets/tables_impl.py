@@ -16,6 +16,7 @@ from hype_frog.reporter.sheets.conditional import (
     apply_content_hub_conditional_rules,
     apply_generic_sheet_coloring,
     apply_main_sheet_heatmaps,
+    apply_merged_tabs_conditional_formatting,
     apply_psi_conditional_rules,
     apply_sheet_text_wrap_columns,
     apply_wrapped_row_heights,
@@ -72,18 +73,14 @@ from hype_frog.reporter.sheets.style_helpers import header_index
 _COPY_HUB_WIDE_HEADERS: frozenset[str] = frozenset(
     {
         "Current Title",
-        "Proposed Title (50-60 Chars)",
-        "Title Count",
         "Current Meta Desc",
-        "Proposed Meta Desc (120-160 Chars)",
-        "Desc Count",
-        "Current H-Tag Structure",
-        "Proposed H-Tag Fixes",
-        "Current Page Copy Snippet",
-        "AEO Answer Block Draft",
-        "FAQ/QA Draft",
+        "H1",
+        "H2",
+        "H3",
+        "H4",
+        "H5",
+        "H6",
         "Current OG-Image URL",
-        "Social Share Note",
         "Target Keywords",
     }
 )
@@ -123,7 +120,8 @@ def _apply_content_hub_copywriter_column_layout(worksheet) -> None:
         if name in _COPY_HUB_WIDE_HEADERS or "proposed" in low:
             letter = get_column_letter(col_idx)
             cur = worksheet.column_dimensions[letter].width or 8.0
-            worksheet.column_dimensions[letter].width = max(45.0, float(cur))
+            floor = 56.0 if name == "Target Keywords" else 45.0
+            worksheet.column_dimensions[letter].width = max(floor, float(cur))
     header_lower_by_col: dict[int, str] = {
         col_idx: str(name).lower() for name, col_idx in headers.items()
     }
@@ -211,6 +209,16 @@ def adjust_sheet_format(writer, sheet_name):
                     min_row=min_row,
                     max_row=max_row,
                 )
+        if sheet_name in (
+            "Technical Diagnostics",
+            "Content & AI Readiness",
+            "Link Intelligence",
+            "Issue Register",
+            "Template & Duplication Risks",
+        ):
+            apply_merged_tabs_conditional_formatting(
+                worksheet, sheet_name, header_row=header_row
+            )
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
         finalize_content_hub_after_normalized_headers(worksheet)
         _apply_content_hub_assigned_owner_validation(worksheet)

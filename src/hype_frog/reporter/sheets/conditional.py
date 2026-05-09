@@ -7,7 +7,12 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.worksheet import Worksheet
-from openpyxl.formatting.rule import CellIsRule, ColorScaleRule, FormulaRule
+from openpyxl.formatting.rule import (
+    CellIsRule,
+    ColorScaleRule,
+    DataBarRule,
+    FormulaRule,
+)
 
 from hype_frog.reporter.engine_formatting import apply_global_conditional_formatting
 from hype_frog.reporter.sheets.config import (
@@ -19,6 +24,7 @@ from hype_frog.reporter.sheets.config import (
     STD_NAVY,
     STD_WHITE,
 )
+from hype_frog.reporter.sheets.layout import CONTENT_HUB_ROW2_HEADER_COMMENTS
 from hype_frog.reporter.sheets.links import (
     is_safe_hyperlink_target,
     normalize_url_for_match,
@@ -83,8 +89,21 @@ def apply_sheet_text_wrap_columns(worksheet: Worksheet, sheet_name: str) -> None
             v = worksheet.cell(row=2, column=c).value
             if v is not None and str(v).strip():
                 headers[str(v).strip()] = c
+        _hub_wrap = frozenset(
+            {
+                "Current Title",
+                "Current Meta Desc",
+                "H1",
+                "H2",
+                "H3",
+                "H4",
+                "H5",
+                "H6",
+                "URL Slug Normalization",
+            }
+        )
         for _name, col_idx in headers.items():
-            if "proposed" not in str(_name).lower():
+            if _name not in _hub_wrap and "proposed" not in str(_name).lower():
                 continue
             for row_idx in range(3, worksheet.max_row + 1):
                 cell = worksheet.cell(row=row_idx, column=col_idx)
@@ -292,7 +311,7 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
                     cell.fill = edge_fill
                 elif sev == "pass":
                     cell.fill = good_fill
-            if h in {"SEO Health Score", "SEO Score", "Technical Health", "Copy Score"}:
+            if h in {"SEO Score", "Technical Health", "Copy Score"}:
                 try:
                     score = float(val)
                     if score < 70:
@@ -341,7 +360,10 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
                     cell.fill = zebra_fill
 
     if not DISABLE_CONDITIONAL_FORMATTING:
-        apply_global_conditional_formatting(worksheet)
+        apply_global_conditional_formatting(
+            worksheet,
+            merged_audit_tabs=sheet_name in _MERGED_TAB_NAMES,
+        )
 
 
 def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> None:
@@ -357,11 +379,10 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
     worksheet.insert_rows(1)
     max_col = worksheet.max_column
     instruction = (
-        "CONTENT HUB INSTRUCTIONS: 1. Draft in 'Proposed' columns. | "
-        "2. Watch 'Count' for Green. | "
-        "3. Click 'Elementor' link. | "
-        "4. Mark 'Status' as 'Completed'. | "
-        "NOTE: If images show '#BLOCKED!', click the 'Security Warning' bar at the top of Excel and select 'Enable Content'."
+        "CONTENT HUB (DIAGNOSTIC): Edit Title, Meta, and H1–H6 in-place; health columns "
+        "and On-Page score update live. | Use Elementor link for CMS edits. | "
+        "Set Status to Completed when done. | "
+        "NOTE: If images show '#BLOCKED!', enable external content in Excel security."
     )
     if max_col > 1:
         inner_end = get_column_letter(max_col - 1)
@@ -383,7 +404,7 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
     worksheet["A1"].font = Font(color=STD_NAVY, bold=True)
     worksheet["A1"].alignment = Alignment(horizontal="left", vertical="center")
     worksheet.row_dimensions[1].height = 28
-    set_freeze_panes_safe(worksheet, "F3")
+    set_freeze_panes_safe(worksheet, "G3")
     headers = {
         str(cell.value): idx
         for idx, cell in enumerate(worksheet[2], start=1)
@@ -399,25 +420,78 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
             formula1='"To Do,In Progress,Review,Completed"',
             allow_blank=True,
         )
+        # Header guidance is served via cell comments to avoid freeze-pane clipping.
+        dv.showInputMessage = False
         worksheet.add_data_validation(dv)
         dv.add(
             f"{get_column_letter(status_col)}{start_row}:{get_column_letter(status_col)}{end_row}"
         )
     if status_col and end_row >= start_row and not DISABLE_CONDITIONAL_FORMATTING:
         status_letter = get_column_letter(status_col)
-        for label, color, font_color in (
-            ("completed", "00B050", "000000"),
-            ("in progress", "FFFF00", "000000"),
+        for label, bg_hex, font_color in (
+            ("completed", "1F7A1F", "FFFFFF"),
+            ("in progress", "FFC000", "000000"),
             ("review", "FFC000", "000000"),
-            ("to do", "FF0000", "FFFFFF"),
+            ("to do", "D9D9D9", "000000"),
+            ("needs copy", "D9D9D9", "000000"),
         ):
             worksheet.conditional_formatting.add(
                 f"{status_letter}{start_row}:{status_letter}{end_row}",
                 FormulaRule(
                     formula=[f'LOWER({status_letter}{start_row})="{label}"'],
                     stopIfTrue=True,
-                    fill=PatternFill("solid", fgColor=color),
-                    font=Font(color=font_color),
+                    fill=PatternFill(
+                        start_color=bg_hex, end_color=bg_hex, fill_type="solid"
+                    ),
+                    font=Font(color=font_color, bold=True),
+                ),
+            )
+    if end_row >= start_row and not DISABLE_CONDITIONAL_FORMATTING:
+        for score_header in (
+            "On-Page Optimization Score",
+            "SEO Score",
+            "Technical Health",
+            "Copy Score",
+        ):
+            col_idx = headers.get(score_header)
+            if not col_idx:
+                continue
+            letter = get_column_letter(col_idx)
+            rng = f"{letter}{start_row}:{letter}{end_row}"
+            worksheet.conditional_formatting.add(
+                rng,
+                ColorScaleRule(
+                    start_type="num",
+                    start_value=0,
+                    start_color="F8696B",
+                    mid_type="num",
+                    mid_value=50,
+                    mid_color="FFEB84",
+                    end_type="num",
+                    end_value=100,
+                    end_color="63BE7B",
+                ),
+            )
+    owner_col = headers.get("Assigned Owner")
+    if owner_col and end_row >= start_row and not DISABLE_CONDITIONAL_FORMATTING:
+        ol = get_column_letter(owner_col)
+        o_rng = f"{ol}{start_row}:{ol}{end_row}"
+        for needle, bg_hex, font_color in (
+            ("copy writer", "92D050", "FFFFFF"),
+            ("developer", "5B9BD5", "FFFFFF"),
+            ("server", "ED7D31", "FFFFFF"),
+        ):
+            worksheet.conditional_formatting.add(
+                o_rng,
+                FormulaRule(
+                    formula=[
+                        f'ISNUMBER(SEARCH("{needle}",LOWER(SUBSTITUTE({ol}{start_row},"/",""))))'
+                    ],
+                    stopIfTrue=True,
+                    fill=PatternFill(
+                        start_color=bg_hex, end_color=bg_hex, fill_type="solid"
+                    ),
+                    font=Font(color=font_color, bold=True),
                 ),
             )
     action_required_col = headers.get("Action Required")
@@ -484,6 +558,68 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
             ),
         )
 
+    health_headers = (
+        "Title Health",
+        "Meta Health",
+        "H1 Health",
+        "H2 Health",
+        "H3 Health",
+        "H4 Health",
+        "H5 Health",
+        "H6 Health",
+    )
+    if not DISABLE_CONDITIONAL_FORMATTING and end_row >= start_row:
+        green_h = PatternFill(
+            start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"
+        )
+        red_h = PatternFill(
+            start_color="F4CCCC", end_color="F4CCCC", fill_type="solid"
+        )
+        orange_h = PatternFill(
+            start_color="FCE4D6", end_color="FCE4D6", fill_type="solid"
+        )
+        for hname in health_headers:
+            cix = headers.get(hname)
+            if not cix:
+                continue
+            hl = get_column_letter(cix)
+            h_rng = f"{hl}{start_row}:{hl}{end_row}"
+            top = f"{hl}{start_row}"
+            worksheet.conditional_formatting.add(
+                h_rng,
+                FormulaRule(
+                    formula=[
+                        f'OR(ISNUMBER(SEARCH("OK",{top})),ISNUMBER(SEARCH("Perfect",{top})))'
+                    ],
+                    stopIfTrue=True,
+                    fill=green_h,
+                    font=Font(color="006100", bold=False),
+                ),
+            )
+            worksheet.conditional_formatting.add(
+                h_rng,
+                FormulaRule(
+                    formula=[
+                        f'OR(ISNUMBER(SEARCH("FIX",{top})),ISNUMBER(SEARCH("MISSING",{top})))'
+                    ],
+                    stopIfTrue=True,
+                    fill=red_h,
+                    font=Font(color="9C0006", bold=True),
+                ),
+            )
+            worksheet.conditional_formatting.add(
+                h_rng,
+                FormulaRule(
+                    formula=[
+                        f'OR(ISNUMBER(SEARCH("SHORT",{top})),ISNUMBER(SEARCH("LONG",{top})),'
+                        f'ISNUMBER(SEARCH("REVIEW",{top})),LEFT({top},3)="Tip")'
+                    ],
+                    stopIfTrue=True,
+                    fill=orange_h,
+                    font=Font(color="833C0C", bold=True),
+                ),
+            )
+
     og_url_col = headers.get("Current OG-Image URL")
     og_preview_col = headers.get("OG Image Preview")
     if og_preview_col and og_url_col and end_row >= start_row:
@@ -500,6 +636,22 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
                     else f'=IF(LEN({og_url_letter}{r})>0, _xlfn.IMAGE({og_url_letter}{r}), "")'
                 ),
             )
+
+    url_col_idx = headers.get("URL")
+    if url_col_idx and end_row >= start_row:
+        link_font = Font(color="0563C1", underline="single")
+        for rr in range(start_row, end_row + 1):
+            ucell = worksheet.cell(row=rr, column=url_col_idx)
+            uv = ucell.value
+            if isinstance(uv, str) and uv.strip().upper().startswith("=HYPERLINK("):
+                ucell.font = link_font
+
+    for hdr_name, cidx in headers.items():
+        tip = CONTENT_HUB_ROW2_HEADER_COMMENTS.get(hdr_name)
+        if tip:
+            hcell = worksheet.cell(row=2, column=cidx)
+            hcell.comment = Comment(tip, "hype-frog")
+
     worksheet["A1"].hyperlink = None
 
 
@@ -600,6 +752,215 @@ def apply_psi_conditional_rules(worksheet: Worksheet) -> None:
         )
 
 
+_MERGED_TAB_NAMES: frozenset[str] = frozenset(
+    {
+        "Technical Diagnostics",
+        "Content & AI Readiness",
+        "Link Intelligence",
+        "Issue Register",
+        "Template & Duplication Risks",
+    }
+)
+
+_HIGHER_BETTER_HEADERS: tuple[str, ...] = (
+    "SEO Health Score",
+    "Desktop PSI Score",
+    "Readability (Rough Flesch)",
+)
+
+_LOWER_BETTER_HEADERS: tuple[str, ...] = (
+    "Mobile LCP (s)",
+    "Mobile TTFB (s)",
+    "Mobile CLS",
+)
+
+_DATA_BAR_HEADERS: tuple[str, ...] = (
+    "Word Count",
+    "Image Count",
+    "Inlinks Count",
+    "Internal PageRank",
+    "Internal Links Count",
+    "Redirect Chain Length",
+)
+
+
+def _merged_headers(worksheet: Worksheet, header_row: int) -> dict[str, int]:
+    return {
+        str(cell.value).strip(): idx
+        for idx, cell in enumerate(worksheet[header_row], start=1)
+        if cell.value is not None and str(cell.value).strip()
+    }
+
+
+def _column_range(headers: dict[str, int], header_name: str, start_row: int, end_row: int) -> str | None:
+    col_idx = headers.get(header_name)
+    if not col_idx or end_row < start_row:
+        return None
+    letter = get_column_letter(col_idx)
+    return f"{letter}{start_row}:{letter}{end_row}"
+
+
+def _add_color_scale_higher_better(
+    worksheet: Worksheet, rng: str
+) -> None:
+    """Fixed 0–100 scale so SEO/PSI/readability gradients are smooth, not data-relative bands."""
+    worksheet.conditional_formatting.add(
+        rng,
+        ColorScaleRule(
+            start_type="num",
+            start_value=0,
+            start_color="F8696B",
+            mid_type="num",
+            mid_value=50,
+            mid_color="FFEB84",
+            end_type="num",
+            end_value=100,
+            end_color="63BE7B",
+        ),
+    )
+
+
+def _add_color_scale_lower_better(worksheet: Worksheet, rng: str) -> None:
+    worksheet.conditional_formatting.add(
+        rng,
+        ColorScaleRule(
+            start_type="min",
+            start_color="63BE7B",
+            mid_type="percentile",
+            mid_value=50,
+            mid_color="FFEB84",
+            end_type="max",
+            end_color="F8696B",
+        ),
+    )
+
+
+def _add_data_bar_blue(worksheet: Worksheet, rng: str) -> None:
+    worksheet.conditional_formatting.add(
+        rng,
+        DataBarRule(
+            start_type="min",
+            end_type="max",
+            color="638EC6",
+            showValue=True,
+        ),
+    )
+
+
+def _add_text_semantic_highlights(
+    worksheet: Worksheet,
+    headers: dict[str, int],
+    header_names: tuple[str, ...],
+    start_row: int,
+    end_row: int,
+) -> None:
+    """Red/pink for Critical / Non-Pass / Error; yellow/orange for Warning / Needs Work."""
+    critical_fill = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
+    warn_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    for name in header_names:
+        col_idx = headers.get(name)
+        if not col_idx:
+            continue
+        col = get_column_letter(col_idx)
+        rng = f"{col}{start_row}:{col}{end_row}"
+        top = f"{col}{start_row}"
+        worksheet.conditional_formatting.add(
+            rng,
+            FormulaRule(
+                formula=[
+                    f'OR(NOT(ISERROR(SEARCH("Critical",{top}))),NOT(ISERROR(SEARCH("Non-Pass",{top}))),NOT(ISERROR(SEARCH("Error",{top}))))'
+                ],
+                stopIfTrue=True,
+                fill=critical_fill,
+            ),
+        )
+        worksheet.conditional_formatting.add(
+            rng,
+            FormulaRule(
+                formula=[
+                    f'OR(NOT(ISERROR(SEARCH("Warning",{top}))),NOT(ISERROR(SEARCH("Needs Work",{top}))))'
+                ],
+                stopIfTrue=True,
+                fill=warn_fill,
+            ),
+        )
+
+
+def apply_merged_tabs_conditional_formatting(
+    worksheet: Worksheet,
+    sheet_name: str,
+    *,
+    header_row: int = 1,
+) -> None:
+    """Conditional formatting for Wave 3 merged workbook tabs (color scales, data bars, text highlights)."""
+    if DISABLE_CONDITIONAL_FORMATTING:
+        return
+    if sheet_name not in _MERGED_TAB_NAMES:
+        return
+    if worksheet.max_row <= header_row:
+        return
+
+    headers = _merged_headers(worksheet, header_row)
+    start_row = header_row + 1
+    end_row = worksheet.max_row
+
+    for hdr in _HIGHER_BETTER_HEADERS:
+        rng = _column_range(headers, hdr, start_row, end_row)
+        if rng:
+            _add_color_scale_higher_better(worksheet, rng)
+
+    for hdr in _LOWER_BETTER_HEADERS:
+        rng = _column_range(headers, hdr, start_row, end_row)
+        if rng:
+            _add_color_scale_lower_better(worksheet, rng)
+
+    for hdr in _DATA_BAR_HEADERS:
+        rng = _column_range(headers, hdr, start_row, end_row)
+        if rng:
+            _add_data_bar_blue(worksheet, rng)
+
+    if sheet_name == "Technical Diagnostics":
+        _add_text_semantic_highlights(
+            worksheet,
+            headers,
+            ("Severity Badge", "Pass Flag", "Indexability Reason"),
+            start_row,
+            end_row,
+        )
+    elif sheet_name == "Content & AI Readiness":
+        _add_text_semantic_highlights(
+            worksheet,
+            headers,
+            ("AEO Badge", "Thin Content Flag", "Title Missing"),
+            start_row,
+            end_row,
+        )
+    elif sheet_name == "Link Intelligence":
+        _add_text_semantic_highlights(
+            worksheet,
+            headers,
+            ("Record Type", "Crawlable"),
+            start_row,
+            end_row,
+        )
+    elif sheet_name == "Issue Register":
+        _add_text_semantic_highlights(
+            worksheet,
+            headers,
+            ("Severity", "Issue", "Status", "Section"),
+            start_row,
+            end_row,
+        )
+    elif sheet_name == "Template & Duplication Risks":
+        _add_text_semantic_highlights(
+            worksheet,
+            headers,
+            ("Issue", "Severity", "Exact Action", "Risk Category"),
+            start_row,
+            end_row,
+        )
+
+
 def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
     """Apply main-sheet heatmaps for key SEO and content quality metrics.
 
@@ -680,5 +1041,6 @@ __all__ = [
     "apply_content_hub_conditional_rules",
     "finalize_content_hub_after_normalized_headers",
     "apply_psi_conditional_rules",
+    "apply_merged_tabs_conditional_formatting",
     "apply_main_sheet_heatmaps",
 ]

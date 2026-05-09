@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
+from openpyxl.comments import Comment
 from openpyxl.utils import get_column_letter
-from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.worksheet.worksheet import Worksheet
 
 
 def add_schema_header_tooltips(
-    worksheet, *, disable_data_validation: bool, header_index_fn
+    worksheet: Worksheet,
+    *,
+    disable_data_validation: bool,
+    header_index_fn: Callable[[Worksheet], dict[str, int]],
 ) -> None:
     if disable_data_validation:
         return
+    author = "hype-frog"
     tooltip_messages = {
         "TTFB (ms)": "Time to First Byte. Measures server responsiveness. Fix: Optimise server-side code or use a CDN.",
         "AEO Readiness Score": "Composite Answer Engine Optimisation quality score. Fix: Add concise answer sections, FAQ schema, and clear question headings.",
@@ -26,11 +33,6 @@ def add_schema_header_tooltips(
         col_idx = headers.get(header)
         if not col_idx:
             continue
-        ref = f"{get_column_letter(col_idx)}1"
-        dv = DataValidation(
-            type="custom", formula1="TRUE", showInputMessage=True, allow_blank=True
-        )
-        dv.promptTitle = header
-        dv.prompt = message
-        worksheet.add_data_validation(dv)
-        dv.add(ref)
+        cell = worksheet.cell(row=1, column=col_idx)
+        text = f"{header}\n\n{message}"
+        cell.comment = Comment(text, author)

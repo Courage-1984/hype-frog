@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -14,6 +15,74 @@ from hype_frog.reporter.engine_io import (
     _sanitize_excel_url,
 )
 from hype_frog.rules import owner_for_issue, workflow_metrics_for_issue
+from hype_frog.reporter.sheets.layout import main_sheet_url_column_letter
+from hype_frog.reporter.summary_builder import reference_tab_for_merged_workbook
+
+
+def _hub_score_value(raw: object) -> float:
+    """Normalize numeric SEO / Technical / Copy scores for Content Hub export."""
+    if raw is None or raw == "":
+        return 0.0
+    try:
+        x = float(raw)
+    except (TypeError, ValueError):
+        return 0.0
+    if math.isnan(x) or math.isinf(x):
+        return 0.0
+    return round(x, 2)
+
+
+def _heading_levels_from_h_tag_structure(structure: object) -> dict[int, list[str]]:
+    """Parse ``Current H-Tag Structure`` lines like ``H2: text`` into level → texts."""
+    out: dict[int, list[str]] = {1: [], 2: [], 3: [], 4: [], 5: [], 6: []}
+    text = str(structure or "")
+    for line in text.splitlines():
+        line = line.strip()
+        if ":" not in line:
+            continue
+        prefix, rest = line.split(":", 1)
+        tag = prefix.strip().upper()
+        if len(tag) == 2 and tag.startswith("H") and tag[1].isdigit():
+            level = int(tag[1])
+            heading_text = rest.strip()
+            if 1 <= level <= 6 and heading_text:
+                out[level].append(heading_text)
+    return out
+
+
+def _first_non_empty(mapping: dict[str, Any], *keys: str) -> str:
+    """Return the first non-empty string value among candidate mapping keys."""
+    for key in keys:
+        val = mapping.get(key)
+        text = str(val or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _join_pipe(values: list[str]) -> str:
+    """Join heading values for display while preserving order and removing duplicates."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        text = str(raw or "").strip()
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(text)
+    return " | ".join(out)
+
+
+def _hyperlink_url_formula(display_url: str) -> str:
+    """Excel HYPERLINK so the URL column is clickable (sanitized for formula quotes)."""
+    s = str(display_url or "").strip()
+    if not s:
+        return ""
+    safe = s.replace('"', '""')
+    return f'=HYPERLINK("{safe}","{safe}")'
 
 
 def _fallback_keyword(url: str, h1_text: str) -> str:
@@ -49,7 +118,7 @@ def build_fixplan_rows(
         root_cause, recommended_fix = root_cause_resolver(issue_name)
         effort = default_effort_by_severity.get(severity, "S")
         workflow = workflow_metrics_for_issue(severity, effort)
-        reference_tab = (
+        legacy_reference = (
             "Indexability"
             if ("Canonical" in issue_name or "Noindex" in issue_name)
             else (
@@ -67,6 +136,7 @@ def build_fixplan_rows(
                 )
             )
         )
+        reference_tab = reference_tab_for_merged_workbook(legacy_reference)
         affected_urls = [
             str(r.values.get("URL") or "") for r in affected if r.values.get("URL")
         ]
@@ -163,40 +233,98 @@ def write_snippet_candidates_chunked(
         ws.append(["", "", "", 0, ""])
 
 
-_CONTENT_HUB_COLUMN_ORDER: tuple[str, ...] = (
+CONTENT_HUB_EXPORT_COLUMNS: tuple[str, ...] = (
     "Action Required",
-    "Status",
-    "Assigned Owner",
-    "URL",
-    "Current SEO Score",
-    "Projected SEO Score",
-    "Elementor Builder Link",
-    "Target Keywords",
-    "Current Page Copy Snippet",
-    "Current Title",
-    "Proposed Title (50-60 Chars)",
-    "Title Count",
-    "Current Meta Desc",
-    "Proposed Meta Desc (120-160 Chars)",
-    "Desc Count",
-    "Current H-Tag Structure",
-    "Proposed H-Tag Fixes",
-    "AEO Answer Block Draft",
-    "FAQ/QA Draft",
-    "Current OG-Image URL",
-    "OG Image Preview",
-    "Social Share Note",
+    "On-Page Optimization Score",
     "SEO Score",
     "Technical Health",
     "Copy Score",
+    "Status",
+    "Assigned Owner",
+    "URL",
+    "Current Title",
+    "Title Health",
+    "Current Meta Desc",
+    "Meta Health",
+    "H1",
+    "H1 Health",
+    "H2",
+    "H2 Health",
+    "H3",
+    "H3 Health",
+    "H4",
+    "H4 Health",
+    "H5",
+    "H5 Health",
+    "H6",
+    "H6 Health",
+    "Elementor Builder Link",
+    "URL Slug Normalization",
+    "Current OG-Image URL",
+    "OG Image Preview",
     "Open in Main",
 )
 
 
-def _content_hub_column_letter(header: str) -> str:
-    """Stable A1 letter for Hub columns matching ``_CONTENT_HUB_COLUMN_ORDER``."""
-    pos = _CONTENT_HUB_COLUMN_ORDER.index(header) + 1
+def content_hub_column_letter(header: str) -> str:
+    """Excel column letter for a Content Optimisation Hub header (row 2 layout)."""
+    pos = CONTENT_HUB_EXPORT_COLUMNS.index(header) + 1
     return get_column_letter(pos)
+
+
+def _content_hub_on_page_score_from_health_formula(row: int) -> str:
+    """Weighted 0–100 score derived from live Title/Meta/H1–H6 *Health* formula columns."""
+    th = content_hub_column_letter("Title Health")
+    mh = content_hub_column_letter("Meta Health")
+    h1 = content_hub_column_letter("H1 Health")
+    h2 = content_hub_column_letter("H2 Health")
+    h3 = content_hub_column_letter("H3 Health")
+    h4 = content_hub_column_letter("H4 Health")
+    h5 = content_hub_column_letter("H5 Health")
+    h6 = content_hub_column_letter("H6 Health")
+    r = row
+    t_pts = (
+        f'IF({th}{r}="",0,IF(LEFT({th}{r},7)="MISSING",0,'
+        f'IF(ISNUMBER(SEARCH("OK",{th}{r})),100,IF(ISNUMBER(SEARCH("SHORT",{th}{r})),65,'
+        f'IF(ISNUMBER(SEARCH("LONG",{th}{r})),50,70)))))'
+    )
+    m_pts = (
+        f'IF({mh}{r}="",0,IF(LEFT({mh}{r},7)="MISSING",0,'
+        f'IF(ISNUMBER(SEARCH("OK",{mh}{r})),100,IF(ISNUMBER(SEARCH("SHORT",{mh}{r})),65,'
+        f'IF(ISNUMBER(SEARCH("LONG",{mh}{r})),50,70)))))'
+    )
+    h1_pts = (
+        f'IF({h1}{r}="",0,IF(LEFT({h1}{r},2)="OK",100,0))'
+    )
+
+    def _h_pts(col: str) -> str:
+        return f'IF({col}{r}="",0,IF(LEFT({col}{r},2)="OK",100,0))'
+
+    h2p, h3p, h4p, h5p, h6p = (
+        _h_pts(h2),
+        _h_pts(h3),
+        _h_pts(h4),
+        _h_pts(h5),
+        _h_pts(h6),
+    )
+    return (
+        f"=MIN(100,ROUND(0.30*({t_pts})+0.25*({m_pts})+0.20*({h1_pts})+0.08*({h2p})+0.06*({h3p})"
+        f"+0.05*({h4p})+0.03*({h5p})+0.03*({h6p}),0))"
+    )
+
+
+def _content_hub_open_in_main_formula(url_col_letter: str, row: int) -> str:
+    """Cross-sheet jump to Main (URL column) with Technical Diagnostics fallback."""
+    ml = main_sheet_url_column_letter()
+    td = "Technical Diagnostics"
+    u = url_col_letter
+    r = row
+    return (
+        f'=IFERROR(HYPERLINK("#\'Main\'!{ml}"&MATCH(TRIM({u}{r}),'
+        f'\'Main\'!{ml}:{ml},0),"Open in Main"),'
+        f'IFERROR(HYPERLINK("#\'{td}\'!A"&MATCH(TRIM({u}{r}),'
+        f'\'{td}\'!A:A,0),"Open in Technical"),"Not Found"))'
+    )
 
 
 def build_content_optimisation_hub_rows(
@@ -254,10 +382,16 @@ def build_content_optimisation_hub_rows(
         for _score, url in scored_urls[:15]:
             manual_content_urls.add(url)
 
-    pt_l = _content_hub_column_letter("Proposed Title (50-60 Chars)")
-    pmd_l = _content_hub_column_letter("Proposed Meta Desc (120-160 Chars)")
-    th_l = _content_hub_column_letter("Technical Health")
-    copy_l = _content_hub_column_letter("Copy Score")
+    g_l = content_hub_column_letter("Current Title")
+    i_l = content_hub_column_letter("Current Meta Desc")
+    k_l = content_hub_column_letter("H1")
+    m_l = content_hub_column_letter("H2")
+    o_l = content_hub_column_letter("H3")
+    q_l = content_hub_column_letter("H4")
+    s_l = content_hub_column_letter("H5")
+    u_l = content_hub_column_letter("H6")
+    w_l = content_hub_column_letter("On-Page Optimization Score")
+    f_l = content_hub_column_letter("URL")
 
     rows: list[dict[str, Any]] = []
     for excel_row, url in enumerate(sorted(manual_content_urls), start=3):
@@ -265,7 +399,13 @@ def build_content_optimisation_hub_rows(
         extra_payload = extra_by_url.get(url)
         m = main_payload.values if main_payload else {}
         e = extra_payload.values if extra_payload else {}
-        score = float(e.get("SEO Health Score") or 0)
+        raw_url = ""
+        if main_payload:
+            raw_url = str(main_payload.values.get("URL") or "").strip()
+        if not raw_url and extra_payload:
+            raw_url = str(extra_payload.values.get("URL") or "").strip()
+        if not raw_url:
+            raw_url = str(url)
         post_id = e.get("WordPress Post ID")
         try:
             post_id = int(post_id) if post_id is not None else None
@@ -273,7 +413,7 @@ def build_content_optimisation_hub_rows(
             post_id = None
         elementor_link = None
         if post_id:
-            parsed = urlparse(url)
+            parsed = urlparse(raw_url)
             if parsed.scheme and parsed.netloc:
                 elementor_link = (
                     f"{parsed.scheme}://{parsed.netloc}/wp-admin/post.php?post={post_id}&action=elementor"
@@ -289,46 +429,98 @@ def build_content_optimisation_hub_rows(
             target_keywords = _fallback_keyword(
                 url, str(e.get("Current H-Tag Structure") or m.get("H1 Content") or "")
             )
-        copy_formula = (
-            f"=IF(AND(LEN({pt_l}{excel_row})>=50,LEN({pt_l}{excel_row})<=60),50,20)"
-            f"+IF(AND(LEN({pmd_l}{excel_row})>=120,LEN({pmd_l}{excel_row})<=160),50,20)"
+
+        h_by_level = _heading_levels_from_h_tag_structure(e.get("Current H-Tag Structure"))
+
+        def _h_values(n: int) -> list[str]:
+            items: list[str] = []
+            from_main = _first_non_empty(
+                m,
+                f"H{n} Content",
+                f"h{n}_content",
+                f"h{n} content",
+                f"h{n}",
+            )
+            if from_main:
+                items.append(from_main)
+            from_extra = _first_non_empty(
+                e,
+                f"H{n} Content",
+                f"h{n}_content",
+                f"h{n} content",
+                f"h{n}",
+            )
+            if from_extra:
+                items.append(from_extra)
+            items.extend(h_by_level.get(n, []))
+            return items
+
+        def _h_joined(n: int) -> str:
+            return _join_pipe(_h_values(n))
+
+        h1_values = _h_values(1)
+        h2_values = _h_values(2)
+        h3_values = _h_values(3)
+        h4_values = _h_values(4)
+        h5_values = _h_values(5)
+        h6_values = _h_values(6)
+
+        title_health = (
+            f'=IF({g_l}{excel_row}="","MISSING",'
+            f'IF(AND(LEN({g_l}{excel_row})>=50,LEN({g_l}{excel_row})<=60),"OK 50-60 chars",'
+            f'IF(LEN({g_l}{excel_row})<50,"SHORT: "&LEN({g_l}{excel_row}),"LONG: "&LEN({g_l}{excel_row}))))'
         )
-        projected_formula = f"=(0.7*{th_l}{excel_row})+(0.3*{copy_l}{excel_row})"
-        action_formula = f'=IF(AND(F{excel_row}>=90,Y{excel_row}>=90),"Complete","Needs Copy")'
-        open_main_formula = (
-            f'=IFERROR(HYPERLINK("#\'Main\'!A"&MATCH(D{excel_row},\'Main\'!A:A,0),'
-            f'"Open"),"Not Found")'
+        meta_health = (
+            f'=IF({i_l}{excel_row}="","MISSING",'
+            f'IF(AND(LEN({i_l}{excel_row})>=120,LEN({i_l}{excel_row})<=160),"OK 120-160 chars",'
+            f'IF(LEN({i_l}{excel_row})<120,"SHORT: "&LEN({i_l}{excel_row}),"LONG: "&LEN({i_l}{excel_row}))))'
         )
+        # Live linter formulas: driven by visible H-tag cells so edits recalculate instantly.
+        h1_health = (
+            f'=IF(TRIM({k_l}{excel_row})="","FIX: MULTIPLE/MISSING",'
+            f'IF((LEN({k_l}{excel_row})-LEN(SUBSTITUTE({k_l}{excel_row},"|",""))+1)=1,'
+            f'"OK","FIX: MULTIPLE/MISSING"))'
+        )
+        h2_health = f'=IF(TRIM({m_l}{excel_row})="","MISSING","OK")'
+        h3_health = f'=IF(TRIM({o_l}{excel_row})="","MISSING","OK")'
+        h4_health = f'=IF(TRIM({q_l}{excel_row})="","MISSING","OK")'
+        h5_health = f'=IF(TRIM({s_l}{excel_row})="","MISSING","OK")'
+        h6_health = f'=IF(TRIM({u_l}{excel_row})="","MISSING","OK")'
+        on_page_score = _content_hub_on_page_score_from_health_formula(excel_row)
+        action_formula = f'=IF({w_l}{excel_row}>=85,"Complete","Needs Copy")'
+        open_main_formula = _content_hub_open_in_main_formula(f_l, excel_row)
+
         rows.append(
             {
+                "SEO Score": _hub_score_value(e.get("SEO Score")),
+                "Technical Health": _hub_score_value(e.get("Technical Health")),
+                "Copy Score": _hub_score_value(e.get("Copy Score")),
                 "Action Required": action_formula,
                 "Status": "To Do",
                 "Assigned Owner": "Copy Writer",
-                "URL": url,
-                "Current SEO Score": score,
-                "Projected SEO Score": projected_formula,
-                "Elementor Builder Link": elementor_cell,
-                "Target Keywords": target_keywords,
-                "Current Page Copy Snippet": str(
-                    e.get("Current Page Copy Snippet") or ""
-                ).strip(),
+                "URL": _hyperlink_url_formula(raw_url),
                 "Current Title": str(m.get("Title") or "").strip() or "MISSING TITLE",
-                "Proposed Title (50-60 Chars)": "",
-                "Title Count": f"=LEN(K{excel_row})",
+                "Title Health": title_health,
                 "Current Meta Desc": str(m.get("Meta Description") or "").strip()
                 or "MISSING DESCRIPTION",
-                "Proposed Meta Desc (120-160 Chars)": "",
-                "Desc Count": f"=LEN(N{excel_row})",
-                "Current H-Tag Structure": str(
-                    e.get("Current H-Tag Structure") or m.get("H1 Content") or ""
-                ).strip(),
-                "Proposed H-Tag Fixes": "",
-                "AEO Answer Block Draft": "",
-                "FAQ/QA Draft": "",
+                "Meta Health": meta_health,
+                "H1": _h_joined(1),
+                "H1 Health": h1_health,
+                "H2": _h_joined(2),
+                "H2 Health": h2_health,
+                "H3": _h_joined(3),
+                "H3 Health": h3_health,
+                "H4": _h_joined(4),
+                "H4 Health": h4_health,
+                "H5": _h_joined(5),
+                "H5 Health": h5_health,
+                "H6": _h_joined(6),
+                "H6 Health": h6_health,
+                "On-Page Optimization Score": on_page_score,
+                "Elementor Builder Link": elementor_cell,
+                "URL Slug Normalization": target_keywords,
                 "Current OG-Image URL": _sanitize_excel_url(e.get("OG Image")),
                 "OG Image Preview": "",
-                "Social Share Note": "",
-                "Copy Score": copy_formula,
                 "Open in Main": open_main_formula,
             }
         )

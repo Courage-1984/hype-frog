@@ -101,7 +101,9 @@ def ensure_freeze_header(worksheet: Worksheet) -> None:
         _clear_orphaned_selection(worksheet)
 
 
-def apply_global_conditional_formatting(worksheet: Worksheet) -> None:
+def apply_global_conditional_formatting(
+    worksheet: Worksheet, *, merged_audit_tabs: bool = False
+) -> None:
     if worksheet.max_row <= 1:
         return
     headers = _legacy_sheet_header_index(worksheet)
@@ -170,22 +172,10 @@ def apply_global_conditional_formatting(worksheet: Worksheet) -> None:
             rng = f"{col}2:{col}{last_row}"
             worksheet.conditional_formatting.add(
                 rng,
-                ColorScaleRule(
-                    start_type="min",
-                    start_color="F8696B",
-                    mid_type="percentile",
-                    mid_value=50,
-                    mid_color="FFEB84",
-                    end_type="max",
-                    end_color="63BE7B",
-                ),
-            )
-            worksheet.conditional_formatting.add(
-                rng,
                 DataBarRule(
                     start_type="min",
                     end_type="max",
-                    color="63BE7B",
+                    color="638EC6",
                     showValue=True,
                 ),
             )
@@ -215,7 +205,7 @@ def apply_global_conditional_formatting(worksheet: Worksheet) -> None:
         )
 
     seo_score_col = headers.get("SEO Health Score")
-    if seo_score_col:
+    if seo_score_col and not merged_audit_tabs:
         col = get_column_letter(seo_score_col)
         worksheet.conditional_formatting.add(
             f"{col}2:{col}{last_row}",
