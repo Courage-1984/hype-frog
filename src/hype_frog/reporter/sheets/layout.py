@@ -147,6 +147,7 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "Status",
         "Assigned Owner",
         "URL",
+        "URL Slug Normalization",
         "Current Title",
         "Title Health",
         "Current Meta Desc",
@@ -164,7 +165,6 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "H6",
         "H6 Health",
         "Elementor Builder Link",
-        "URL Slug Normalization",
         "Current OG-Image URL",
         "OG Image Preview",
         "Open in Main",
@@ -239,26 +239,21 @@ CONTENT_HUB_HEADER_COMMENT_OG_IMAGE_PREVIEW: str = (
 
 # Row-2 header cell comments for Content Optimisation Hub (openpyxl Comment; not Data Validation).
 CONTENT_HUB_ROW2_HEADER_COMMENTS: dict[str, str] = {
-    "SEO Score": CONTENT_HUB_HEADER_COMMENT_SEO_SCORE,
-    "Technical Health": CONTENT_HUB_HEADER_COMMENT_TECHNICAL_HEALTH,
+    "SEO Score": "The baseline SEO health score captured during the initial crawl.",
+    "Technical Health": "Baseline technical performance score (Status codes, Speed, Indexability).",
     "Copy Score": (
-        "Copy Score (0-100) reflects readability and copy hygiene from the crawl model. "
-        "It is a directional quality signal and updates on re-crawl after publication."
+        "Baseline assessment of content quality and readability."
     ),
     "Action Required": (
-        "Dynamic decision output: if On-Page Optimization Score is below 85 this row returns "
-        "'Needs Copy'; otherwise it returns 'Complete'. Use it as the primary work queue."
+        'Dynamic summary: "Needs Copy" if score < 85, "Complete" if score >= 85.'
     ),
     "On-Page Optimization Score": (
-        "Live weighted formula (0-100) derived from Title Health, Meta Health, and H1-H6 Health. "
-        "Any edit to those source cells recalculates this score immediately."
+        "Live calculation (0-100) of on-page health. Factors: Title/Meta length and H-tag hierarchy. Aim for 90+."
     ),
     "Status": (
-        "Workflow: To Do → In Progress → Review → Completed. Use the list validation on each row."
+        'Workflow tracking. Change to "Completed" once changes are live in the CMS.'
     ),
-    "Assigned Owner": (
-        "Pick Copy Writer, Developer, or Server/Host. Aligns with conditional row coloring."
-    ),
+    "Assigned Owner": "The team member responsible for this URL.",
     "URL": "Live audited URL. Click the cell to open the page (HYPERLINK). TRIM is used when jumping to Main.",
     "Current Title": "Title text from the crawl. Edit in CMS; health column updates from this cell.",
     "Title Health": (
@@ -567,6 +562,16 @@ def apply_column_widths(worksheet: Worksheet) -> None:
             col_idx = headers.get(header_name)
             if col_idx:
                 worksheet.column_dimensions[get_column_letter(col_idx)].width = 36
+    # Content Hub density overrides: preserve compact, operational editing view.
+    for header_name, width in {
+        "Action Required": 17.43,
+        "On-Page Optimization Score": 12.0,
+        "Assigned Owner": 15.0,
+        "Open in Main": 9.0,
+    }.items():
+        col_idx = headers.get(header_name)
+        if col_idx:
+            worksheet.column_dimensions[get_column_letter(col_idx)].width = width
 
 
 __all__ = [
