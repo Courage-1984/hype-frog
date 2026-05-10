@@ -446,3 +446,149 @@ class SummaryMetricsPayload(BaseModel):
     warning_url_count: int = Field(ge=0)
     projected_health_score_pct: float = Field(ge=0.0, le=100.0)
     projected_pass_rate_pct: float = Field(ge=0.0, le=100.0)
+
+
+# ---------------------------------------------------------------------------
+# Strict raw-response validators (Sprint 1 Bulletproof Foundation).
+#
+# Additive only. These models exist alongside the established ``CrawlResult``
+# TypedDict and ``CrawlResultModel`` to validate **raw** upstream payloads
+# (HTTP fetch result, Google PSI, Google Search Console) before they enter
+# the pipeline. Existing dictionary keys in ``main_data`` are unchanged.
+# ---------------------------------------------------------------------------
+
+
+_HTTP_SENTINEL_STATUSES: frozenset[str] = frozenset(
+    {"Timeout", "Connection Error", "Unknown"}
+)
+
+
+class HttpCrawlResultModel(BaseModel):
+    """Strict raw-fetch envelope: URL, HTTP status, response timing.
+
+    Designed for use at the boundary of the ``crawler/`` HTTP layer to catch
+    silent corruption (negative timings, non-numeric statuses, blank URLs).
+    Caller is expected to wrap ``model_validate`` in a ``try/except
+    ValidationError`` block and degrade gracefully — never crash the loop.
+    """
+
+    model_config = ConfigDict(extra="ignore", validate_assignment=True)
+
+    url: str = Field(..., min_length=1)
+    status_code: int = Field(..., ge=100, le=599)
+    response_time_ms: float = Field(..., ge=0.0)
+    final_url: str | None = None
+    error_kind: str | None = None
+
+    @field_validator("url", "final_url", mode="before")
+    @classmethod
+    def _strip_url(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    @field_validator("status_code", mode="before")
+    @classmethod
+    def _reject_sentinels(cls, value: Any) -> Any:
+        if isinstance(value, str) and value in _HTTP_SENTINEL_STATUSES:
+            raise ValueError(f"non-numeric HTTP status sentinel: {value!r}")
+        return value
+
+    @field_validator("response_time_ms", mode="after")
+    @classmethod
+    def _finite_response_time(cls, value: float) -> float:
+        if math.isnan(value) or math.isinf(value):
+            raise ValueError("response_time_ms must be finite")
+        return value
+
+
+class PSIMetricsModel(BaseModel):
+    """Strict PageSpeed Insights metrics extracted from a Lighthouse payload.
+
+    Field naming mirrors the flattened keys produced by
+    ``hype_frog.crawler.psi_engine._lab_strategy_metrics``. ``fid_ms`` is
+    accepted for legacy CrUX snapshots (pre-INP) and remains optional.
+    """
+
+    model_config = ConfigDict(extra="ignore", validate_assignment=True)
+
+    url: str | None = None
+    performance_score: int | None = Field(default=None, ge=0, le=100)
+    seo_score: int | None = Field(default=None, ge=0, le=100)
+    lcp_seconds: float | None = Field(default=None, ge=0.0)
+    cls: float | None = Field(default=None, ge=0.0)
+    inp_ms: float | None = Field(default=None, ge=0.0)
+    fid_ms: float | None = Field(default=None, ge=0.0)
+    ttfb_seconds: float | None = Field(default=None, ge=0.0)
+
+    @field_validator(
+        "lcp_seconds",
+        "cls",
+        "inp_ms",
+        "fid_ms",
+        "ttfb_seconds",
+        mode="after",
+    )
+    @classmethod
+    def _finite_or_none(cls, value: float | None) -> float | None:
+        if value is None:
+            return None
+        if math.isnan(value) or math.isinf(value):
+            raise ValueError("PSI metric must be finite")
+        return value
+
+    @model_validator(mode="after")
+    def _require_some_signal(self) -> PSIMetricsModel:
+        signal_fields = (
+            self.performance_score,
+            self.seo_score,
+            self.lcp_seconds,
+            self.cls,
+            self.inp_ms,
+            self.fid_ms,
+            self.ttfb_seconds,
+        )
+        if all(field is None for field in signal_fields):
+            raise ValueError(
+                "PSI payload contained no recognisable Lighthouse/CrUX metrics"
+            )
+        return self
+
+
+class GSCMetricsModel(BaseModel):
+    """Strict per-page Google Search Console row.
+
+    Mirrors the float/int shape returned by the Search Console
+    ``searchanalytics.query`` endpoint. ``ctr`` is the GSC-native ratio in
+    [0, 1] (not a percentage). ``position`` allows ``0.0`` because the API
+    occasionally returns it for rows with no qualifying impressions.
+    """
+
+    model_config = ConfigDict(extra="ignore", validate_assignment=True)
+
+    url: str | None = None
+    clicks: int = Field(..., ge=0)
+    impressions: int = Field(..., ge=0)
+    ctr: float = Field(..., ge=0.0, le=1.0)
+    position: float = Field(..., ge=0.0)
+
+    @field_validator("clicks", "impressions", mode="before")
+    @classmethod
+    def _coerce_count(cls, value: Any) -> Any:
+        if value is None:
+            raise ValueError("GSC count field is required")
+        if isinstance(value, float):
+            if math.isnan(value) or math.isinf(value):
+                raise ValueError("GSC count must be finite")
+            if value < 0:
+                raise ValueError("GSC count must be non-negative")
+            return int(value)
+        return value
+
+    @field_validator("ctr", "position", mode="after")
+    @classmethod
+    def _finite_metric(cls, value: float) -> float:
+        if math.isnan(value) or math.isinf(value):
+            raise ValueError("GSC metric must be finite")
+        return value
