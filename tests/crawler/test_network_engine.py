@@ -22,7 +22,18 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-ROOT = Path(__file__).resolve().parents[1]
+import aiohttp
+
+from hype_frog.config import (  # noqa: E402
+    MAX_RETRIES,
+    RETRY_BACKOFF_FACTOR,
+    RETRY_BASE_DELAY_SECONDS,
+    RETRY_MAX_DELAY_SECONDS,
+    RETRYABLE_STATUS_CODES,
+    REQUEST_JITTER_SECONDS,
+)
+
+ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 if SRC.is_dir() and str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
@@ -38,6 +49,7 @@ from hype_frog.crawler.network_engine import (  # noqa: E402
     _poisson_jitter_seconds,
     _strip_html_to_text,
     _word_count,
+    fetch_http,
     fetch_rendered,
     fetch_rendered_with_diagnostics,
 )
@@ -365,7 +377,7 @@ def test_fetch_rendered_with_diagnostics_returns_fallback_when_probe_fails() -> 
                 session_manager=manager,
             )
         )
-    assert diag == _empty_diagnostics("partial")
+    assert diag == _empty_diagnostics("skipped")
     manager.get_context.assert_not_awaited()
 
 
@@ -389,7 +401,7 @@ def test_fetch_rendered_with_diagnostics_returns_fallback_when_context_unavailab
         )
     assert diag["html"] is None
     assert diag["extraction_source"] == "raw_http"
-    assert diag["extraction_state"] == "partial"
+    assert diag["extraction_state"] == "skipped"
 
 
 def test_fetch_rendered_jitter_zero_does_not_sleep() -> None:
@@ -457,3 +469,170 @@ def test_rendered_fetch_diagnostics_typed_dict_keys() -> None:
         "is_js_dependent",
     }
     assert set(RenderedFetchDiagnostics.__annotations__.keys()) == expected
+
+
+# ---------------------------------------------------------------------------
+# Sprint 2 dead-letter contract — extraction_state on failure paths
+# ---------------------------------------------------------------------------
+#
+# Subprocess probe failure and ``get_context() is None`` (CDP / Chromium
+# launch failure) return ``_empty_diagnostics("skipped")`` so the crawl
+# pipeline can treat them as hard skips rather than partial renders. Other
+# degradation paths (Playwright import failure, ``page.goto`` errors,
+# timeouts mid-pipeline) still downgrade to ``"partial"``.
+# ---------------------------------------------------------------------------
+
+_VALID_EXTRACTION_STATES: frozenset[str] = frozenset({"complete", "partial", "skipped"})
+
+
+async def test_dead_letter_when_subprocess_probe_fails() -> None:
+    """Probe failure (e.g. SelectorEventLoop on Windows) must dead-letter."""
+    manager = _make_mock_session_manager()
+    with patch(
+        "hype_frog.crawler.network_engine._probe_subprocess_supported",
+        new_callable=AsyncMock,
+    ) as probe:
+        probe.return_value = False
+        diag = await fetch_rendered_with_diagnostics(
+            "https://example.com/",
+            render_wait_ms=1000,
+            selector_wait_ms=500,
+            jitter_mean_seconds=0.0,
+            session_manager=manager,
+        )
+
+    assert diag["extraction_state"] in _VALID_EXTRACTION_STATES
+    assert diag["extraction_state"] == "skipped"
+    assert diag["html"] is None
+    assert diag["raw_html"] is None
+    assert diag["extraction_source"] == "raw_http"
+    assert diag["is_js_dependent"] is False
+    # Probe-failure path must not even reach the browser context.
+    manager.get_context.assert_not_awaited()
+
+
+async def test_dead_letter_when_get_context_returns_none() -> None:
+    """CDP / Chromium launch failure surfaces ``get_context() == None``."""
+    manager = MagicMock(spec=PlaywrightSessionManager)
+    manager.get_context = AsyncMock(return_value=None)
+    manager.aclose = AsyncMock(return_value=None)
+    with patch(
+        "hype_frog.crawler.network_engine._probe_subprocess_supported",
+        new_callable=AsyncMock,
+    ) as probe:
+        probe.return_value = True
+        diag = await fetch_rendered_with_diagnostics(
+            "https://example.com/",
+            render_wait_ms=1000,
+            selector_wait_ms=500,
+            jitter_mean_seconds=0.0,
+            session_manager=manager,
+        )
+
+    assert diag["extraction_state"] in _VALID_EXTRACTION_STATES
+    assert diag["extraction_state"] == "skipped"
+    assert diag["html"] is None
+    assert diag["raw_html"] is None
+    assert diag["extraction_source"] == "raw_http"
+    assert diag["raw_word_count"] == 0
+    assert diag["rendered_word_count"] == 0
+
+
+async def test_dead_letter_state_is_in_three_way_contract_via_fetch_rendered() -> None:
+    """The 4-tuple back-compat shape must surface a contract-valid state."""
+    manager = MagicMock(spec=PlaywrightSessionManager)
+    manager.get_context = AsyncMock(return_value=None)
+    manager.aclose = AsyncMock(return_value=None)
+    with patch(
+        "hype_frog.crawler.network_engine._probe_subprocess_supported",
+        new_callable=AsyncMock,
+    ) as probe:
+        probe.return_value = True
+        html, source, state, _headers = await fetch_rendered(
+            "https://example.com/",
+            render_wait_ms=1000,
+            selector_wait_ms=500,
+            jitter_mean_seconds=0.0,
+            session_manager=manager,
+        )
+
+    assert state in _VALID_EXTRACTION_STATES
+    assert state == "skipped"
+    assert html is None
+    assert source == "raw_http"
+
+
+# ---------------------------------------------------------------------------
+# is_js_dependent — boundary coverage (complements existing relative-threshold
+# and absolute-threshold tests above)
+# ---------------------------------------------------------------------------
+
+
+def test_is_js_dependent_at_exact_absolute_delta_boundary() -> None:
+    """``rendered - raw == 100`` is the inclusive trigger for the absolute branch."""
+    # delta = 100, ratio = 0.5  -> trips both branches; expected True.
+    assert _compute_is_js_dependent(raw_count=200, rendered_count=300) is True
+    # delta = 99, ratio ~= 0.495 -> below both branches; expected False.
+    assert _compute_is_js_dependent(raw_count=200, rendered_count=299) is False
+
+
+def test_is_js_dependent_at_exact_relative_threshold_boundary() -> None:
+    """``delta / raw == 0.5`` is the inclusive trigger for the ratio branch."""
+    # raw=200, rendered=300 -> ratio 0.5 (and delta 100 abs trip too).
+    assert _compute_is_js_dependent(raw_count=200, rendered_count=300) is True
+    # raw=400, rendered=499 -> delta 99, ratio 0.2475 -> both branches miss.
+    assert _compute_is_js_dependent(raw_count=400, rendered_count=499) is False
+
+
+def test_is_js_dependent_negative_delta_returns_false() -> None:
+    """Rendered DOM smaller than raw HTML never indicates JS dependence."""
+    assert _compute_is_js_dependent(raw_count=500, rendered_count=300) is False
+    assert _compute_is_js_dependent(raw_count=100, rendered_count=99) is False
+
+
+def test_is_js_dependent_raw_empty_floor_is_inclusive() -> None:
+    """When raw == 0, the JS-only floor (50) trips at exact equality."""
+    assert _compute_is_js_dependent(raw_count=0, rendered_count=50) is True
+    assert _compute_is_js_dependent(raw_count=0, rendered_count=49) is False
+    assert _compute_is_js_dependent(raw_count=0, rendered_count=0) is False
+
+
+def test_is_js_dependent_zero_rendered_always_false() -> None:
+    """If the rendered DOM is empty the heuristic must not flag it."""
+    assert _compute_is_js_dependent(raw_count=0, rendered_count=0) is False
+    assert _compute_is_js_dependent(raw_count=10_000, rendered_count=0) is False
+    assert _compute_is_js_dependent(raw_count=None, rendered_count=0) is False
+
+
+async def test_fetch_http_200_non_html_does_not_read_body() -> None:
+    """200 + non-HTML ``Content-Type`` must short-circuit before ``response.text()``."""
+    response = MagicMock()
+    response.status = 200
+    response.headers = {"Content-Type": "application/pdf"}
+    response.url = "https://example.com/report.pdf"
+    response.history = []
+    response.text = AsyncMock(
+        side_effect=AssertionError("response.text() must not run for non-HTML MIME")
+    )
+
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=response)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    session = MagicMock()
+    session.get = MagicMock(return_value=cm)
+
+    result = await fetch_http(
+        session=session,
+        url="https://example.com/report.pdf",
+        timeout=aiohttp.ClientTimeout(total=30),
+        max_retries=0,
+        retryable_status_codes=RETRYABLE_STATUS_CODES,
+        retry_base_delay_seconds=RETRY_BASE_DELAY_SECONDS,
+        retry_backoff_factor=RETRY_BACKOFF_FACTOR,
+        retry_max_delay_seconds=RETRY_MAX_DELAY_SECONDS,
+        request_jitter_seconds=REQUEST_JITTER_SECONDS,
+    )
+    assert result["status_code"] == 200
+    assert result["html"] is None
+    assert result["error_kind"] is None
+    response.text.assert_not_awaited()

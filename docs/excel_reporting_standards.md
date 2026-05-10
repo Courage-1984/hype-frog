@@ -40,7 +40,7 @@ The TOC sheet lists each workbook tab with:
 
 - A stable **section** name (sheet title),
 - An **Open** hyperlink,
-- A **descriptive** blurb (`toc_descriptions` dictionary pattern in `reporters/sheets/toc.py`).
+- A **descriptive** blurb (`toc_descriptions` dictionary pattern in `src/hype_frog/reporter/sheets/toc.py`).
 
 New sheets must register a human-readable description there.
 
@@ -51,7 +51,7 @@ Business logic for draft vs ready copy uses explicit literals:
 - Ready path: **`Ready to Publish`**
 - Blocked path: **`Needs Copy`**
 
-Conditional formatting must highlight **`Needs Copy`** in **red** (see `reporters/sheets/conditional.py` for the `CellIsRule` pattern). Do not rename these literals without updating both formulas and format rules.
+Conditional formatting must highlight **`Needs Copy`** in **red** (see `src/hype_frog/reporter/sheets/conditional.py` for the `CellIsRule` pattern). Do not rename these literals without updating both formulas and format rules.
 
 ## Numeric conditional formats
 

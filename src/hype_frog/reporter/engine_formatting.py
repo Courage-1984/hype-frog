@@ -388,3 +388,109 @@ def apply_global_conditional_formatting(
                 fill=PatternFill("solid", fgColor="FFF2CC"),
             ),
         )
+
+
+# ---------------------------------------------------------------------------
+# Sprint 6 — executive priority heatmap.
+#
+# Lives alongside ``apply_global_conditional_formatting`` because both
+# share the openpyxl idiom (``worksheet.conditional_formatting.add(rng,
+# Rule(...))``). Kept as a separate function rather than folded into
+# the global helper because the Content Optimisation Hub uses
+# ``header_row=2`` (banner row 1, headers row 2, data row 3) while
+# every other audit sheet uses ``header_row=1`` — a single helper
+# would have to branch on sheet identity, which we deliberately avoid
+# here.
+# ---------------------------------------------------------------------------
+
+
+_CRITICAL_PRIORITY_FILL = PatternFill(
+    start_color="C00000", end_color="C00000", fill_type="solid"
+)
+_CRITICAL_PRIORITY_FONT = Font(color="FFFFFF", bold=True)
+
+
+def _header_index_at_row(worksheet: Worksheet, header_row: int) -> dict[str, int]:
+    """Return ``{header_text: 1-indexed_column}`` for ``header_row``."""
+    return {
+        str(cell.value).strip(): cell.column
+        for cell in worksheet[header_row]
+        if cell.value is not None and str(cell.value).strip()
+    }
+
+
+def apply_executive_priority_formatting(
+    worksheet: Worksheet,
+    *,
+    header_row: int = 2,
+) -> None:
+    """Apply Sprint 6 ROI heatmaps to the Content Optimisation Hub.
+
+    Adds two openpyxl conditional rules driven by the executive ROI
+    columns appended in ``engine_rows.CONTENT_HUB_EXPORT_COLUMNS``:
+
+    1. **ColorScaleRule** (red → yellow → green) on ``Semantic AEO
+       Score`` so low-readiness pages glow red and high-readiness
+       pages glow green at a glance.
+    2. **FormulaRule** on the entire data row that triggers a bold
+       white-on-red fill when ``Instant Priority`` equals ``CRITICAL``.
+
+    Both rules degrade gracefully: if either header is missing (e.g.
+    a legacy export) the corresponding rule is simply skipped, no
+    exception is raised.
+    """
+    if worksheet.max_row <= header_row:
+        return
+    headers = _header_index_at_row(worksheet, header_row)
+    last_row = worksheet.max_row
+    first_data_row = header_row + 1
+
+    aeo_col = headers.get("Semantic AEO Score")
+    if aeo_col:
+        aeo_letter = get_column_letter(aeo_col)
+        worksheet.conditional_formatting.add(
+            f"{aeo_letter}{first_data_row}:{aeo_letter}{last_row}",
+            ColorScaleRule(
+                start_type="num",
+                start_value=0,
+                start_color="F8696B",
+                mid_type="num",
+                mid_value=50,
+                mid_color="FFEB84",
+                end_type="num",
+                end_value=100,
+                end_color="63BE7B",
+            ),
+        )
+
+    priority_col = headers.get("Instant Priority")
+    if priority_col:
+        priority_letter = get_column_letter(priority_col)
+        last_col_letter = get_column_letter(worksheet.max_column)
+        row_range = (
+            f"A{first_data_row}:{last_col_letter}{last_row}"
+        )
+        # Whole-row formula must use a column-absolute / row-relative
+        # reference so each row evaluates against ITS OWN priority cell.
+        worksheet.conditional_formatting.add(
+            row_range,
+            FormulaRule(
+                formula=[f'UPPER(${priority_letter}{first_data_row})="CRITICAL"'],
+                stopIfTrue=False,
+                fill=_CRITICAL_PRIORITY_FILL,
+                font=_CRITICAL_PRIORITY_FONT,
+            ),
+        )
+        # Belt-and-braces: also add a CellIsRule directly on the
+        # priority column itself so the flag stays legible even if a
+        # downstream stylesheet removes the row-wide rule.
+        worksheet.conditional_formatting.add(
+            f"{priority_letter}{first_data_row}:{priority_letter}{last_row}",
+            CellIsRule(
+                operator="equal",
+                formula=['"CRITICAL"'],
+                stopIfTrue=False,
+                fill=_CRITICAL_PRIORITY_FILL,
+                font=_CRITICAL_PRIORITY_FONT,
+            ),
+        )

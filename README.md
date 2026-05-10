@@ -2,10 +2,12 @@
 
 Concurrent **Python 3.12** pipeline for large-scale URL crawling, structured extraction, rule-based scoring, and **workbook** reporting. The CLI drives an asyncio-heavy workflow with optional rendered-page capture for richer DOM-dependent signals.
 
+**Product highlights:** **BFS spider** discovery with depth limits (`HF_MAX_DEPTH`), **semantic AEO** scoring and entity/citation signals, **LLM search-intent** classification with safe fallbacks, **executive ROI** fields (traffic lift, visibility gain, instant priority), and a multi-sheet **audit workbook** with strict sanitization and view-state guardrails.
+
 ## What it does
 
 - Ingests a single URL or a sitemap document, deduplicates and optionally caps URL volume.
-- Crawls with configurable concurrency and delay profiles.
+- Crawls with configurable concurrency and delay profiles; discovers internal links in **breadth-first** order subject to depth and deduplication caps.
 - Produces a multi-sheet **audit workbook** (primary inventory, technical and content tabs, optional full suite) with sanitization and governed view state to reduce client corruption risk.
 - Supports checkpointed runs for long crawls and optional comparison against a prior workbook.
 
@@ -105,18 +107,18 @@ uv run pytest
 
 Re-run the suite after substantive changes to crawl, pipeline, or reporting code.
 
-## Architecture (summary)
+## Architecture and documentation
 
-Detailed breakdown lives under **`./docs/`** (modular markdown only):
+Canonical technical manuals (keep in sync with code changes):
 
-- [`docs/architecture_overview.md`](docs/architecture_overview.md) — layers and data flow.
-- [`docs/crawler_engine.md`](docs/crawler_engine.md) — fetch modes, retries, extraction contract.
-- [`docs/excel_reporting_standards.md`](docs/excel_reporting_standards.md) — integrity, TOC, hub rules.
-- [`docs/data_contracts.md`](docs/data_contracts.md) — row shapes and additive key policy.
+- [`docs/system_architecture.md`](docs/system_architecture.md) — layers, staged pipeline, **BFS spider**, fetch modes, **AEO**, **search intent**, **ROI**, executive dashboard, workbook integrity pointers.
+- [`docs/data_contracts.md`](docs/data_contracts.md) — `main` / `extra` envelopes, Pydantic contracts, additive keys, checkpoints.
+- [`docs/excel_reporting_standards.md`](docs/excel_reporting_standards.md) — reporter module split, sanitization, ghost/nuclear view state, TOC, Content Hub literals.
 
 ## Governance
 
-Cursor rules live in **`.cursor/rules/`** as scoped `.mdc` modules. The root **`.cursorrules`** file is the global governance contract (modular ownership, Pydantic chain-of-trust, logic vs layout separation, and `uv` workflow). Keep `README`, rules, and `docs/` aligned as architecture evolves.
+- **Root contract:** [`.cursorrules`](.cursorrules) — ownership, chain-of-trust, logic vs layout, `uv` toolchain, **continuous documentation sync**.
+- **Cursor rules (consolidated):** [`.cursor/rules/`](.cursor/rules/) — exactly four `.mdc` files: `architecture.mdc`, `auto_documentation.mdc`, `crawler_engine.mdc`, `excel_engine.mdc`.
 
 ## Policy notes
 

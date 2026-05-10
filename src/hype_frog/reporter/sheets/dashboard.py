@@ -305,6 +305,34 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet["A22"] = '=HYPERLINK("#\'Link Inventory\'!A1","External Link Health %")'
         worksheet["B22"] = _EXCEL_EXTERNAL_LINK_HEALTH_PCT
         worksheet["B22"].number_format = "0%"
+        # Sprint 6 — Executive ROI roll-ups sourced from the Content
+        # Optimisation Hub. Both formulas are name-keyed via the
+        # existing ``_CONTENT_HUB_DYNAMIC_COLUMN`` INDEX/MATCH pattern
+        # so they survive any Hub column re-ordering. Wrapped in
+        # ``IFERROR`` so a missing Hub or empty data range collapses
+        # to a clean ``0`` instead of ``#N/A``. ``SUMPRODUCT(--(...))``
+        # is used for the priority count because Excel ``COUNTIF``
+        # rejects array references returned by ``INDEX(..., 0, col)``.
+        worksheet["A23"] = (
+            f'=HYPERLINK("#\'{CONTENT_OPTIMISATION_HUB_SHEET}\'!A1",'
+            f'"Total Estimated Monthly Traffic Lift")'
+        )
+        worksheet["B23"] = (
+            f"=IFERROR(SUM("
+            f'{_CONTENT_HUB_DYNAMIC_COLUMN.format(header="Potential Traffic Lift")}'
+            f"),0)"
+        )
+        worksheet["B23"].number_format = "#,##0"
+        worksheet["A24"] = (
+            f'=HYPERLINK("#\'{CONTENT_OPTIMISATION_HUB_SHEET}\'!A1",'
+            f'"Critical Priority Pages")'
+        )
+        worksheet["B24"] = (
+            f"=IFERROR(SUMPRODUCT(--("
+            f'{_CONTENT_HUB_DYNAMIC_COLUMN.format(header="Instant Priority")}'
+            f'="CRITICAL")),0)'
+        )
+        worksheet["B24"].number_format = "0"
         for ref in (
             "A5",
             "B5",
@@ -342,6 +370,10 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             "B21",
             "A22",
             "B22",
+            "A23",
+            "B23",
+            "A24",
+            "B24",
         ):
             worksheet[ref].fill = value_fill
             worksheet[ref].font = Font(
@@ -365,11 +397,13 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             "A20",
             "A21",
             "A22",
+            "A23",
+            "A24",
         ):
             worksheet[ref].font = Font(
                 color=STD_BLUE, underline="single", bold=True, size=12
             )
-        for row in range(5, 23):
+        for row in range(5, 25):
             worksheet[f"A{row}"].alignment = Alignment(
                 horizontal="center", vertical="center"
             )
@@ -378,6 +412,30 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             kpi_comment = Comment(body, "hype-frog")
             apply_comment_dimensions(kpi_comment)
             worksheet[addr].comment = kpi_comment
+        # Sprint 6 — inline tooltips for the new executive ROI KPIs.
+        # Inlined here (not in ``DASHBOARD_KPI_ROW_COMMENTS``) so this
+        # sprint stays inside its 5-file budget without touching
+        # ``dashboard_config.py``.
+        _exec_roi_tooltips: dict[str, str] = {
+            "A23": (
+                "Total Estimated Monthly Traffic Lift\n\n"
+                "Sum of 'Potential Traffic Lift' across every URL on the "
+                "Content Optimisation Hub. Each row's lift is "
+                "GSC Clicks * ((100 - Semantic AEO Score) / 100) * 0.25 "
+                "(25% AEO ceiling). Pages with no GSC traffic or no AEO "
+                "score contribute 0."
+            ),
+            "A24": (
+                "Critical Priority Pages\n\n"
+                "Count of Hub rows whose 'Instant Priority' is "
+                "'CRITICAL' — i.e. GSC Clicks > 500 AND (Semantic AEO "
+                "Score < 50 OR Field LCP > 2500ms)."
+            ),
+        }
+        for addr, body in _exec_roi_tooltips.items():
+            roi_comment = Comment(body, "hype-frog")
+            apply_comment_dimensions(roi_comment)
+            worksheet[addr].comment = roi_comment
 
     summary_metrics = SummaryMetricsPayload(
         urls_crawled=max(0, total_urls),

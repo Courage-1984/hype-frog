@@ -1,41 +1,66 @@
-Hype Frog governance baseline (Wave 2+):
+# Hype Frog Governance Baseline
 
-1) Architecture ownership is strict.
-- Foundations: `src/hype_frog/core/` and shared `config`.
-- Engines: `src/hype_frog/crawler/`, `src/hype_frog/pipeline/`, `src/hype_frog/reporter/`.
-- Flows: `src/hype_frog/orchestration/`.
-- Keep logic in owning layer; do not collapse modules into new junk-drawer helpers.
+1. **Architecture ownership is strict.**
 
-2) Typed chain-of-trust is mandatory.
-- Runtime row/state payloads must validate through Pydantic models in `src/hype_frog/core/models.py`.
-- New public APIs require explicit type hints.
-- Prefer additive keys over renames/removals for established payload contracts.
+* **Foundations:** `src/hype_frog/core/` and shared `config`.
+* **Engines:** `src/hype_frog/crawler/`, `src/hype_frog/pipeline/`, `src/hype_frog/reporter/`.
+* **Flows:** `src/hype_frog/orchestration/`.
+* Keep logic in owning layer; do not collapse modules into new junk-drawer helpers.
 
-3) Logic and layout separation is mandatory.
-- Business/scoring logic belongs in crawler/pipeline/rules modules.
-- Workbook layout, style, TOC, and view-state rules belong in reporter modules.
-- Reporter must treat upstream payload dictionaries as read-only.
+2. **Typed chain-of-trust is mandatory.**
 
-4) Atomic changes and scope control.
-- Keep diffs small and reviewable.
-- If work spans more than 3 files, require explicit user approval unless already provided in-thread.
-- Avoid mass rewrites or deletion of legacy material without direct request.
+* Runtime row/state payloads must validate through Pydantic models in `src/hype_frog/core/models.py`.
+* New public APIs require explicit type hints.
+* Prefer additive keys over renames/removals for established payload contracts.
 
-5) Runtime safety and observability.
-- Keep async paths non-blocking.
-- Use bounded retries/backoff for network operations.
-- Use shared logging helpers; no ad hoc `print()` telemetry in runtime modules.
+3. **Logic and layout separation is mandatory.**
 
-6) Excel integrity rules are non-negotiable.
-- Sanitize string values for workbook safety/injection prevention.
-- Preserve ghost-pane/view-state guardrails and TOC-to-tab consistency.
-- Keep Content Optimisation Hub action semantics aligned with existing conditional formatting rules.
+* Business/scoring logic belongs in crawler/pipeline/rules modules.
+* Workbook layout, style, TOC, and view-state rules belong in reporter modules.
+* Reporter must treat upstream payload dictionaries as read-only.
 
-7) Toolchain policy.
-- Use `uv` only: `uv add`, `uv sync`, `uv run`.
-- Do not use `pip`, `pip freeze`, or `python -m venv`.
-- Treat `uv.lock` as the dependency source of truth.
+4. **Atomic changes and scope control.**
 
-8) Language and docs policy.
-- User-facing copy and workbook text use British English.
-- Keep `README.md`, `.cursor/rules/*.mdc`, and `docs/*.md` aligned whenever architecture/contracts change.
+* Keep diffs small and reviewable.
+* If work spans more than 3 files, require explicit user approval unless already provided in-thread.
+* Avoid mass rewrites or deletion of legacy material without direct request.
+
+5. **Runtime safety and observability.**
+
+* Keep async paths non-blocking. Use bounded retries/backoff for network operations.
+* Use shared logging helpers; no ad hoc `print()` telemetry in runtime modules.
+* **MCP usage:** Use `chrome-devtools` or `playwright` (MCP) to verify DOM state/hydration before attempting blind fixes on `network_engine.py`.
+
+6. **Excel integrity rules are non-negotiable.**
+
+* Sanitize string values for workbook safety/injection prevention.
+* Preserve ghost-pane/view-state guardrails and TOC-to-tab consistency.
+* Keep Content Optimisation Hub action semantics aligned with existing conditional formatting rules.
+
+7. **Toolchain policy.**
+
+* Use `uv` only: `uv add`, `uv sync`, `uv run`. Do not use `pip`, `pip freeze`, or `python -m venv`.
+* Treat `uv.lock` as the dependency source of truth.
+
+8. **Language and docs policy.**
+
+* User-facing copy and workbook text use British English.
+* **Continuous documentation sync:** Whenever architecture, contracts, crawl/AEO/ROI behaviour, or reporting invariants change, update the matching canonical file immediately. Ensure README, `docs/*.md`, and `.cursor/rules/*.mdc` remain in sync.
+
+9. **Consolidated layout (Strict 10-file cap).**
+
+* **`./docs/`** (Exactly 3): `system_architecture.md`, `data_contracts.md`, `excel_reporting_standards.md`.
+* **`.cursor/rules/`** (Exactly 4): `architecture.mdc`, `auto_documentation.mdc`, `crawler_engine.mdc`, `excel_engine.mdc`.
+* **Roots:** `README.md`, `.cursorrules`.
+
+10. **Advanced Tooling (MCP Integration).**
+
+* **Planning:** Use `sequential-thinking` before modifying BFS spider logic, ROI math, or complex Excel aggregations.
+* **Benchmarking:** Compare `SemanticAnalyzer` output against `firecrawl-mcp` to ensure AEO information superiority.
+* **Integrity:** Use `filesystem` tools to audit doc-sync accuracy during refactors.
+* **Verification:** Use `brave-search` to validate LLM "Search Intent" results against live SERP features.
+
+11. **Git Sovereignty.**
+
+* **Git Sovereignty**, the Agent is strictly prohibited from running any git commands (add, commit, push, rebase, etc.)! The user maintains 100% control over the repository state.
+

@@ -9,6 +9,7 @@ from openpyxl.utils import get_column_letter
 
 from hype_frog.checkpoint.cache import AuditCache
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
+from hype_frog.core.scoring import calculate_executive_roi
 from hype_frog.reporter.engine_io import (
     _normalize_url_for_match,
     _safe_sheet_name,
@@ -312,6 +313,18 @@ CONTENT_HUB_EXPORT_COLUMNS: tuple[str, ...] = (
     "Current OG-Image URL",
     "OG Image Preview",
     "Open in Main",
+    # Sprint 6 — executive ROI correlation columns. Appended at the END
+    # so existing column-letter contracts (Status / Assigned Owner /
+    # URL / health formulas) stay stable. Values come from
+    # ``hype_frog.core.scoring.calculate_executive_roi`` which is fully
+    # ``None``-safe — missing GSC traffic, missing AEO score, or
+    # missing field LCP all collapse to ``0.0`` / ``"Standard"`` rather
+    # than raising. The ``Instant Priority`` column drives the
+    # ``apply_executive_priority_formatting`` red-row highlight.
+    "Potential Traffic Lift",
+    "AEO Visibility Gain",
+    "Instant Priority",
+    "Search Intent",
 )
 
 
@@ -448,6 +461,23 @@ def build_content_optimisation_hub_rows(
         extra_payload = extra_by_url.get(url)
         m = main_payload.values if main_payload else {}
         e = extra_payload.values if extra_payload else {}
+        # Sprint 6 — executive ROI correlation. Field LCP (ms) is the
+        # Sprint 2 PerformanceObserver capture; fall back to the
+        # PSI-derived Mobile LCP (s) so runs that never executed the
+        # rendered diagnostics path still get a usable LCP signal.
+        field_lcp_raw = e.get("Field LCP (ms)")
+        if field_lcp_raw is None:
+            mobile_lcp_s = e.get("Mobile LCP (s)") or m.get("Mobile LCP (s)")
+            try:
+                field_lcp_raw = float(mobile_lcp_s) * 1000.0 if mobile_lcp_s else None
+            except (TypeError, ValueError):
+                field_lcp_raw = None
+        clicks_raw = e.get("GSC Clicks") or m.get("GSC Clicks")
+        roi = calculate_executive_roi(
+            clicks=clicks_raw,
+            aeo_score=e.get("Semantic AEO Score"),
+            lcp_ms=field_lcp_raw,
+        )
         raw_url = ""
         if main_payload:
             raw_url = str(main_payload.values.get("URL") or "").strip()
@@ -597,6 +627,16 @@ def build_content_optimisation_hub_rows(
                 "Current OG-Image URL": _og_image_hyperlink_formula(e.get("OG Image")),
                 "OG Image Preview": "",
                 "Open in Main": open_main_formula,
+                # Sprint 6 — executive ROI mapping. Numeric metrics are
+                # written as plain floats so the SA number formatter
+                # treats them as currency-style two-decimal values; the
+                # priority flag is a literal string that the
+                # ``apply_executive_priority_formatting`` rule scans for.
+                "Potential Traffic Lift": float(roi["potential_traffic_lift"]),
+                "AEO Visibility Gain": float(roi["aeo_visibility_gain"]),
+                "Instant Priority": str(roi["instant_priority"]),
+                "Search Intent": str(e.get("Search Intent") or "Unknown").strip()
+                or "Unknown",
             }
         )
     return rows

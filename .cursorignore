@@ -1,0 +1,14 @@
+# =========================
+# AI Indexing Exclusions
+# =========================
+
+# Prevents Cursor from hallucinating based on outdated code
+archive_legacy/
+
+# Standard Python noise
+__pycache__/
+.pytest_cache/
+
+# Local data/logs that don't help with code understanding
+logs/
+.cache/

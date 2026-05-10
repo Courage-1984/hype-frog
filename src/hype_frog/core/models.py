@@ -220,6 +220,9 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "TTFB (ms)": None,
     "Total Request Time (ms)": None,
     "Content-Type": None,
+    # Dead-letter / short-circuit reasons (machine-readable), e.g.
+    # ``unsupported_mime`` when HTTP 200 returns a non-HTML body.
+    "skip_reason": None,
     "HTTP Version": None,
     "HTML Size (KB)": None,
     "Compression Enabled": False,
@@ -380,6 +383,12 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "Top Entities": None,
     "Citation Candidate Count": 0,
     "Semantic AEO Score": None,
+    # LLM intent classifier. Populated as one of: Informational,
+    # Transactional, Navigational, Commercial Investigation, or Unknown.
+    # Defaults to Unknown so missing API keys and skipped LLM calls remain
+    # explicit in downstream reports instead of disappearing during
+    # ExtraRowPayload re-validation.
+    "Search Intent": "Unknown",
     # Sprint 4 — structural intelligence, security boolean digests, and
     # internationalisation. ``Crawl Depth`` is the BFS distance from the
     # seed URL (``0`` for the seed); ``Security: HSTS`` / ``Security: CSP``

@@ -21,6 +21,7 @@ src/hype_frog/core/link_constants.py
 src/hype_frog/core/logger.py
 src/hype_frog/core/models.py
 src/hype_frog/core/run_config.py
+src/hype_frog/core/scoring.py
 src/hype_frog/core/text_utils.py
 src/hype_frog/core/url_normalization.py
 src/hype_frog/crawler/__init__.py
@@ -61,6 +62,7 @@ src/hype_frog/reporter/engine_guardrails.py
 src/hype_frog/reporter/engine_io.py
 src/hype_frog/reporter/engine_rows.py
 src/hype_frog/reporter/excel_engine.py
+src/hype_frog/reporter/help_layer.py
 src/hype_frog/reporter/narrative_engine.py
 src/hype_frog/reporter/summary_builder.py
 src/hype_frog/reporter/sheets/__init__.py

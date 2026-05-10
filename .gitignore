@@ -41,5 +41,7 @@ output/
 # =========================
 .DS_Store
 .vscode/
-# Notice we are NOT ignoring .cursor/ or uv.lock!
+
+# NOTICE: .cursor/ and uv.lock are NOT ignored!
+# We version control our Cursor rules and dependency lockfile.
 
