@@ -16,6 +16,7 @@ Requires-Dist: python-dotenv>=1.0.0
 Requires-Dist: google-api-python-client>=2.0.0
 Requires-Dist: google-auth-oauthlib>=1.0.0
 Requires-Dist: playwright>=1.59.0
+Requires-Dist: spacy>=3.8.14
 Provides-Extra: dev
 Requires-Dist: pytest>=8.0.0; extra == "dev"
 Provides-Extra: render

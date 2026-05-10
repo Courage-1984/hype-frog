@@ -26,7 +26,10 @@ from hype_frog.crawler.data_assembler import (
     finalize_row_state,
     init_rows,
 )
-from hype_frog.crawler.network_engine import fetch_http, fetch_rendered
+from hype_frog.crawler.network_engine import (
+    fetch_http,
+    fetch_rendered_with_diagnostics,
+)
 from hype_frog.core.models import CrawlRowPayload
 from hype_frog.core.text_utils import status_class
 from hype_frog.core.url_normalization import normalize_url
@@ -85,7 +88,17 @@ async def fetch_and_parse(
     crawl_mode: str = "fast",
     render_wait_ms: int = 4000,
     selector_wait_ms: int = 3000,
+    depth: int = 0,
 ) -> CrawlRowPayload:
+    """Crawl a single URL and return a populated row payload.
+
+    ``depth`` is the BFS hop distance from the seed URL when the caller
+    is operating a true spider (``0`` for the seed). The current
+    sitemap-driven runner in :mod:`hype_frog.orchestration.crawl_runner`
+    does not maintain BFS state, so it leaves the default; the kwarg
+    exists here so a future spider entrypoint can plug in without
+    further fetcher edits.
+    """
     del full_suite
     async with semaphore:
         start_time = time.time()
@@ -178,23 +191,40 @@ async def fetch_and_parse(
             extraction_state_hint = "complete"
             rendered_headers: dict[str, str] = {}
             if crawl_mode == "accurate":
-                rendered_html, rendered_source, rendered_state, rendered_headers_raw = (
-                    await fetch_rendered(
-                        url,
-                        render_wait_ms=render_wait_ms,
-                        selector_wait_ms=selector_wait_ms,
-                    )
+                # Switched from the legacy 4-tuple ``fetch_rendered`` wrapper
+                # to the rich diagnostics flavour so Sprint 2 raw-vs-rendered
+                # signals (JS-dependent flag, raw/rendered word counts,
+                # field PerformanceObserver LCP/CLS) reach the row payload
+                # for cache + workbook export. Failures still degrade
+                # gracefully — see ``_empty_diagnostics``.
+                diagnostics = await fetch_rendered_with_diagnostics(
+                    url,
+                    render_wait_ms=render_wait_ms,
+                    selector_wait_ms=selector_wait_ms,
                 )
+                rendered_html = diagnostics["html"]
                 if rendered_html:
                     html = rendered_html
-                    extraction_source = rendered_source
-                    extraction_state_hint = rendered_state
+                    extraction_source = diagnostics["extraction_source"]
+                    extraction_state_hint = diagnostics["extraction_state"]
                     rendered_headers = {
                         str(k).lower(): str(v)
-                        for k, v in (rendered_headers_raw or {}).items()
+                        for k, v in (diagnostics["response_headers"] or {}).items()
                     }
                 else:
                     extraction_state_hint = "partial"
+                # Always surface the Sprint 2 ghost data — even when
+                # ``rendered_html`` was empty the raw_word_count /
+                # is_js_dependent values are still meaningful (and the
+                # SQLite cache stores raw JSON, so these new keys
+                # round-trip without a Pydantic schema bump).
+                extra_values["JS Dependent"] = bool(diagnostics["is_js_dependent"])
+                extra_values["Raw Words"] = int(diagnostics["raw_word_count"] or 0)
+                extra_values["Rendered Words"] = int(
+                    diagnostics["rendered_word_count"] or 0
+                )
+                extra_values["Field LCP (ms)"] = diagnostics["field_lcp_ms"]
+                extra_values["Field CLS"] = diagnostics["field_cls"]
             main_values["Extraction Source"] = extraction_source
             extra_values["Extraction Source"] = extraction_source
             if rendered_headers:
@@ -235,6 +265,7 @@ async def fetch_and_parse(
                 extra=extra,
                 html=html,
                 resolved_url=resolved_url,
+                depth=depth,
             )
             main_values["Extraction State"] = extraction_state_hint
         else:

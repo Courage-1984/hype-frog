@@ -33,6 +33,17 @@ TECHNICAL_DIAGNOSTICS_COLUMNS: tuple[str, ...] = (
     "GSC Last Crawl",
     "GSC Coverage Category",
     "Source Legacy Tab",
+    # Sprint 5 — structural / security / i18n diagnostics migrated from
+    # the Content Optimisation Hub. Appended at the END so existing
+    # column-position contracts (notably the
+    # ``_link_main_technical_health_to_diagnostics`` VLOOKUP into
+    # ``'Technical Diagnostics'!$A:$E,5,FALSE`` for ``SEO Health Score``)
+    # are preserved. ``Anchor Text Diversity`` deliberately stays on the
+    # Hub per the brief and is not mirrored here.
+    "Crawl Depth",
+    "Security: HSTS",
+    "Security: CSP",
+    "Hreflang Signals",
 )
 
 CONTENT_AI_READINESS_COLUMNS: tuple[str, ...] = (
@@ -273,6 +284,16 @@ def build_technical_diagnostics_rows(
                 "GSC Last Crawl": _to_str(row.get("GSC Inspection Last Crawl")),
                 "GSC Coverage Category": _to_str(row.get("GSC Inspection Coverage State")),
                 "Source Legacy Tab": _joined(sources),
+                # Sprint 5 — migrated from the Content Optimisation Hub.
+                # ``Crawl Depth`` is the BFS hop distance from the seed
+                # (currently always ``0`` until a spider entrypoint
+                # passes a real value); the security columns are boolean
+                # digests of the raw response headers above; the
+                # hreflang string is purely on-page extraction.
+                "Crawl Depth": _to_int(row.get("Crawl Depth"), 0),
+                "Security: HSTS": _to_bool(row.get("Security: HSTS")),
+                "Security: CSP": _to_bool(row.get("Security: CSP")),
+                "Hreflang Signals": _to_str(row.get("Hreflang Signals")),
             }
         )
     return rows
