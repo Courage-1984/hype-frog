@@ -384,13 +384,16 @@ def build_issue_register_rows(
         section = _to_str(row.get("Section")) or "Issue Counts"
         issue_name = _to_str(row.get("Issue"))
         ref = _to_str(row.get("Reference Tab"))
+        affected_count = _to_int(row.get("Affected URL Count"), 0)
+        if affected_count <= 0:
+            continue
         rows.append(
             {
                 "URL": "",
                 "Section": section,
                 "Issue": issue_name,
                 "Severity": _to_str(row.get("Severity")),
-                "Affected URL Count": _to_int(row.get("Affected URL Count"), 0),
+                "Affected URL Count": affected_count,
                 "Reference Area": ref,
                 "Stable Issue ID": "",
                 "Owner": "",

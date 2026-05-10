@@ -36,10 +36,12 @@ def normalize_url_key(url: object, keep_query: bool = True) -> str:
     return normalize_url(url, keep_query=keep_query)
 
 
-def readability_flesch(words: int, sentences: int) -> float | None:
+def readability_flesch(words: int, sentences: int, syllables: int) -> float | None:
     if words <= 0 or sentences <= 0:
         return None
-    return round(206.835 - 1.015 * (words / sentences), 2)
+    score = 206.835 - 1.015 * (words / sentences) - 84.6 * (syllables / words)
+    bounded_score = max(0.0, min(100.0, score))
+    return round(bounded_score, 2)
 
 
 def url_depth(url: str) -> int:
@@ -289,12 +291,13 @@ def assemble_from_html(
         extra_values["Word Count"] = word_count
         extra_values["Thin Content Flag"] = word_count < 300
         extra_values["Word Count Band"] = word_count_band(word_count)
-        sentence_count = max(1, len([s for s in body_text.split(".") if s.strip()]))
+        sentence_parts = re.split(r"[.!?]+(?:\s+|$)", body_text)
+        sentence_count = max(1, len([s for s in sentence_parts if s.strip()]))
         extra_values["Sentence Count"] = sentence_count
-        extra_values["Readability (Rough Flesch)"] = readability_flesch(
-            word_count, sentence_count
-        )
         syllables = count_syllables_approx(body_text)
+        extra_values["Readability (Rough Flesch)"] = readability_flesch(
+            word_count, sentence_count, syllables
+        )
         fk_grade = flesch_kincaid_grade_level(
             word_count=word_count,
             sentence_count=sentence_count,

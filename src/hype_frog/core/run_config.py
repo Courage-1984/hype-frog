@@ -29,9 +29,9 @@ class RunConfig:
 
 
 def quick_test_run_config() -> RunConfig:
-    """10-URL sitemap crawl preset: Playwright, faster profile, full suite, no PSI, no checkpoint resume prompt."""
+    """10-URL single-seed BFS crawl preset: Playwright, faster profile, full suite, no PSI, no checkpoint resume prompt."""
     return RunConfig(
-        target_input="https://africanmarketingconfederation.org/page-sitemap.xml",
+        target_input="https://africanmarketingconfederation.org/",
         max_urls=10,
         max_psi_urls=0,
         high_value_slugs=[],

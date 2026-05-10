@@ -308,7 +308,9 @@ def build_priority_rows(
             {
                 "URL": row.get("URL"),
                 "Business Risk Score": int(risk_score),
-                "SEO Health Score": row.get("SEO Health Score"),
+                "SEO Health Score": round(
+                    value_or_default_fn(row.get("SEO Health Score"), 0.0), 2
+                ),
                 "Severity Badge": row.get("Severity Badge"),
                 "Critical Issues Count": row.get("Critical Issues Count"),
                 "Warning Issues Count": row.get("Warning Issues Count"),
@@ -316,7 +318,7 @@ def build_priority_rows(
                 "Broken Internal Links Count": row.get("Broken Internal Links Count"),
                 "Canonical Type": row.get("Canonical Type"),
                 "GSC Impressions": row.get("GSC Impressions", 0.0),
-                "GSC CTR": row.get("GSC CTR", 0.0),
+                "GSC CTR": round(value_or_default_fn(row.get("GSC CTR"), 0.0), 4),
                 "Revenue Intent": revenue_intent,
                 "Why Prioritized": " | ".join(reasons) if reasons else "Monitor",
                 "Action Needed": "Yes" if risk_score >= 30 else "No",
@@ -452,13 +454,20 @@ def build_crawlgraph_rows(
                 ),
                 None,
             ),
-            "Internal PageRank": next(
-                (
-                    row.get("Internal PageRank")
-                    for row in extra_rows
-                    if normalize_url_key(row.get("URL")) == normalize_url_key(url_item)
+            "Internal PageRank": round(
+                float(
+                    next(
+                        (
+                            row.get("Internal PageRank")
+                            for row in extra_rows
+                            if normalize_url_key(row.get("URL"))
+                            == normalize_url_key(url_item)
+                        ),
+                        0.0,
+                    )
+                    or 0.0
                 ),
-                0.0,
+                6,
             ),
         }
         for url_item in main_urls
@@ -472,7 +481,26 @@ def build_sitemapqa_rows(
 ) -> list[dict[str, Any]]:
     sitemap_rows: list[dict[str, Any]] = []
     if not sitemap_meta:
-        return sitemap_rows
+        return [
+            {
+                "Sitemap URL": "No Sitemap data available for this run.",
+                "Final URL": "",
+                "Status Code": "",
+                "Found via Crawl": "",
+                "Found via Sitemap": "",
+                "Discovery Source": "",
+                "In Sitemap but Non-200": "",
+                "Sitemap URL Redirects": "",
+                "In Sitemap but Canonicalized Elsewhere": "",
+                "Missing <lastmod>": "",
+                "Missing <changefreq>": "",
+                "Missing <priority>": "",
+                "Sitemap <lastmod>": "",
+                "Sitemap <changefreq>": "",
+                "Sitemap <priority>": "",
+                "Source Sitemap": "",
+            }
+        ]
     for sitemap_url, meta in sitemap_meta.items():
         matched = next(
             (

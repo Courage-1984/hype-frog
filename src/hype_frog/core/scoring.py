@@ -35,7 +35,7 @@ CRITICAL_LCP_MS_THRESHOLD: Final[float] = 2500.0
 class ExecutiveROIResult(TypedDict):
     """Return shape of :func:`calculate_executive_roi`."""
 
-    potential_traffic_lift: float
+    potential_traffic_lift: int
     aeo_visibility_gain: float
     instant_priority: str
 
@@ -102,20 +102,28 @@ def calculate_executive_roi(
           :data:`CRITICAL_LCP_MS_THRESHOLD`). ``"Standard"`` otherwise.
     """
     safe_clicks = _safe_clicks(clicks)
-    safe_aeo = _safe_float(aeo_score)
-    safe_lcp = _safe_float(lcp_ms)
-
-    if safe_aeo is None:
-        # No baseline → cannot estimate either headroom or lift.
-        potential_lift = 0.0
-        visibility_gain = 0.0
-    else:
-        clamped_aeo = max(0.0, min(100.0, safe_aeo))
-        visibility_gain = round(100.0 - clamped_aeo, 2)
-        potential_lift = round(
-            safe_clicks * (visibility_gain / 100.0) * AEO_MAX_LIFT_FACTOR,
-            2,
+    if safe_clicks <= 0:
+        # Zero-click rule: no traffic baseline means zero lift, always.
+        potential_lift = 0
+        safe_aeo = _safe_float(aeo_score)
+        visibility_gain = (
+            round(100.0 - max(0.0, min(100.0, safe_aeo)), 2)
+            if safe_aeo is not None
+            else 0.0
         )
+    else:
+        safe_aeo = _safe_float(aeo_score)
+        if safe_aeo is None:
+            visibility_gain = 0.0
+            potential_lift = 0
+        else:
+            clamped_aeo = max(0.0, min(100.0, safe_aeo))
+            visibility_gain = round(100.0 - clamped_aeo, 2)
+            potential_lift = int(
+                round(safe_clicks * (visibility_gain / 100.0) * AEO_MAX_LIFT_FACTOR)
+            )
+
+    safe_lcp = _safe_float(lcp_ms)
 
     aeo_at_risk = safe_aeo is not None and safe_aeo < CRITICAL_AEO_THRESHOLD
     lcp_at_risk = safe_lcp is not None and safe_lcp > CRITICAL_LCP_MS_THRESHOLD
