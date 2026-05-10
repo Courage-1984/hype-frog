@@ -3,12 +3,16 @@ from __future__ import annotations
 import asyncio
 import random
 import time
-from typing import TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
+from urllib.parse import urlparse
 
 import aiohttp
 
 from hype_frog.config import PLAYWRIGHT_MAX_SESSIONS
 from hype_frog.core import get_logger
+
+if TYPE_CHECKING:  # pragma: no cover - import only for type hints
+    from playwright.async_api import Browser, BrowserContext
 
 logger = get_logger(__name__)
 _PLAYWRIGHT_SEMAPHORE = asyncio.Semaphore(max(1, int(PLAYWRIGHT_MAX_SESSIONS)))
@@ -23,6 +27,140 @@ class HttpFetchResult(TypedDict):
     ttfb_ms: float | None
     total_request_ms: float | None
     error_kind: str | None
+
+
+def _domain_key(url: str) -> str:
+    """Return a normalised ``host[:port]`` key for context isolation.
+
+    Empty/relative URLs collapse to ``"_default"`` so that calls without a
+    parsable origin still receive an isolated context (rather than colliding
+    with everything else).
+    """
+    try:
+        parsed = urlparse(str(url or "").strip())
+    except (ValueError, AttributeError):
+        return "_default"
+    netloc = (parsed.netloc or "").lower()
+    return netloc or "_default"
+
+
+class PlaywrightSessionManager:
+    """Per-instance manager that maps base domains to isolated browser contexts.
+
+    Encapsulates the ``BrowserContext`` lifecycle so cookies, local storage,
+    and HTTP cache stay strictly siloed across domains during a single
+    rendered-fetch session. Use as an ``async with`` context manager:
+
+    .. code-block:: python
+
+        async with PlaywrightSessionManager() as manager:
+            context = await manager.get_context("https://example.com/")
+
+    Concurrency: an internal :class:`asyncio.Lock` serialises lazy launch and
+    per-domain context creation so sibling crawl tasks cannot race on the
+    same ``Browser`` instance.
+    """
+
+    def __init__(
+        self,
+        *,
+        browser_factory: Any | None = None,
+        headless: bool = True,
+        context_kwargs: dict[str, Any] | None = None,
+    ) -> None:
+        self._browser_factory = browser_factory
+        self._headless = headless
+        self._context_kwargs: dict[str, Any] = dict(context_kwargs or {})
+        self._playwright_cm: Any | None = None
+        self._playwright: Any | None = None
+        self._browser: Browser | None = None
+        self._contexts: dict[str, BrowserContext] = {}
+        self._lock = asyncio.Lock()
+        self._closed = False
+
+    async def __aenter__(self) -> PlaywrightSessionManager:
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        await self.aclose()
+
+    async def _ensure_browser(self) -> Browser | None:
+        if self._browser is not None:
+            return self._browser
+        if self._closed:
+            return None
+
+        if self._browser_factory is None:
+            try:
+                from playwright.async_api import async_playwright
+            except Exception:
+                logger.warning(
+                    "Accurate mode requested but Playwright is unavailable. "
+                    "Install with: uv add playwright && uv run playwright install chromium"
+                )
+                return None
+            self._playwright_cm = async_playwright()
+            self._playwright = await self._playwright_cm.__aenter__()
+            chromium = self._playwright.chromium
+        else:
+            chromium = self._browser_factory
+
+        try:
+            self._browser = await chromium.launch(headless=self._headless)
+        except Exception:
+            logger.warning(
+                "Chromium browser binaries are missing. Run: uv run playwright install chromium"
+            )
+            await self._teardown_playwright()
+            return None
+        return self._browser
+
+    async def get_context(self, url: str) -> BrowserContext | None:
+        """Return the cached context for ``url``'s base domain (lazy-create)."""
+        if self._closed:
+            raise RuntimeError("PlaywrightSessionManager is closed")
+        domain = _domain_key(url)
+        async with self._lock:
+            cached = self._contexts.get(domain)
+            if cached is not None:
+                return cached
+            browser = await self._ensure_browser()
+            if browser is None:
+                return None
+            context = await browser.new_context(**self._context_kwargs)
+            self._contexts[domain] = context
+            logger.debug("Playwright context created for domain=%s", domain)
+            return context
+
+    async def aclose(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        for domain, context in list(self._contexts.items()):
+            try:
+                await context.close()
+            except Exception as exc:
+                logger.debug("Failed to close context %s: %s", domain, exc)
+        self._contexts.clear()
+        if self._browser is not None:
+            try:
+                await self._browser.close()
+            except Exception as exc:
+                logger.debug("Failed to close browser: %s", exc)
+            self._browser = None
+        await self._teardown_playwright()
+
+    async def _teardown_playwright(self) -> None:
+        if self._playwright_cm is None:
+            self._playwright = None
+            return
+        try:
+            await self._playwright_cm.__aexit__(None, None, None)
+        except Exception as exc:
+            logger.debug("Failed to close playwright runtime: %s", exc)
+        finally:
+            self._playwright_cm = None
+            self._playwright = None
 
 
 async def fetch_rendered(
@@ -50,7 +188,6 @@ async def fetch_rendered(
         try:
             from playwright.async_api import Error as PlaywrightError
             from playwright.async_api import TimeoutError as PlaywrightTimeoutError
-            from playwright.async_api import async_playwright
         except Exception:
             logger.warning(
                 "Accurate mode requested but Playwright is unavailable. "
@@ -58,18 +195,16 @@ async def fetch_rendered(
             )
             return None, "raw_http", "partial", None
 
-        browser = None
-        try:
-            async with async_playwright() as p:
-                try:
-                    browser = await p.chromium.launch(headless=True)
-                except Exception:
-                    logger.warning(
-                        "Chromium browser binaries are missing. Run: uv run playwright install chromium"
-                    )
-                    return None, "raw_http", "partial", None
-                context = await browser.new_context()
+        async with PlaywrightSessionManager() as manager:
+            context = await manager.get_context(target_url)
+            if context is None:
+                return None, "raw_http", "partial", None
+            try:
                 page = await context.new_page()
+            except PlaywrightError:
+                return None, "raw_http", "partial", None
+
+            try:
                 try:
                     nav_response = await page.goto(
                         target_url,
@@ -98,7 +233,6 @@ async def fetch_rendered(
                             extraction_state = "partial"
                     html = await page.content()
                     response_headers = dict(nav_response.headers) if nav_response else {}
-                    await context.close()
                     return html, "rendered_browser", extraction_state, response_headers
                 except PlaywrightTimeoutError:
                     html = await page.content()
@@ -107,17 +241,14 @@ async def fetch_rendered(
                         if "nav_response" in locals() and nav_response
                         else {}
                     )
-                    await context.close()
                     return html, "rendered_browser", "partial", response_headers
                 except PlaywrightError:
-                    await context.close()
                     return None, "raw_http", "partial", None
-        except Exception:
-            return None, "raw_http", "partial", None
-        finally:
-            if browser:
+            except Exception:
+                return None, "raw_http", "partial", None
+            finally:
                 try:
-                    await browser.close()
+                    await page.close()
                 except Exception:
                     pass
 
