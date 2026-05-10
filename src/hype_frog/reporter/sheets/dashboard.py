@@ -16,6 +16,7 @@ from hype_frog.reporter.narrative_engine import NarrativeEngine, average_seo_sco
 from hype_frog.reporter.sheets.dashboard_config import (
     ALERT_COLOR,
     DASHBOARD_COLUMN_WIDTHS,
+    DASHBOARD_KPI_ROW_COMMENTS,
     DASHBOARD_TOOLTIPS,
     GOOD_COLOR,
     LIGHT_HEADER_COLOR,
@@ -35,6 +36,7 @@ from hype_frog.reporter.sheets.config import (
     STD_NAVY,
 )
 from hype_frog.reporter.sheets.style_helpers import header_index, to_int
+from hype_frog.reporter.sheets.validation import apply_comment_dimensions
 from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
 from hype_frog.reporter.sheets.conditional import (
     apply_dashboard_metric_conditional_rules,
@@ -372,38 +374,10 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
                 horizontal="center", vertical="center"
             )
             worksheet.row_dimensions[row].height = 24
-        worksheet["A5"].comment = Comment(
-            "Aggregated organic visibility score based on metadata, indexing, and keyword footprint.",
-            "hype-frog",
-        )
-        worksheet["A6"].comment = Comment(
-            "Summary of crawlability, status codes, and HTTPS security.",
-            "hype-frog",
-        )
-        worksheet["A7"].comment = Comment(
-            "Core Web Vitals and PageSpeed Insights (Mobile/Desktop) averages.",
-            "hype-frog",
-        )
-        worksheet["A18"].comment = Comment(
-            "Count of URLs on Main with valid JSON-LD (Has Valid JSON-LD = TRUE).",
-            "hype-frog",
-        )
-        worksheet["A19"].comment = Comment(
-            "Room for AEO improvement (0–100): when extractability averages exist, "
-            "100 minus average AEO Extractability Score; otherwise (1 minus Average SEO Score %) × 100.",
-            "hype-frog",
-        )
-        worksheet["A21"].comment = Comment(
-            "Sum of generic anchor-text occurrences per URL (Link Intelligence Summary rows). "
-            "Improve anchors for answer-engine clarity.",
-            "hype-frog",
-        )
-        worksheet["A22"].comment = Comment(
-            "Share of unique external target URLs returning HTTP 200 after optional HEAD sniff "
-            "(RunMetadata keys External Sniff Performed / External Link Unique *). "
-            "Blank when sniff was skipped.",
-            "hype-frog",
-        )
+        for addr, body in DASHBOARD_KPI_ROW_COMMENTS.items():
+            kpi_comment = Comment(body, "hype-frog")
+            apply_comment_dimensions(kpi_comment)
+            worksheet[addr].comment = kpi_comment
 
     summary_metrics = SummaryMetricsPayload(
         urls_crawled=max(0, total_urls),
@@ -873,7 +847,9 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     for ref, message in DASHBOARD_TOOLTIPS.items():
         cell = worksheet[ref]
         title = f"KPI {ref}"
-        cell.comment = Comment(f"{title}\n\n{message}", "hype-frog")
+        kpi_comment = Comment(f"{title}\n\n{message}", "hype-frog")
+        apply_comment_dimensions(kpi_comment)
+        cell.comment = kpi_comment
     worksheet.conditional_formatting.add(
         "B20",
         CellIsRule(

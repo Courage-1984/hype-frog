@@ -5,7 +5,16 @@
 .venv/
 secrets/
 client_secrets.json
+credentials.json
 token.json
+
+# =========================
+# Local caches (PSI, GSC, etc.)
+# =========================
+.cache/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
 
 # =========================
 # Python Artifacts

@@ -1,6 +1,6 @@
 [project]
 name = "hype-frog"
-version = "0.1.0"
+version = "0.2.0"
 description = "Technical site crawl and workbook reporting"
 readme = "README.md"
 requires-python = ">=3.12"
