@@ -33,6 +33,26 @@ def _hub_score_value(raw: object) -> float:
     return round(x, 2)
 
 
+def _round2(raw: object, default: float = 0.0) -> float:
+    try:
+        val = float(raw)
+    except (TypeError, ValueError):
+        return default
+    if math.isnan(val) or math.isinf(val):
+        return default
+    return round(val, 2)
+
+
+def _round4(raw: object, default: float = 0.0) -> float:
+    try:
+        val = float(raw)
+    except (TypeError, ValueError):
+        return default
+    if math.isnan(val) or math.isinf(val):
+        return default
+    return round(val, 4)
+
+
 def _heading_levels_from_h_tag_structure(structure: object) -> dict[int, list[str]]:
     """Parse ``Current H-Tag Structure`` lines like ``H2: text`` into level → texts."""
     out: dict[int, list[str]] = {1: [], 2: [], 3: [], 4: [], 5: [], 6: []}
@@ -145,6 +165,9 @@ def build_fixplan_rows(
             for r in extra_rows
             if issue_name in str(r.values.get("Matched Issues") or "").split(" | ")
         ]
+        affected_count = len(affected)
+        if affected_count <= 0:
+            continue
         root_cause, recommended_fix = root_cause_resolver(issue_name)
         effort = default_effort_by_severity.get(severity, "S")
         workflow = workflow_metrics_for_issue(severity, effort)
@@ -193,7 +216,7 @@ def build_fixplan_rows(
                 "Category": "AEO" if issue_name in aeo_issue_names else "SEO",
                 "Issue Type": issue_name,
                 "Severity": severity,
-                "Affected Count": len(affected),
+                "Affected Count": affected_count,
                 "Likely Root Cause": root_cause,
                 "Recommended Fix": recommended_fix,
                 "Owner": owner_for_issue(issue_name, severity),
@@ -439,7 +462,7 @@ def build_content_optimisation_hub_rows(
                 score = float(row_values.get("SEO Health Score") or 0.0)
             except Exception:
                 score = 0.0
-            scored_urls.append((score, raw_url))
+            scored_urls.append((round(score, 2), raw_url))
         scored_urls.sort(key=lambda item: item[0])
         for _score, url in scored_urls[:15]:
             manual_content_urls.add(url)
@@ -573,7 +596,7 @@ def build_content_optimisation_hub_rows(
                 "SEO Score": _hub_score_value(e.get("SEO Score")),
                 "Technical Health": _hub_score_value(e.get("Technical Health")),
                 "Copy Score": _hub_score_value(e.get("Copy Score")),
-                "Entity Density (%)": e.get("Entity Density (%)"),
+                "Entity Density (%)": _round2(e.get("Entity Density (%)")),
                 "Top Entities": str(e.get("Top Entities") or "").strip(),
                 # Display-safe string: the shared number formatter treats any
                 # header containing "date" as date-like, and "Candidate"
@@ -581,7 +604,7 @@ def build_content_optimisation_hub_rows(
                 "Citation Candidate Count": str(
                     int(float(e.get("Citation Candidate Count") or 0))
                 ),
-                "Semantic AEO Score": e.get("Semantic AEO Score"),
+                "Semantic AEO Score": _round2(e.get("Semantic AEO Score")),
                 # Sprint 5 — Sprint 2 ghost data surfacing on the Hub.
                 # Boolean and integer coercions are intentional so the
                 # Excel formatter does not interpret a stray ``None`` as
@@ -592,8 +615,8 @@ def build_content_optimisation_hub_rows(
                 "JS Dependent": bool(e.get("JS Dependent")),
                 "Raw Words": int(float(e.get("Raw Words") or 0)),
                 "Rendered Words": int(float(e.get("Rendered Words") or 0)),
-                "Field LCP (ms)": e.get("Field LCP (ms)"),
-                "Field CLS": e.get("Field CLS"),
+                "Field LCP (ms)": _round2(e.get("Field LCP (ms)"), default=0.0),
+                "Field CLS": _round4(e.get("Field CLS"), default=0.0),
                 "Anchor Text Diversity": str(
                     e.get("Anchor Text Diversity") or ""
                 ).strip(),
@@ -632,8 +655,8 @@ def build_content_optimisation_hub_rows(
                 # treats them as currency-style two-decimal values; the
                 # priority flag is a literal string that the
                 # ``apply_executive_priority_formatting`` rule scans for.
-                "Potential Traffic Lift": float(roi["potential_traffic_lift"]),
-                "AEO Visibility Gain": float(roi["aeo_visibility_gain"]),
+                "Potential Traffic Lift": int(round(roi["potential_traffic_lift"])),
+                "AEO Visibility Gain": _round2(roi["aeo_visibility_gain"]),
                 "Instant Priority": str(roi["instant_priority"]),
                 "Search Intent": str(e.get("Search Intent") or "Unknown").strip()
                 or "Unknown",

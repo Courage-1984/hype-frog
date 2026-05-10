@@ -122,6 +122,35 @@ def _sheet_rows(worksheet: Worksheet) -> list[dict[str, Any]]:
     return rows
 
 
+def _count_broken_internal_link_instances(link_inventory_rows: list[dict[str, Any]]) -> int:
+    count = 0
+    for row in link_inventory_rows:
+        link_type = str(row.get("Link Type") or "").strip().lower()
+        if link_type != "internal":
+            continue
+        status = row.get("Status Code")
+        if isinstance(status, (int, float)) and int(status) == 404:
+            count += 1
+            continue
+        status_text = str(status or "").strip()
+        if status_text == "404":
+            count += 1
+    return count
+
+
+def _format_priority_urls_ctr(writer: Any) -> None:
+    """Format Priority URLs CTR values to four decimals for readability."""
+    if "Priority URLs" not in writer.book.sheetnames:
+        return
+    priority_ws = writer.book["Priority URLs"]
+    headers = header_index(priority_ws)
+    ctr_col = headers.get("GSC CTR")
+    if not ctr_col or priority_ws.max_row < 2:
+        return
+    for row_idx in range(2, priority_ws.max_row + 1):
+        priority_ws.cell(row=row_idx, column=ctr_col).number_format = "0.0000"
+
+
 def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     """Render the executive dashboard sheet with KPI and ownership blocks.
 
@@ -240,9 +269,9 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             '=HYPERLINK("#\'Technical Diagnostics\'!A1","Mobile vs. Desktop Variance")'
         )
         worksheet["B8"] = (
-            "=IFERROR("
+            "=ROUND(IFERROR("
             "AVERAGE('Technical Diagnostics'!S:S)-AVERAGE('Technical Diagnostics'!R:R)"
-            ",0)"
+            ",0),1)"
         )
         worksheet["B8"].number_format = "0.0"
         worksheet["A9"] = '=HYPERLINK("#\'Priority URLs\'!A1","Critical URLs")'
@@ -270,7 +299,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet["B15"] = "=MIN(1,B5+(B9*0.01))"
         worksheet["B15"].number_format = "0%"
         worksheet["A16"] = "Projected Pass Rate % (if all To Do done)"
-        worksheet["B16"] = "=MIN(1,B7+(B9*0.01))"
+        worksheet["B16"] = f"=IFERROR(IF({_TD_URL_ROWS}>0,1,0),0)"
         worksheet["B16"].number_format = "0%"
         worksheet["A17"] = (
             f'=HYPERLINK("#\'{CONTENT_OPTIMISATION_HUB_SHEET}\'!A1",'
@@ -515,6 +544,12 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         avg_seo_score_pct=avg_seo_pct_narrative,
         critical_url_count=dashboard_metrics.critical_urls,
     )
+    broken_internal_instances = _count_broken_internal_link_instances(
+        link_inventory_rows_narrative
+    )
+    strategic_narrative_text = (
+        f"{strategic_narrative_text}\n\nBroken internal links: {broken_internal_instances}."
+    )
 
     status_buckets = dashboard_metrics.status_buckets
     error_count = dashboard_metrics.error_count
@@ -524,9 +559,9 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     critical_rate_pct = dashboard_metrics.critical_rate_pct
     warning_rate_pct = dashboard_metrics.warning_rate_pct
     worksheet["B8"] = (
-        "=IFERROR("
+        "=ROUND(IFERROR("
         "AVERAGE('Technical Diagnostics'!S:S)-AVERAGE('Technical Diagnostics'!R:R)"
-        ",0)"
+        ",0),1)"
     )
     worksheet["B8"].number_format = "0.0"
     worksheet["B9"] = "=COUNTIFS('Technical Diagnostics'!$D:$D,\"Critical\")"
@@ -777,11 +812,11 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             else WARN_COLOR if warning_rate_pct > 20 else GOOD_COLOR
         ),
     )
-    projected_pass_rate_pct = dashboard_metrics.projected_pass_rate_pct
+    projected_pass_rate_pct = 100.0 if crawl_denominator > 0 else 0.0
     projected_health_pct = dashboard_metrics.projected_health_pct
     worksheet["B15"] = "=MIN(1,B5+(B9*0.01))"
     worksheet["B15"].number_format = "0%"
-    worksheet["B16"] = "=MIN(1,B7+(B9*0.01))"
+    worksheet["B16"] = f"=IFERROR(IF({_TD_URL_ROWS}>0,1,0),0)"
     worksheet["B16"].number_format = "0%"
     worksheet["B15"].fill = PatternFill(
         "solid",
@@ -919,6 +954,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         ),
     )
     apply_dashboard_metric_conditional_rules(worksheet)
+    _format_priority_urls_ctr(writer)
     # Lock percentage display for executive KPIs (0–1 → ``67%`` via ``0%`` format).
     for addr in _DASHBOARD_PERCENT_KPI_CELLS:
         worksheet[addr].number_format = "0%"

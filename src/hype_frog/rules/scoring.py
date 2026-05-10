@@ -12,6 +12,21 @@ _SCORABLE_EXTRACTION_STATES = frozenset({"complete", "partial"})
 def score_url_health(
     row: dict[str, Any], summary_rules: list[tuple[str, str, Callable[[dict[str, Any]], bool]]]
 ) -> tuple[Any, str, str, dict[str, list[str]]]:
+    raw_status = row.get("Status Code")
+    status_code: int | None = None
+    try:
+        if raw_status is not None and str(raw_status).strip() != "":
+            status_code = int(float(raw_status))
+    except (TypeError, ValueError):
+        status_code = None
+    if status_code == 404:
+        return (
+            0,
+            "Critical",
+            "FAIL 🔴",
+            {"Critical": ["HTTP 404 Not Found"], "Warning": [], "Observation": []},
+        )
+
     extraction_state = str(row.get("Extraction State") or "").strip().lower()
     if extraction_state not in _SCORABLE_EXTRACTION_STATES:
         return None, "Unmeasured", "UNMEASURED", {"Critical": [], "Warning": [], "Observation": []}

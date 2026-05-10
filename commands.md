@@ -23,3 +23,5 @@ git add .
 git commit -m "Cleanup: Untrack files listed in .gitignore"
 git push -u origin main
 
+uv run python -m spacy download en_core_web_sm
+
