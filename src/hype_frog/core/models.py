@@ -470,6 +470,11 @@ class HttpCrawlResultModel(BaseModel):
     silent corruption (negative timings, non-numeric statuses, blank URLs).
     Caller is expected to wrap ``model_validate`` in a ``try/except
     ValidationError`` block and degrade gracefully — never crash the loop.
+
+    Sprint 2 additions (additive only): ``field_cls`` and ``field_lcp_ms``
+    carry browser-native ``PerformanceObserver`` measurements captured during
+    rendered fetch; ``raw_word_count`` / ``rendered_word_count`` /
+    ``is_js_dependent`` carry the raw-vs-rendered DOM diff signal.
     """
 
     model_config = ConfigDict(extra="ignore", validate_assignment=True)
@@ -479,6 +484,11 @@ class HttpCrawlResultModel(BaseModel):
     response_time_ms: float = Field(..., ge=0.0)
     final_url: str | None = None
     error_kind: str | None = None
+    field_cls: float | None = Field(default=None, ge=0.0)
+    field_lcp_ms: float | None = Field(default=None, ge=0.0)
+    raw_word_count: int | None = Field(default=None, ge=0)
+    rendered_word_count: int | None = Field(default=None, ge=0)
+    is_js_dependent: bool | None = None
 
     @field_validator("url", "final_url", mode="before")
     @classmethod
@@ -500,6 +510,15 @@ class HttpCrawlResultModel(BaseModel):
     def _finite_response_time(cls, value: float) -> float:
         if math.isnan(value) or math.isinf(value):
             raise ValueError("response_time_ms must be finite")
+        return value
+
+    @field_validator("field_cls", "field_lcp_ms", mode="after")
+    @classmethod
+    def _finite_field_metric(cls, value: float | None) -> float | None:
+        if value is None:
+            return None
+        if math.isnan(value) or math.isinf(value):
+            raise ValueError("field metric must be finite")
         return value
 
 
