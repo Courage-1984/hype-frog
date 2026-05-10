@@ -17,6 +17,7 @@ dependencies = [
     "google-api-python-client>=2.0.0",
     "google-auth-oauthlib>=1.0.0",
     "playwright>=1.59.0",
+    "spacy>=3.8.14",
 ]
 
 [project.optional-dependencies]

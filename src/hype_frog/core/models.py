@@ -371,6 +371,30 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "Internal Links List": [],
     "Link Details": [],
     "aeo_snippets": [],
+    # Sprint 3 — semantic / answer-engine readiness columns. These are
+    # additive workbook fields populated by
+    # ``hype_frog.extractors.semantic_engine.SemanticAnalyzer``. They
+    # coexist with the existing ``AEO Readiness Score`` / ``AEO Badge``
+    # columns above without overwriting them.
+    "Entity Density (%)": None,
+    "Top Entities": None,
+    "Citation Candidate Count": 0,
+    "Semantic AEO Score": None,
+    # Sprint 4 — structural intelligence, security boolean digests, and
+    # internationalisation. ``Crawl Depth`` is the BFS distance from the
+    # seed URL (``0`` for the seed); ``Security: HSTS`` / ``Security: CSP``
+    # are boolean digests derived from the raw ``Strict-Transport-Security``
+    # / ``Content-Security-Policy`` header columns above (those keep their
+    # raw header strings, these add a fast pass/fail signal). ``Anchor
+    # Text Diversity`` is a "<unique> unique / <total> total" summary over
+    # the internal-link anchor pool. ``Hreflang Signals`` is the on-page
+    # hreflang cluster as a ``"lang: url; lang: url"`` string — no extra
+    # network fetch is performed (Sprint 4 brief constraint).
+    "Crawl Depth": 0,
+    "Security: HSTS": False,
+    "Security: CSP": False,
+    "Anchor Text Diversity": None,
+    "Hreflang Signals": None,
 }
 
 
@@ -489,6 +513,33 @@ class HttpCrawlResultModel(BaseModel):
     raw_word_count: int | None = Field(default=None, ge=0)
     rendered_word_count: int | None = Field(default=None, ge=0)
     is_js_dependent: bool | None = None
+    # Sprint 3 — semantic / answer-engine readiness signals. ``aeo_score``
+    # here is the new entity-density + citation-presence weighted average
+    # produced by ``hype_frog.extractors.semantic_engine``; it deliberately
+    # coexists with the existing ``AEO Readiness Score`` workbook column
+    # (computed by ``pipeline.assemble.compute_aeo_readiness_score``) — the
+    # two are different signals and both ship in the row payload.
+    entity_density: float | None = Field(default=None, ge=0.0)
+    top_entities: list[str] | None = None
+    citation_count: int | None = Field(default=None, ge=0)
+    aeo_score: float | None = Field(default=None, ge=0.0, le=100.0)
+    # Sprint 4 — structural / security / link / i18n diagnostics. All
+    # additive. ``crawl_depth`` is the BFS hop count from the seed
+    # (``0`` = seed). ``hsts_enabled`` / ``csp_defined`` are boolean
+    # digests of the raw ``Strict-Transport-Security`` /
+    # ``Content-Security-Policy`` headers; ``x_frame_options`` carries
+    # the raw header string (or ``None`` when absent).
+    # ``internal_link_count`` / ``anchor_text_summary`` summarise the
+    # internal ``<a>`` pool extracted on-page. ``hreflang_tags`` is the
+    # on-page hreflang cluster joined as ``"lang: url; lang: url"`` —
+    # no separate network fetch is performed for validation.
+    crawl_depth: int | None = Field(default=None, ge=0)
+    hsts_enabled: bool | None = None
+    csp_defined: bool | None = None
+    x_frame_options: str | None = None
+    internal_link_count: int | None = Field(default=None, ge=0)
+    anchor_text_summary: str | None = None
+    hreflang_tags: str | None = None
 
     @field_validator("url", "final_url", mode="before")
     @classmethod
@@ -520,6 +571,37 @@ class HttpCrawlResultModel(BaseModel):
         if math.isnan(value) or math.isinf(value):
             raise ValueError("field metric must be finite")
         return value
+
+    @field_validator("entity_density", "aeo_score", mode="after")
+    @classmethod
+    def _finite_semantic_metric(cls, value: float | None) -> float | None:
+        if value is None:
+            return None
+        if math.isnan(value) or math.isinf(value):
+            raise ValueError("semantic metric must be finite")
+        return value
+
+    @field_validator("top_entities", mode="before")
+    @classmethod
+    def _normalise_top_entities(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return [item.strip() for item in value.split("|") if item.strip()]
+        return value
+
+    @field_validator(
+        "x_frame_options",
+        "anchor_text_summary",
+        "hreflang_tags",
+        mode="before",
+    )
+    @classmethod
+    def _normalise_diagnostic_strings(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
 
 
 class PSIMetricsModel(BaseModel):

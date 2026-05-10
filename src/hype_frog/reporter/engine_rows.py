@@ -268,6 +268,25 @@ CONTENT_HUB_EXPORT_COLUMNS: tuple[str, ...] = (
     "SEO Score",
     "Technical Health",
     "Copy Score",
+    "Entity Density (%)",
+    "Top Entities",
+    "Citation Candidate Count",
+    "Semantic AEO Score",
+    # Sprint 5 — Sprint 2 "ghost data" surfaced for the Content Hub
+    # (raw vs. rendered DOM diff + field PerformanceObserver Web
+    # Vitals). ``Crawl Depth`` / ``Security: HSTS`` / ``Security: CSP``
+    # / ``Hreflang Signals`` were migrated to ``Technical Diagnostics``
+    # in this sprint; ``Anchor Text Diversity`` deliberately stays on
+    # the Hub because it is a copy/SEO authoring signal, not a tech
+    # diagnostic. None of these header strings hit the
+    # ``apply_south_african_formats`` date-like substring heuristic
+    # (date / timestamp / lastmod / updated).
+    "JS Dependent",
+    "Raw Words",
+    "Rendered Words",
+    "Field LCP (ms)",
+    "Field CLS",
+    "Anchor Text Diversity",
     "Status",
     "Assigned Owner",
     "URL",
@@ -524,6 +543,30 @@ def build_content_optimisation_hub_rows(
                 "SEO Score": _hub_score_value(e.get("SEO Score")),
                 "Technical Health": _hub_score_value(e.get("Technical Health")),
                 "Copy Score": _hub_score_value(e.get("Copy Score")),
+                "Entity Density (%)": e.get("Entity Density (%)"),
+                "Top Entities": str(e.get("Top Entities") or "").strip(),
+                # Display-safe string: the shared number formatter treats any
+                # header containing "date" as date-like, and "Candidate"
+                # includes that substring.
+                "Citation Candidate Count": str(
+                    int(float(e.get("Citation Candidate Count") or 0))
+                ),
+                "Semantic AEO Score": e.get("Semantic AEO Score"),
+                # Sprint 5 — Sprint 2 ghost data surfacing on the Hub.
+                # Boolean and integer coercions are intentional so the
+                # Excel formatter does not interpret a stray ``None`` as
+                # blank text on what is meant to be a numeric/flag
+                # column. Field LCP / CLS are passed through as-is so
+                # ``None`` (failed PerformanceObserver capture) renders
+                # as blank rather than misleading ``0.0``.
+                "JS Dependent": bool(e.get("JS Dependent")),
+                "Raw Words": int(float(e.get("Raw Words") or 0)),
+                "Rendered Words": int(float(e.get("Rendered Words") or 0)),
+                "Field LCP (ms)": e.get("Field LCP (ms)"),
+                "Field CLS": e.get("Field CLS"),
+                "Anchor Text Diversity": str(
+                    e.get("Anchor Text Diversity") or ""
+                ).strip(),
                 "Action Required": action_formula,
                 "Status": "To Do",
                 "Assigned Owner": "Copy Writer",

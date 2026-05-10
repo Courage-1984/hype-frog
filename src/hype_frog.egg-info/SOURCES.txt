@@ -14,6 +14,7 @@ src/hype_frog/checkpoint/__init__.py
 src/hype_frog/checkpoint/cache.py
 src/hype_frog/checkpoint/store.py
 src/hype_frog/core/__init__.py
+src/hype_frog/core/api_clients.py
 src/hype_frog/core/cli.py
 src/hype_frog/core/file_utils.py
 src/hype_frog/core/link_constants.py
@@ -36,6 +37,7 @@ src/hype_frog/extractors/__init__.py
 src/hype_frog/extractors/page.py
 src/hype_frog/extractors/robots.py
 src/hype_frog/extractors/schema.py
+src/hype_frog/extractors/semantic_engine.py
 src/hype_frog/orchestration/__init__.py
 src/hype_frog/orchestration/crawl_runner.py
 src/hype_frog/orchestration/enrichment_flow.py
@@ -90,4 +92,5 @@ tests/test_excel_engine.py
 tests/test_extractors.py
 tests/test_help_layer_tooltips.py
 tests/test_narrative_strategic.py
+tests/test_network_engine.py
 tests/test_scoring.py

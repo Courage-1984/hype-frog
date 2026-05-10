@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import coordinate_to_tuple
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.worksheet import Worksheet
 
+from hype_frog.reporter.help_layer import apply_semantic_aeo_tooltips
 from hype_frog.reporter.engine_formatting import (
     apply_fixplan_workflow_formatting,
     ensure_auto_filter,
@@ -71,6 +73,87 @@ from hype_frog.reporter.sheets.view_state import (
     set_freeze_panes_safe,
 )
 from hype_frog.reporter.sheets.style_helpers import header_index
+
+# Sprint 4 + Sprint 5 — structural / security / i18n diagnostic
+# tooltips and the new "ghost data" surfaced from Sprint 2's rendered
+# diagnostics pipeline. A single dict feeds both the Content Hub
+# (header_row=2) and the Technical Diagnostics tab (header_row=1) —
+# ``_apply_diagnostic_header_tooltips`` does header-name lookup so each
+# call only attaches comments to columns that actually exist on the
+# given sheet. Inlined here (not in ``reporter.help_layer``) because
+# ``help_layer.py`` is outside the 4-file authorisation for both sprints.
+_DIAGNOSTIC_HEADER_TOOLTIPS: dict[str, str] = {
+    "Crawl Depth": (
+        "Description: BFS hop distance from the seed URL during this audit "
+        "(0 = seed). Higher values indicate pages buried deeper in the site "
+        "structure, which can hurt discoverability and crawl budget."
+    ),
+    "Security: HSTS": (
+        "Description: TRUE when a non-empty Strict-Transport-Security "
+        "response header was returned, signalling enforced HTTPS to "
+        "browsers (HSTS)."
+    ),
+    "Security: CSP": (
+        "Description: TRUE when a non-empty Content-Security-Policy "
+        "response header was returned, signalling browser-side defence "
+        "against XSS / script-injection."
+    ),
+    "Anchor Text Diversity": (
+        "Description: Summary of the internal-link anchor pool on this "
+        "page, formatted as '<unique> unique / <total> total'. Low "
+        "diversity often means heavy reuse of generic anchors "
+        "(e.g. 'click here') across the internal link graph."
+    ),
+    "Hreflang Signals": (
+        "Description: On-page hreflang cluster joined as "
+        "'lang: url; lang: url'. Extraction is HTML-only — no extra "
+        "network requests are issued for cluster validation."
+    ),
+    "JS Dependent": (
+        "Description: Flags pages where JavaScript adds more than 100 "
+        "words or > 50% additional content compared to the raw HTML. "
+        "Strong indicator that bots without a JS renderer (some "
+        "answer-engine crawlers, monitoring tools) will see a thin "
+        "version of the page."
+    ),
+    "Raw Words": (
+        "Description: Word count of the raw HTML body returned by the "
+        "initial HTTP fetch, before JavaScript execution. Compare with "
+        "Rendered Words to gauge JS dependency."
+    ),
+    "Rendered Words": (
+        "Description: Word count of the body after Playwright "
+        "rendering, ``networkidle`` wait, and hydration settle. The "
+        "delta vs Raw Words drives the JS Dependent flag."
+    ),
+    "Field LCP (ms)": (
+        "Description: Largest Contentful Paint in milliseconds, "
+        "captured live in the browser via PerformanceObserver during "
+        "the rendered fetch. Blank when the observer was blocked "
+        "(CSP) or the page never reached a stable LCP."
+    ),
+    "Field CLS": (
+        "Description: Cumulative Layout Shift captured live in the "
+        "browser via PerformanceObserver during the rendered fetch. "
+        "Blank when the observer was blocked or the page produced no "
+        "shift events in the observation window."
+    ),
+}
+
+
+def _apply_diagnostic_header_tooltips(
+    worksheet: Worksheet,
+    *,
+    header_row: int = 1,
+) -> None:
+    """Attach Sprint 4 + Sprint 5 diagnostic header tooltips by name lookup."""
+    for col_idx in range(1, worksheet.max_column + 1):
+        cell = worksheet.cell(row=header_row, column=col_idx)
+        header = str(cell.value or "").strip()
+        tooltip = _DIAGNOSTIC_HEADER_TOOLTIPS.get(header)
+        if tooltip:
+            cell.comment = Comment(tooltip, "hype-frog")
+
 
 def _apply_link_inventory_client_polish(worksheet: Worksheet) -> None:
     """Frog-green header row and readable widths for the seven export columns."""
@@ -269,6 +352,12 @@ def adjust_sheet_format(writer, sheet_name):
             apply_merged_tabs_conditional_formatting(
                 worksheet, sheet_name, header_row=header_row
             )
+        if sheet_name == "Technical Diagnostics":
+            # Sprint 5 — attach tooltips for the migrated diagnostic
+            # columns (Crawl Depth / Security: HSTS / Security: CSP /
+            # Hreflang Signals). The helper is name-keyed so it skips
+            # any header it doesn't recognise.
+            _apply_diagnostic_header_tooltips(worksheet, header_row=header_row)
         if sheet_name == "Link Inventory":
             _apply_link_inventory_client_polish(worksheet)
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
@@ -276,6 +365,8 @@ def adjust_sheet_format(writer, sheet_name):
         _apply_content_hub_assigned_owner_validation(worksheet)
         _apply_content_hub_copywriter_column_layout(worksheet)
         apply_header_tooltips(worksheet, header_row=2)
+        apply_semantic_aeo_tooltips(worksheet, header_row=2)
+        _apply_diagnostic_header_tooltips(worksheet, header_row=2)
     ensure_auto_filter(worksheet)
     if sheet_name != "Dashboard":
         ensure_freeze_header(worksheet)

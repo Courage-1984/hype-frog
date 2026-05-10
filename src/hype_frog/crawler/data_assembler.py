@@ -6,6 +6,7 @@ from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
+from hype_frog.core import get_logger
 from hype_frog.core.link_constants import GENERIC_ANCHOR_TERMS
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.core.text_utils import (
@@ -23,6 +24,12 @@ from hype_frog.extractors import (
     parse_jsonld_summary,
     resolve_indexability_directive,
 )
+from hype_frog.extractors.semantic_engine import (
+    SemanticAnalyzer,
+    get_default_analyzer,
+)
+
+logger = get_logger(__name__)
 
 
 def normalize_url_key(url: object, keep_query: bool = True) -> str:
@@ -40,6 +47,66 @@ def url_depth(url: str) -> int:
     if not path:
         return 0
     return len([p for p in path.split("/") if p])
+
+
+def _has_truthy_header(value: object) -> bool:
+    """Treat any non-empty header (string or non-False scalar) as 'present'."""
+    if value is None or value is False:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return bool(value)
+
+
+def _extract_hreflang_signals(
+    soup: BeautifulSoup, resolved_url: str
+) -> tuple[str | None, int, bool, bool]:
+    """Return (joined_signals, count, self_referenced, x_default_present).
+
+    Reads ``<link rel="alternate" hreflang="...">`` tags from the parsed
+    document and joins them as ``"lang: url; lang: url"`` for the
+    workbook. No additional network requests are issued — this is
+    purely on-page extraction per the Sprint 4 brief.
+    """
+    pairs: list[str] = []
+    count = 0
+    self_referenced = False
+    x_default = False
+    resolved_norm = normalize_url_key(resolved_url)
+    seen: set[tuple[str, str]] = set()
+    try:
+        candidates = soup.find_all(
+            "link", attrs={"rel": True, "hreflang": True}
+        )
+    except Exception:
+        return None, 0, False, False
+    for tag in candidates:
+        rel_tokens = tag.get("rel") or []
+        if isinstance(rel_tokens, str):
+            rel_tokens = [rel_tokens]
+        if not any("alternate" in str(t).lower() for t in rel_tokens):
+            continue
+        lang = (tag.get("hreflang") or "").strip()
+        href = (tag.get("href") or "").strip()
+        if not lang or not href:
+            continue
+        try:
+            absolute = normalize_url_key(urljoin(resolved_url, href))
+        except Exception:
+            absolute = href
+        key = (lang.lower(), absolute)
+        if key in seen:
+            continue
+        seen.add(key)
+        count += 1
+        pairs.append(f"{lang}: {absolute}")
+        if lang.lower() == "x-default":
+            x_default = True
+        if absolute == resolved_norm:
+            self_referenced = True
+    if not pairs:
+        return None, 0, False, False
+    return "; ".join(pairs), count, self_referenced, x_default
 
 def init_rows(
     url: str, sitemap_meta: dict[str, dict[str, object]] | None
@@ -72,9 +139,31 @@ def assemble_from_html(
     extra: ExtraRowPayload,
     html: str,
     resolved_url: str,
+    semantic_analyzer: SemanticAnalyzer | None = None,
+    depth: int = 0,
 ) -> None:
+    """Populate row payloads from rendered HTML.
+
+    ``depth`` carries the BFS hop count from the seed URL (``0`` for the
+    seed). The production crawler entrypoint currently passes the
+    default; threading the live BFS distance through ``fetcher.py`` is a
+    follow-up tracked outside this sprint's 4-file budget.
+    """
     main_values = main_data.values
     extra_values = extra.values
+    analyzer = semantic_analyzer or get_default_analyzer()
+
+    try:
+        extra_values["Crawl Depth"] = max(0, int(depth or 0))
+    except (TypeError, ValueError):
+        extra_values["Crawl Depth"] = 0
+
+    extra_values["Security: HSTS"] = _has_truthy_header(
+        extra_values.get("Strict-Transport-Security")
+    )
+    extra_values["Security: CSP"] = _has_truthy_header(
+        extra_values.get("Content-Security-Policy")
+    )
 
     extra_values["HTML Size (KB)"] = round(len(html.encode("utf-8")) / 1024, 2)
     parsed = parse_html_signals(html)
@@ -123,6 +212,18 @@ def assemble_from_html(
     main_values["Indexability"] = resolve_indexability_directive(
         meta_robots_raw, extra_values.get("X-Robots-Tag")
     )
+
+    # Sprint 4 — on-page hreflang cluster. Populates the long-empty
+    # ``Hreflang Present`` / ``Hreflang Count`` columns alongside the
+    # new ``Hreflang Signals`` workbook field. No extra network fetch.
+    hreflang_signals, hreflang_count, hreflang_self, x_default_present = (
+        _extract_hreflang_signals(soup, resolved_url)
+    )
+    extra_values["Hreflang Signals"] = hreflang_signals
+    extra_values["Hreflang Present"] = hreflang_count > 0
+    extra_values["Hreflang Count"] = hreflang_count
+    extra_values["Hreflang Self Reference"] = hreflang_self
+    extra_values["x-default Present"] = x_default_present
 
     og_title_meta = soup.find("meta", attrs={"property": "og:title"})
     og_desc_meta = soup.find("meta", attrs={"property": "og:description"})
@@ -200,6 +301,40 @@ def assemble_from_html(
             syllable_count=syllables,
         )
         extra_values["Flesch-Kincaid Grade (Est.)"] = fk_grade
+
+        # Sprint 3 semantic + citation analysis. Reuses the cleaned text
+        # already produced above; ``primary`` provides paragraph-level text
+        # for accurate 40-60 word citation windowing without re-parsing
+        # the HTML. Falls back gracefully when spaCy is unavailable —
+        # the citation count keeps working in that case.
+        paragraph_texts: list[str] = []
+        if primary is not None:
+            for paragraph_tag in primary.find_all("p"):
+                paragraph_text = paragraph_tag.get_text(" ", strip=True)
+                if paragraph_text:
+                    paragraph_texts.append(paragraph_text)
+        try:
+            semantic = analyzer.analyze(
+                body_text=body_text,
+                paragraphs=paragraph_texts or None,
+            )
+        except Exception as exc:  # never let semantic failure abort the row
+            logger.debug("Semantic analyser raised for %s: %s", resolved_url, exc)
+            semantic = {
+                "entity_density": None,
+                "top_entities": None,
+                "citation_count": 0,
+                "aeo_score": None,
+            }
+        extra_values["Entity Density (%)"] = semantic.get("entity_density")
+        top_entities = semantic.get("top_entities")
+        extra_values["Top Entities"] = (
+            " | ".join(top_entities) if top_entities else None
+        )
+        extra_values["Citation Candidate Count"] = int(
+            semantic.get("citation_count") or 0
+        )
+        extra_values["Semantic AEO Score"] = semantic.get("aeo_score")
 
     aeo_snippets = extract_aeo_snippets(html)
     extra_values["aeo_snippets"] = aeo_snippets
@@ -320,6 +455,7 @@ def assemble_from_html(
 
     source_netloc = urlparse(resolved_url).netloc.lower()
     internal_links: list[str] = []
+    internal_anchor_texts: list[str] = []
     external_links_count = 0
     nofollow_internal = 0
     nofollow_external = 0
@@ -343,6 +479,8 @@ def assemble_from_html(
         link_type = "Internal" if target_netloc == source_netloc else "External"
         if link_type == "Internal":
             internal_links.append(target_abs)
+            if anchor_text:
+                internal_anchor_texts.append(anchor_text)
             if nofollow:
                 nofollow_internal += 1
         else:
@@ -371,6 +509,24 @@ def assemble_from_html(
     extra_values["Nofollow External Links Count"] = nofollow_external
     extra_values["Generic Anchor Text Count"] = generic_anchor_text_count
     extra_values["Link Details"] = link_details
+    # Sprint 4 — anchor-text diversity summary derived from the
+    # internal anchor pool just collected above. Casefold dedup so
+    # "Learn more" and "learn  more" collapse into a single bucket.
+    anchor_total = len(internal_anchor_texts)
+    if anchor_total:
+        seen_anchor_keys: set[str] = set()
+        unique_anchor_texts: list[str] = []
+        for text in internal_anchor_texts:
+            key = " ".join(text.split()).casefold()
+            if key in seen_anchor_keys:
+                continue
+            seen_anchor_keys.add(key)
+            unique_anchor_texts.append(text)
+        extra_values["Anchor Text Diversity"] = (
+            f"{len(unique_anchor_texts)} unique / {anchor_total} total"
+        )
+    else:
+        extra_values["Anchor Text Diversity"] = "0 unique / 0 total"
 
 def finalize_row_state(
     main_data: MainRowPayload,
