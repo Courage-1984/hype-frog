@@ -16,6 +16,7 @@ src/hype_frog/checkpoint/store.py
 src/hype_frog/core/__init__.py
 src/hype_frog/core/cli.py
 src/hype_frog/core/file_utils.py
+src/hype_frog/core/link_constants.py
 src/hype_frog/core/logger.py
 src/hype_frog/core/models.py
 src/hype_frog/core/run_config.py
@@ -49,6 +50,7 @@ src/hype_frog/pipeline/context.py
 src/hype_frog/pipeline/enrich.py
 src/hype_frog/pipeline/export.py
 src/hype_frog/pipeline/graph_engine.py
+src/hype_frog/pipeline/link_inventory.py
 src/hype_frog/pipeline/score.py
 src/hype_frog/reporter/__init__.py
 src/hype_frog/reporter/dashboard_logic.py
@@ -57,6 +59,7 @@ src/hype_frog/reporter/engine_guardrails.py
 src/hype_frog/reporter/engine_io.py
 src/hype_frog/reporter/engine_rows.py
 src/hype_frog/reporter/excel_engine.py
+src/hype_frog/reporter/narrative_engine.py
 src/hype_frog/reporter/summary_builder.py
 src/hype_frog/reporter/sheets/__init__.py
 src/hype_frog/reporter/sheets/coh.py
@@ -82,6 +85,9 @@ src/hype_frog/reporter/sheets/view_state.py
 src/hype_frog/rules/__init__.py
 src/hype_frog/rules/registry.py
 src/hype_frog/rules/scoring.py
+tests/test_aeo_readiness_score.py
 tests/test_excel_engine.py
 tests/test_extractors.py
+tests/test_help_layer_tooltips.py
+tests/test_narrative_strategic.py
 tests/test_scoring.py
