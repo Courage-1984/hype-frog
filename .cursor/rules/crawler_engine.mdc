@@ -1,44 +1,55 @@
 ---
-description: Crawl modes, Playwright async-only policy, retries, and extraction contracts.
+description: Crawl modes, Playwright async-only policy, retries, extraction contracts, layer split, and URL identity for crawler/extractors/pipeline/core.
 globs: "{src/hype_frog/crawler,src/hype_frog/extractors,src/hype_frog/pipeline,src/hype_frog/core}/**/*.py"
 alwaysApply: false
 ---
 
-# Crawler Engine Rules
+Canonical narrative: [`docs/system_architecture.md`](../../docs/system_architecture.md) (fetch modes, BFS, pipeline). Contract detail: [`docs/data_contracts.md`](../../docs/data_contracts.md). Keep rules and docs aligned when editing crawl or extractor code.
+
+# Crawler engine rules
+
+## Layer split
+
+- Crawler responsibilities stay in `crawler/`; parser responsibilities in `extractors/`.
 
 ## Playwright
 
-- Use **`playwright.async_api` only**. Do not use synchronous Playwright APIs in runtime crawl code.
-- Subprocess / browser lifecycle must remain compatible with **asyncio** (no blocking waits on the event loop).
+- Use **`playwright.async_api` only** in runtime crawl code. No synchronous Playwright on the event loop.
+- Browser lifecycle must stay compatible with **asyncio** (no blocking waits on the loop).
 
-## Dual-mode behavior
+## Dual-mode behaviour
 
 - **Fast path:** `aiohttp` + parser-driven extraction.
-- **Accurate path:** rendered page capture when available, with **graceful fallback** to HTTP when binaries, loop, or environment constraints prevent browser use.
+- **Accurate path:** rendered capture when available, with **graceful fallback** to HTTP when binaries, loop, or environment block browser use.
 
 ## Extraction contract
 
-Maintain these fields consistently for observability and scoring:
+Maintain consistently for observability and scoring:
 
-- **Extraction State:** exactly one of `complete` | `partial` | `skipped` (lowercase values as stored in row data).
+- **Extraction State:** exactly one of `complete` | `partial` | `skipped` (lowercase in row data).
 - **Extraction Source:** `raw_http` | `rendered_browser` as implemented in fetchers.
 
-Any new extractor or fetch outcome must map into **complete** / **partial** / **skipped** with an explicit reason where applicable.
+New extractor or fetch outcomes must map into **complete** / **partial** / **skipped** with an explicit reason where applicable.
+
+## Skipped with reason (dead-letter policy)
+
+When **Extraction State** is **`skipped`**, the row must not be a silent hole:
+
+- Set **`skip_reason`** (or the project’s canonical equivalent field wired through `main` / `extra`) to a **stable machine-readable** token, for example: `timeout`, `mime_mismatch`, `render_crash`, `redirect_loop`, `max_retries_exceeded`, `blocked`, `config_abort`.
+- Use **`skipped`** when the URL cannot be audited safely after bounded work — including **infinite redirect loops**, **exhausted max retries**, **severe Playwright / browser crashes**, or **MIME / content-type mismatch** that prevents meaningful extraction — not for “unset state”.
+- **Workbook visibility is mandatory:** skipped rows **must** appear in the final Excel output with URL identity and **`skip_reason`** populated so clients see dead-letter URLs. **Never** drop or filter them silently from the inventory.
+- **Do not** use `skipped` for “we forgot to set state”; prefer **`partial`** with detail when some signals exist, or **`skipped`** only when work is intentionally abandoned with a recorded cause.
+- Downstream scoring and reporters must tolerate skipped rows **without crashing**; skipped URLs remain **first-class** audit artefacts (dead-letter visibility), not dropped rows.
 
 ## Retries and backoff
 
-- Network operations must use **bounded retries** with **exponential backoff** (and jitter where the codebase already applies it) before treating a URL or batch as failed.
-- Do not introduce unbounded retry loops; respect configured caps and retryable status codes.
+Use **bounded retries** with **exponential backoff** (and jitter where the codebase applies it). No unbounded loops; respect configured caps and retryable status codes.
 
 ## Concurrency controls
 
-- Keep **`aiohttp.TCPConnector`** limits (`limit`, `limit_per_host`, `keepalive_timeout`) aligned with `config` values.
-- Cap concurrent browser sessions with the project **semaphore** pattern; do not remove backpressure without replacing equivalent limits.
+- Keep **`aiohttp.TCPConnector`** limits (`limit`, `limit_per_host`, `keepalive_timeout`) aligned with `config`.
+- Cap concurrent browser sessions with the project **semaphore**; do not remove backpressure without an equivalent limit.
 
 ## URL identity
 
-- Use shared **normalization** helpers for joins, deduplication, checkpoints, and any formulas referencing URLs.
-
-## Canonical expansion
-
-This file extends the narrower `crawler_agent.mdc` glob; keep both consistent when editing either.
+Use shared **normalization** helpers in `core/` for joins, deduplication, checkpoints, and any formulas referencing URLs.

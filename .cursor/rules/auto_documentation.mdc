@@ -1,30 +1,45 @@
 ---
-description: When and how to update ./docs/ alongside code changes.
+description: Documentation verification, when to update ./docs/, pytest/asyncio test guardrails, and extraction-state assertions.
 alwaysApply: true
 ---
 
-# Autonomous Documentation Discipline
+# Documentation discipline and testing guardrails
 
 ## Verification before documentation (mandatory)
 
-- **Never** document broken, speculative, or unverified behavior as a finalized solution.
-- Before adding or changing `./docs/` content that describes runtime behavior, **run the relevant automated checks** (for example `python -m pytest` for the affected areas) and confirm they pass in the current workspace.
-- If tests do not exist for a fix, prefer adding a minimal test or smoke path first, or document the item explicitly as **provisional** with the exact verification gap called out—never as “done” production guidance.
+- **Never** document broken, speculative, or unverified behaviour as a finalized solution.
+- Before adding or changing `./docs/` content that describes runtime behaviour, **run the relevant automated checks** (for example `uv run pytest` or `python -m pytest` for affected areas) and confirm they pass.
+- If tests do not exist for a fix, prefer a minimal test or smoke path first, or document explicitly as **provisional** with the exact verification gap called out—never as “done” production guidance.
 
-## When the assistant must propose `./docs/` updates
+## Continuous documentation sync
 
-Proactively suggest concrete edits under `./docs/` (new or existing modular files, never one giant file) when any of the following occurs:
+When code changes behaviour or contracts, update the **canonical** narrative in lockstep:
 
-1. A **time-consuming bug** was resolved and the root cause plus guardrail is reusable knowledge (e.g. workbook corruption, async deadlock, retry semantics).
-2. **Core architecture** changes (new pipeline stage, new crawl mode, changed data contracts, reporter layout ownership).
-3. A **documented workaround** or operational constraint is introduced (environment limits, optional dependencies, fallback paths).
+| Area | Canonical location |
+|------|---------------------|
+| Pipeline, BFS, AEO, intent, ROI, layers | `docs/system_architecture.md` |
+| Row shapes, Pydantic, checkpoints | `docs/data_contracts.md` |
+| Excel integrity, TOC, hub, view state | `docs/excel_reporting_standards.md` |
+
+Cross-link with relative paths; stay **vendor-neutral** in generated prose (no third-party marketing names).
+
+## When to propose `./docs/` updates
+
+Proactively suggest concrete edits under `./docs/` when:
+
+1. A **time-consuming bug** is resolved and the root cause plus guardrail is reusable (e.g. workbook corruption, async deadlock, retry semantics).
+2. **Core architecture** changes (new pipeline stage, crawl mode, data contracts, reporter ownership).
+3. A **documented workaround** or operational constraint is introduced.
 
 ## How to propose updates
 
-- Keep files **small and topic-scoped** (mirror names like `architecture_overview.md`, `crawler_engine.md`, `excel_reporting_standards.md`).
-- Cross-link between docs with relative paths; avoid duplicating entire modules in prose.
-- Stay **vendor-neutral** in generated documentation text (no product marketing names for third-party services).
+- Keep topic files aligned with the **three** `docs/*.md` files above (no sprawl).
+- Prefer `./docs/` for narrative “why” and invariants; use code comments for local “what this block does.” Do not replace tests with documentation.
 
-## Relationship to code comments
+## Testing invariants
 
-Prefer `./docs/` for narrative “why” and invariants; use code comments for local “what this block does.” Do not replace tests with documentation.
+1. **No live network in unit tests** — Mock `aiohttp` sessions and Playwright interactions with `unittest.mock` (and related helpers). Async tests use **pytest-asyncio** with the same discipline as production (no accidental real network awaits).
+
+2. **Mirror `src/hype_frog/` layout** — Packages under `tests/` mirror `src/hype_frog/` relative paths so ownership and imports stay obvious.
+
+3. **Extraction state contract** — Tests covering extraction or crawl outcomes must assert **`Extraction State`** (or the same contract field) explicitly against **`complete`**, **`partial`**, or **`skipped`** as appropriate. Never leave the three-way contract ambiguous or unasserted.

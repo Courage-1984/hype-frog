@@ -9,6 +9,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.reporter.help_layer import apply_semantic_aeo_tooltips
 from hype_frog.reporter.engine_formatting import (
+    apply_executive_priority_formatting,
     apply_fixplan_workflow_formatting,
     ensure_auto_filter,
     ensure_freeze_header,
@@ -137,6 +138,28 @@ _DIAGNOSTIC_HEADER_TOOLTIPS: dict[str, str] = {
         "browser via PerformanceObserver during the rendered fetch. "
         "Blank when the observer was blocked or the page produced no "
         "shift events in the observation window."
+    ),
+    # Sprint 6 — executive ROI tooltips. Numbers reference the
+    # constants in ``hype_frog.core.scoring`` so any future re-tuning
+    # only needs to edit one place; the tooltip text is duplicated here
+    # for the workbook reader.
+    "Potential Traffic Lift": (
+        "Description: Estimated monthly clicks recoverable by closing "
+        "the AEO gap on this URL.\n"
+        "Calculation: GSC Clicks * ((100 - Semantic AEO Score) / 100) "
+        "* 0.25 (assumed 25% maximum AEO-driven lift).\n"
+        "Returns 0 when GSC traffic or AEO score is missing."
+    ),
+    "AEO Visibility Gain": (
+        "Description: Semantic readiness headroom on a 0-100 scale "
+        "(100 - Semantic AEO Score). Higher = more upside if the AEO "
+        "issues on this page are addressed."
+    ),
+    "Instant Priority": (
+        "Description: 'CRITICAL' when GSC Clicks > 500 AND (Semantic "
+        "AEO Score < 50 OR Field LCP > 2500ms). High-traffic pages "
+        "with weak readiness or poor field web vitals are flagged for "
+        "immediate executive attention; everything else is 'Standard'."
     ),
 }
 
@@ -297,6 +320,12 @@ def adjust_sheet_format(writer, sheet_name):
     add_back_to_dashboard_link(worksheet, sheet_name)
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
         apply_content_hub_conditional_rules(worksheet, writer)
+        # Sprint 6 — executive ROI heatmaps. Runs AFTER the Hub
+        # conditional pipeline so the banner row insert in
+        # ``apply_content_hub_conditional_rules`` has already pushed
+        # headers to row 2 / data to row 3, which is what the new
+        # helper expects.
+        apply_executive_priority_formatting(worksheet, header_row=2)
     apply_sheet_text_wrap_columns(worksheet, sheet_name)
     if sheet_name in {CONTENT_OPTIMISATION_HUB_SHEET, "AIOSEO"}:
         apply_editor_url_column_hyperlinks(

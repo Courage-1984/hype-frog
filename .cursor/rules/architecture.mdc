@@ -1,45 +1,75 @@
 ---
-description: High-level layout, async concurrency, and module boundaries for this repository.
+description: Module boundaries, async concurrency, logging, data flow, coding guardrails, and incremental change policy.
 alwaysApply: true
 ---
 
-# Architecture Governance
+# Architecture and engineering guardrails
 
 ## Module boundaries
 
-Preserve separation across these areas. Cross imports should follow the dependency direction: **core** and **config** are foundations; **crawler** and **extractors** consume them; **pipeline** orchestrates enrichment and export; **rules** encodes scoring and issue logic; **reporters** builds workbook output; **checkpoint** persists resume state.
+Preserve separation. Dependency direction: **core** and **config** are foundations; **crawler** and **extractors** consume them; **pipeline** orchestrates enrichment and export; **rules** encodes scoring and issue logic; **reporter** builds workbook output; **checkpoint** persists resume state.
 
-- `crawler/` — HTTP session creation, fetching, optional rendered capture, sitemap and auxiliary metric integrations.
+- `crawler/` — HTTP sessions, fetching, optional rendered capture, sitemap and auxiliary integrations.
 - `extractors/` — HTML and metadata parsing; no direct workbook writing.
 - `pipeline/` — Row assembly, sanitization helpers, scoring glue, export paths shared with the CLI entrypoint.
 - `rules/` — Issue definitions, scoring, stable identifiers.
-- `src/hype_frog/reporter/` — Spreadsheet construction, tabs, conditional formats, navigation and view state.
+- `src/hype_frog/reporter/` — Spreadsheet construction, tabs, conditional formats, navigation, view state.
 - `checkpoint/` — Durable crawl progress for long runs.
 - `core/` — Logging, CLI helpers, URL normalization shared across layers.
 
 ## Concurrency and entrypoint
 
-The primary entrypoint drives bounded **asyncio** concurrency over URL lists. Network I/O must stay non-blocking; CPU-bound work should stay out of hot async paths where possible.
+The primary entrypoint drives bounded **asyncio** concurrency over URL lists. Network I/O must stay non-blocking; keep CPU-bound work out of hot async paths where possible.
 
 ## Observability and logging (strict)
 
-- **`print()` is prohibited in `pipeline/`** — Do not use `print()` for debugging, telemetry, or progress tracking anywhere under `pipeline/`. No new `print()` calls for those purposes; remove them when touching related code.
-- **All observability must use `core/` logging** — Emit diagnostics and progress only through the shared helpers in `core/` (for example `hype_frog.core.get_logger`, with `configure_logging` driven from the entrypoint as today). Do not bypass that stack with ad hoc streams, one-off handlers, or stdout/stderr writes intended as logs.
-- **Safe under concurrent asyncio** — Many crawl tasks may log in overlapping awaits; rely on the standard `logging` path wired by `core` (thread-safe handlers, single configured root, serialized handler I/O) so records stay coherent. Do not substitute `print()` in hot async paths, where interleaved stdout would be neither structured nor ordering-safe across tasks.
+- **`print()` is prohibited in `pipeline/`** — No new `print()` for debugging, telemetry, or progress under `pipeline/`; remove such uses when touching related code.
+- **All observability must use `core/` logging** — Use shared helpers (e.g. `hype_frog.core.get_logger`, `configure_logging` from the entrypoint). Do not bypass with ad hoc handlers or stdout/stderr intended as logs.
+- **Safe under concurrent asyncio** — Rely on standard `logging` wired by `core` so overlapping crawl tasks stay coherent.
 
 ## Data flow (conceptual)
 
 1. Discover URLs (manual URL, sitemap, or capped list).
-2. Fetch per URL (fast HTTP path and/or rendered path per configuration).
+2. Fetch per URL (fast HTTP and/or rendered path per configuration).
 3. Normalize keys and merge into structured row dictionaries.
-4. Enrich with internal-link intelligence and optional external metrics batches.
+4. Enrich with internal-link intelligence and optional external metric batches.
 5. Apply rules and scoring; emit **main** and **extra** row shapes.
 6. Export via sanitized DataFrames and openpyxl post-processing (freeze panes, TOC, validation).
 
 ## Historical and archive material
 
-Do not treat `./archive/` as live product code unless a task explicitly says to integrate it. Never delete repository files to “clean up”; prefer additive changes or moving deprecated artifacts only when a human requests archival workflow (no destructive git or shell removal per project policy).
+Do not treat `./archive/` as live product code unless a task explicitly says to integrate it. Never delete repository files to “clean up”; prefer additive changes or human-requested archival workflow (no destructive git or shell removal per project policy).
 
 ## Excluded from automated analysis
 
 Ignore the `./.old/` directory for scans, refactors, and documentation generation.
+
+## Vibe check (before non-trivial logic)
+
+Before implementing or refactoring non-trivial behaviour, output a **one-sentence “Vibe check”**: how the change fits existing architecture and which module owns it. Skip only for typo-only or comment-only edits.
+
+## Typing
+
+All **new or changed** public functions and methods must use **explicit** type annotations (`typing`, `collections.abc`, PEP 604 unions, `TypedDict` / Pydantic where the codebase already uses them). Avoid untyped public APIs.
+
+## AI / LLM operational governance
+
+- **Aggressive timeouts** — Every outbound LLM HTTP call must use a short upper bound (target **≈5 seconds** unless the task explicitly documents otherwise); never await model I/O without a timeout that fits crawl concurrency.
+- **Strict token / completion limits** — Configure maximum tokens or equivalent caps so a single request cannot expand without bound; pairing limits with timeouts prevents runaway latency.
+- **Instant fallback** — On **`RateLimitError`**, **`APIConnectionError`**, missing or blank API keys, timeout, empty/malformed output, or unexpected labels: return the neutral classification (**`Unknown`** for intent) immediately — **no blocking retries** that stall the pipeline for LLM recovery.
+- **Non-blocking pipeline** — The async crawl must **never** block waiting on an LLM: failures degrade to **`Unknown`** (or equivalent safe defaults) while URL processing continues.
+- **Logging** — Record fallback paths at an appropriate level so operators can distinguish quota/network/key issues from genuine intent signals.
+
+Formatting and lint tooling are **not** prescribed here; rely on the IDE / team conventions (for example format-on-save).
+
+## Atomic and incremental changes
+
+Prefer **small, reviewable** diffs. If coordinated edits would span **more than three files**, pause for **explicit human confirmation** unless broader scope was already approved in-thread.
+
+## Data mutability
+
+Treat pipeline row dictionaries (including **`main_data` / main row keys**) as **append-only** for existing keys: no renames/removals without explicit approval and a migration plan. New fields must be **additive** and backward-tolerant for reporters.
+
+## Safety net
+
+Iteration speed must not override workbook integrity, bounded retries, or the extraction state contract in `.cursor/rules/crawler_engine.mdc`.

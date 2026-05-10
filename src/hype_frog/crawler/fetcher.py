@@ -186,7 +186,20 @@ async def fetch_and_parse(
                 domain_key, {}
             ).get("aeo_engine_bot_coverage")
 
-        if isinstance(status_code, int) and status_code == 200 and html is not None:
+        ct_lower = (response_headers.get("Content-Type") or "").lower()
+        unsupported_mime = (
+            isinstance(status_code, int)
+            and status_code == 200
+            and html is None
+            and "text/html" not in ct_lower
+        )
+        if unsupported_mime:
+            main_values["Extraction Source"] = "raw_http"
+            extra_values["Extraction Source"] = "raw_http"
+            main_values["Extraction State"] = "skipped"
+            extra_values["Extraction State"] = "skipped"
+            extra_values["skip_reason"] = "unsupported_mime"
+        elif isinstance(status_code, int) and status_code == 200 and html is not None:
             extraction_source = "raw_http"
             extraction_state_hint = "complete"
             rendered_headers: dict[str, str] = {}
@@ -212,7 +225,7 @@ async def fetch_and_parse(
                         for k, v in (diagnostics["response_headers"] or {}).items()
                     }
                 else:
-                    extraction_state_hint = "partial"
+                    extraction_state_hint = diagnostics["extraction_state"]
                 # Always surface the Sprint 2 ghost data — even when
                 # ``rendered_html`` was empty the raw_word_count /
                 # is_js_dependent values are still meaningful (and the

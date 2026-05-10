@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections import deque
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -16,11 +17,61 @@ from hype_frog.config import (
 )
 from hype_frog.core import get_logger
 from hype_frog.core.file_utils import build_output_filename
+from hype_frog.core.url_normalization import normalize_url
 from hype_frog.crawler import create_session, fetch_and_parse, parse_sitemap
 from hype_frog.core.models import CrawlResult, CrawlRowPayload
+from hype_frog.extractors.semantic_engine import IntentAnalyzer
 from hype_frog.orchestration.run_setup import RunSetup
 
 logger = get_logger(__name__)
+
+
+def _normalize_url_key(url: object) -> str:
+    return normalize_url(url)
+
+
+def _max_depth_from_env(default: int = 3) -> int:
+    raw = os.getenv("HF_MAX_DEPTH", "").strip()
+    if not raw:
+        return default
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        logger.warning("Invalid HF_MAX_DEPTH=%r; using default %s.", raw, default)
+        return default
+
+
+def _candidate_internal_links(row: CrawlRowPayload) -> list[str]:
+    links = row.extra.values.get("Internal Links List Full") or []
+    if not isinstance(links, list):
+        return []
+    out: list[str] = []
+    for link in links:
+        normalized = _normalize_url_key(link)
+        if normalized:
+            out.append(normalized)
+    return out
+
+
+async def _apply_search_intent(
+    row: CrawlRowPayload,
+    *,
+    analyzer: IntentAnalyzer,
+) -> None:
+    main_values = row.main.values
+    extra_values = row.extra.values
+    text_parts = [
+        main_values.get("Title"),
+        main_values.get("Meta Description"),
+        extra_values.get("Current H-Tag Structure"),
+        extra_values.get("Current Page Copy Snippet"),
+    ]
+    rendered_text = " ".join(str(part or "").strip() for part in text_parts if part)
+    try:
+        extra_values["Search Intent"] = await analyzer.analyze_intent(rendered_text)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.warning("Search intent classification failed for %s: %s", main_values.get("URL"), exc)
+        extra_values["Search Intent"] = "Unknown"
 
 
 @dataclass(frozen=True)
@@ -67,12 +118,20 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             raise ValueError("No URLs to crawl. Exiting.")
 
         original_count = len(urls)
-        urls = list(dict.fromkeys(urls))
+        urls = list(dict.fromkeys(_normalize_url_key(url) for url in urls if url))
+        if sitemap_meta:
+            sitemap_meta = {
+                _normalize_url_key(url): meta for url, meta in sitemap_meta.items()
+            }
         if len(urls) != original_count:
             logger.info("Removed %s duplicate URLs.", original_count - len(urls))
         if setup.max_urls is not None and len(urls) > setup.max_urls:
             urls = urls[: setup.max_urls]
-            logger.info("Applied crawl cap: limiting run to first %s URLs.", len(urls))
+            logger.info(
+                "Applied initial seed cap: limiting run to first %s URLs.",
+                len(urls),
+            )
+        max_depth = _max_depth_from_env(default=3)
 
         if setup.workers_preset is not None:
             workers = setup.workers_preset
@@ -190,63 +249,110 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                     resumed_results = []
                     checkpoint_completed_urls = set()
 
-        tasks = [
-            asyncio.create_task(
-                fetch_and_parse(
-                    url,
-                    session,
-                    semaphore,
-                    full_suite,
-                    robots_cache,
-                    request_delay,
-                    sitemap_meta,
-                    crawl_mode=setup.crawl_mode,
-                    render_wait_ms=setup.render_wait_ms,
-                    selector_wait_ms=setup.selector_wait_ms,
-                )
-            )
-            for url in urls
-        ]
-
         completed_urls_runtime = set(checkpoint_completed_urls)
         pending_batch: list[CrawlResult] = []
         typed_results: list[CrawlRowPayload] = []
         crawled_count = len(checkpoint_completed_urls)
-        total_urls = len(urls) + len(checkpoint_completed_urls)
-        for done_task in asyncio.as_completed(tasks):
-            result_payload: CrawlRowPayload = await done_task
-            typed_results.append(result_payload)
-            main_row, extra_row = result_payload.model_dump_rows()
-            result: CrawlResult = {"main": main_row, "extra": extra_row}
-            pending_batch.append(result)
-            crawled_count += 1
-            url_done = main_row.get("URL")
-            if url_done:
-                completed_urls_runtime.add(url_done)
-            if len(pending_batch) >= flush_batch_size:
-                cache.upsert_results(pending_batch)
-                pending_batch = []
-            done_count = crawled_count
-            if checkpoint_every > 0 and done_count % checkpoint_every == 0:
-                if pending_batch:
+        completed_normalized = {
+            _normalize_url_key(url) for url in completed_urls_runtime if url
+        }
+        crawl_queue: deque[tuple[str, int]] = deque()
+        queued_urls: set[str] = set(completed_normalized)
+        crawl_urls_runtime: list[str] = []
+        for url in urls:
+            normalized = _normalize_url_key(url)
+            if not normalized or normalized in queued_urls:
+                continue
+            crawl_queue.append((normalized, 0))
+            queued_urls.add(normalized)
+            crawl_urls_runtime.append(normalized)
+        total_urls = len(crawl_urls_runtime) + len(checkpoint_completed_urls)
+        in_flight: dict[asyncio.Task[CrawlRowPayload], tuple[str, int]] = {}
+        intent_analyzer = IntentAnalyzer()
+
+        def _can_enqueue() -> bool:
+            return setup.max_urls is None or len(queued_urls) < setup.max_urls
+
+        def _schedule_available() -> None:
+            while crawl_queue and len(in_flight) < workers:
+                next_url, next_depth = crawl_queue.popleft()
+                task = asyncio.create_task(
+                    fetch_and_parse(
+                        next_url,
+                        session,
+                        semaphore,
+                        full_suite,
+                        robots_cache,
+                        request_delay,
+                        sitemap_meta,
+                        crawl_mode=setup.crawl_mode,
+                        render_wait_ms=setup.render_wait_ms,
+                        selector_wait_ms=setup.selector_wait_ms,
+                        depth=next_depth,
+                    )
+                )
+                in_flight[task] = (next_url, next_depth)
+
+        _schedule_available()
+        while in_flight:
+            done_tasks, _pending = await asyncio.wait(
+                set(in_flight),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for done_task in done_tasks:
+                _scheduled_url, scheduled_depth = in_flight.pop(done_task)
+                result_payload: CrawlRowPayload = await done_task
+                await _apply_search_intent(result_payload, analyzer=intent_analyzer)
+                typed_results.append(result_payload)
+                main_row, extra_row = result_payload.model_dump_rows()
+                result: CrawlResult = {"main": main_row, "extra": extra_row}
+                pending_batch.append(result)
+                crawled_count += 1
+                url_done = main_row.get("URL")
+                if url_done:
+                    completed_urls_runtime.add(url_done)
+                    completed_normalized.add(_normalize_url_key(url_done))
+                if scheduled_depth < max_depth:
+                    for discovered_url in _candidate_internal_links(result_payload):
+                        if discovered_url in queued_urls:
+                            continue
+                        if not _can_enqueue():
+                            break
+                        queued_urls.add(discovered_url)
+                        crawl_queue.append((discovered_url, scheduled_depth + 1))
+                        crawl_urls_runtime.append(discovered_url)
+                    total_urls = len(crawl_urls_runtime) + len(checkpoint_completed_urls)
+                if len(pending_batch) >= flush_batch_size:
                     cache.upsert_results(pending_batch)
                     pending_batch = []
-                checkpoint_results = cache.all_results()
-                save_checkpoint(
-                    checkpoint_file, checkpoint_results, urls, checkpoint_completed_urls
-                )
-                logger.info(
-                    "Checkpoint saved: %s/%s -> %s",
-                    done_count,
-                    total_urls,
-                    checkpoint_file,
-                )
+                done_count = crawled_count
+                if checkpoint_every > 0 and done_count % checkpoint_every == 0:
+                    if pending_batch:
+                        cache.upsert_results(pending_batch)
+                        pending_batch = []
+                    checkpoint_results = cache.all_results()
+                    save_checkpoint(
+                        checkpoint_file,
+                        checkpoint_results,
+                        crawl_urls_runtime,
+                        checkpoint_completed_urls,
+                    )
+                    logger.info(
+                        "Checkpoint saved: %s/%s -> %s",
+                        done_count,
+                        total_urls,
+                        checkpoint_file,
+                    )
+            _schedule_available()
         if pending_batch:
             cache.upsert_results(pending_batch)
         if checkpoint_every > 0:
             checkpoint_results = cache.all_results()
             save_checkpoint(
-                checkpoint_file, checkpoint_results, urls, checkpoint_completed_urls
+                checkpoint_file,
+                checkpoint_results,
+                crawl_urls_runtime,
+                checkpoint_completed_urls,
             )
 
         logger.info("Generating Excel report...")
@@ -256,7 +362,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             crawl_rows=typed_results,
             target_input=setup.target_input,
             max_psi_urls=setup.max_psi_urls,
-            crawl_urls=urls,
+            crawl_urls=crawl_urls_runtime,
             sitemap_meta=sitemap_meta,
             source_label=source_label,
             workers=workers,

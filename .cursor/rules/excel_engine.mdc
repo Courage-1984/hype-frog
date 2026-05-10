@@ -1,0 +1,69 @@
+---
+description: Excel workbook integrity, sanitization, ghost/nuclear view state, TOC, hub semantics, and reporter module ownership.
+globs: "src/hype_frog/reporter/**/*.py"
+alwaysApply: true
+---
+
+Canonical narrative: [`docs/excel_reporting_standards.md`](../../docs/excel_reporting_standards.md). Keep rules and docs aligned when editing reporter code.
+
+# Excel engine rules
+
+## Logic vs layout
+
+- Business and scoring logic: `crawler/`, `pipeline/`, `rules/`.
+- Workbook I/O, formatting, TOC, view state: `src/hype_frog/reporter/`.
+- **Do not mutate pipeline data** (`main_data` / upstream row dicts) inside the reporter layer. Treat dictionaries as **read-only**.
+
+## Priority
+
+Treat **workbook integrity** and **client-safe XML** as highest priority. Prefer defensive openpyxl usage over shortcuts.
+
+## String sanitization
+
+- Sanitize **all** outgoing string cell values: strip **non-printable / control** characters; prevent formula/CSV injection (strip leading `=`, `+`, `-`, `@` where the codebase applies injection guards).
+- Keep enforcement aligned across:
+  - `src/hype_frog/pipeline/export.py`
+  - `src/hype_frog/reporter/engine_io.py`
+  - sheet writers under `src/hype_frog/reporter/sheets/`
+- Never write raw strings that break worksheet XML or conditional-formatting assumptions.
+
+## Ghost pane selection and freeze panes
+
+- When clearing `freeze_panes`, clear **orphaned** `sheetView` selections (e.g. `worksheet.views.sheetView[0].selection = []` or equivalent safe pattern).
+- **Ghost pane guard:** selections must match splits. If `xSplit == 0`, remove `topRight` / `bottomRight`; if `ySplit == 0`, remove `bottomLeft` / `bottomRight`; never `bottomRight` unless **both** splits exist.
+- Central helpers include `sanitize_sheet_view_selection`, `apply_optimal_view_state`; guardrail orchestration in `src/hype_frog/reporter/engine_guardrails.py` — keep paths aligned when touching freezes or merges.
+
+## Nuclear view-state guardrails
+
+For sheets that are not **Main** or **Dashboard**, when the used grid is very small (`max_row` / `max_column` thresholds as in code), **disable** freeze panes and autofilter to avoid fragile client view state.
+
+## Numeric conditional formatting
+
+Do not inject **non-numeric strings** into columns governed by numeric conditional rules; use blank/`None` when unmeasured.
+
+## TOC and hyperlinks
+
+- **Table of Contents** must match tab names exactly; entries use descriptive labels and stable descriptions — keep `src/hype_frog/reporter/sheets/toc.py` and `src/hype_frog/reporter/engine_guardrails.py` consistent.
+- Validate internal hyperlinks against **actual sheet names** and escaped single-quote rules when renaming sheets.
+
+## Content Optimisation Hub — Action Required
+
+- Ready path: **`Ready to Publish`**. Blocked path: **`Needs Copy`**.
+- **Conditional formatting** must highlight **`Needs Copy`** in **red** (`CellIsRule` patterns in `src/hype_frog/reporter/sheets/conditional.py`). Do not rename literals without updating formulas and rules.
+- Do not pass **`None`** to action columns where populated text is required for formatting.
+
+## Reporter module ownership
+
+- `engine_guardrails.py` — invariants (Action Required normalisation, TOC refresh, freeze policy, tooltips).
+- `engine_formatting.py` — visual formatting and conditional formats.
+- `engine_io.py` — workbook-safe I/O, sanitization, row-writing bridges.
+- `engine_rows.py` — report-row assembly and domain-specific shaping.
+- `excel_engine.py` — compatibility facade / re-export, not the behaviour monolith.
+
+## New sheets
+
+When adding a sheet: update **TOC**, apply **view-state** guardrails for that sheet, run **sanitization** on written rows. Keep modular split: rows → `engine_rows.py`, I/O → `engine_io.py`, formatting → `engine_formatting.py`, invariants → `engine_guardrails.py`.
+
+## Testing touchpoints
+
+After changing view state, TOC, or conditional formatting, run pytest (`test_excel_engine.py` and related tests under `tests/`).

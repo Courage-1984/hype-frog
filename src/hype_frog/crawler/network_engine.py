@@ -445,7 +445,7 @@ async def fetch_rendered_with_diagnostics(
 
     async with _PLAYWRIGHT_SEMAPHORE:
         if not await _probe_subprocess_supported():
-            return _empty_diagnostics("partial")
+            return _empty_diagnostics("skipped")
 
         try:
             from playwright.async_api import Error as PlaywrightError
@@ -462,7 +462,7 @@ async def fetch_rendered_with_diagnostics(
         try:
             context = await manager.get_context(target_url)
             if context is None:
-                return _empty_diagnostics("partial")
+                return _empty_diagnostics("skipped")
             try:
                 page = await context.new_page()
             except PlaywrightError:

@@ -28,6 +28,7 @@ from collections import Counter
 from typing import Any, TypedDict
 
 from hype_frog.core import get_logger
+from hype_frog.core.api_clients import SEARCH_INTENT_LABELS, classify_search_intent_with_llm
 
 logger = get_logger(__name__)
 
@@ -329,6 +330,26 @@ class SemanticAnalyzer:
         )
 
 
+class IntentAnalyzer:
+    """LLM-backed search-intent classifier with a no-key ``Unknown`` fallback."""
+
+    def __init__(self, *, max_chars: int = 4_000) -> None:
+        self._max_chars = max(200, int(max_chars))
+
+    async def analyze_intent(self, rendered_text: str | None) -> str:
+        """Classify page intent as one of the allowed workbook labels.
+
+        The API client enforces the graceful fallback contract: no API key,
+        empty text, network failures, or non-canonical model outputs all
+        produce ``"Unknown"``.
+        """
+        text = " ".join(str(rendered_text or "").split())
+        if not text:
+            return "Unknown"
+        intent = await classify_search_intent_with_llm(text[: self._max_chars])
+        return intent if intent in SEARCH_INTENT_LABELS else "Unknown"
+
+
 # Process-wide default analyser. Lazy-instantiated so importers that never
 # call ``get_default_analyzer()`` (e.g. test modules that mock it) pay no
 # construction cost.
@@ -349,6 +370,7 @@ __all__ = [
     "DEFAULT_DEFINITION_TRIGGERS",
     "DEFAULT_ENTITY_LABELS",
     "DEFAULT_MAX_CHARS",
+    "IntentAnalyzer",
     "SemanticAnalysisResult",
     "SemanticAnalyzer",
     "count_citation_candidates",

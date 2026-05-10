@@ -14,8 +14,10 @@ their existing dictionaries.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
+import aiohttp
 from pydantic import BaseModel, ValidationError
 
 from hype_frog.core.logger import get_logger
@@ -26,6 +28,15 @@ from hype_frog.core.models import (
 )
 
 logger = get_logger(__name__)
+
+SEARCH_INTENT_LABELS: tuple[str, ...] = (
+    "Informational",
+    "Transactional",
+    "Navigational",
+    "Commercial Investigation",
+)
+
+_OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
 
 
 def _format_validation_failure(error: ValidationError) -> str:
@@ -160,7 +171,103 @@ def parse_gsc_row(
     )
 
 
+def _normalise_search_intent(raw: object) -> str:
+    """Return a canonical search-intent label, or ``"Unknown"``."""
+    text = str(raw or "").strip()
+    if not text:
+        return "Unknown"
+    cleaned = " ".join(text.replace(".", " ").replace(",", " ").split())
+    lowered = cleaned.casefold()
+    for label in SEARCH_INTENT_LABELS:
+        if lowered == label.casefold() or label.casefold() in lowered:
+            return label
+    # Let common terse LLM outputs like "commercial" map cleanly.
+    if lowered == "commercial":
+        return "Commercial Investigation"
+    return "Unknown"
+
+
+async def classify_search_intent_with_llm(
+    text: str | None,
+    *,
+    session: aiohttp.ClientSession | None = None,
+    model: str | None = None,
+    timeout_seconds: float = 12.0,
+) -> str:
+    """Classify page search intent with an OpenAI-compatible LLM.
+
+    Graceful fallback contract: missing API key, blank text, HTTP errors,
+    malformed responses, and unexpected labels all return ``"Unknown"``.
+    This keeps crawl workers moving even when LLM enrichment is unavailable.
+    """
+    snippet = " ".join(str(text or "").split())
+    if not snippet:
+        return "Unknown"
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if not api_key:
+        return "Unknown"
+
+    prompt = (
+        "Analyze this text and return one word for the search intent. "
+        "Allowed outputs: Informational, Transactional, Navigational, "
+        "Commercial Investigation.\n\n"
+        f"Text: {snippet[:4000]}"
+    )
+    payload = {
+        "model": model or os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You classify web page search intent. Return only one "
+                    "allowed label and no explanation."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0,
+        "max_tokens": 8,
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    owns_session = session is None
+    client = session or aiohttp.ClientSession()
+    try:
+        async with client.post(
+            _OPENAI_CHAT_COMPLETIONS_URL,
+            json=payload,
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=timeout_seconds),
+        ) as response:
+            if response.status >= 400:
+                body = await response.text()
+                logger.warning(
+                    "LLM intent classifier returned HTTP %s: %s",
+                    response.status,
+                    body[:200],
+                )
+                return "Unknown"
+            data = await response.json()
+    except Exception as exc:
+        logger.warning("LLM intent classifier failed: %s", exc)
+        return "Unknown"
+    finally:
+        if owns_session:
+            await client.close()
+
+    try:
+        content = data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError):
+        return "Unknown"
+    return _normalise_search_intent(content)
+
+
 __all__ = [
+    "SEARCH_INTENT_LABELS",
+    "classify_search_intent_with_llm",
     "parse_gsc_row",
     "parse_http_crawl_result",
     "parse_psi_response",
