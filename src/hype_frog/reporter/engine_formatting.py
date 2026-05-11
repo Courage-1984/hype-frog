@@ -424,20 +424,16 @@ def apply_executive_priority_formatting(
     *,
     header_row: int = 2,
 ) -> None:
-    """Apply Sprint 6 ROI heatmaps to the Content Optimisation Hub.
+    """Apply Sprint 6 ROI-related conditional formatting.
 
-    Adds two openpyxl conditional rules driven by the executive ROI
-    columns appended in ``engine_rows.CONTENT_HUB_EXPORT_COLUMNS``:
+    When ``Semantic AEO Score`` is present: **ColorScaleRule** (red →
+    yellow → green) on that column (used on the Content Optimisation Hub).
 
-    1. **ColorScaleRule** (red → yellow → green) on ``Semantic AEO
-       Score`` so low-readiness pages glow red and high-readiness
-       pages glow green at a glance.
-    2. **FormulaRule** on the entire data row that triggers a bold
-       white-on-red fill when ``Instant Priority`` equals ``CRITICAL``.
+    When ``Instant Priority`` is present: **FormulaRule** for whole-row
+    red highlight when the value is ``CRITICAL`` (Hub no longer carries
+    this column; primary use is ``Content Hub Metrics``).
 
-    Both rules degrade gracefully: if either header is missing (e.g.
-    a legacy export) the corresponding rule is simply skipped, no
-    exception is raised.
+    Missing headers skip the corresponding rule.
     """
     if worksheet.max_row <= header_row:
         return

@@ -5,7 +5,10 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.workbook.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
+from hype_frog.reporter.sheets.config import (
+    CONTENT_HUB_METRICS_SHEET,
+    CONTENT_OPTIMISATION_HUB_SHEET,
+)
 from hype_frog.reporter.sheets.layout import (
     CONTENT_HUB_HEADER_COMMENT_OG_IMAGE_PREVIEW,
     CONTENT_HUB_HEADER_COMMENT_SEO_SCORE,
@@ -21,6 +24,10 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     ),
     CONTENT_OPTIMISATION_HUB_SHEET: (
         "Diagnostic command center: live title, meta, and H1–H6 health plus on-page score."
+    ),
+    CONTENT_HUB_METRICS_SHEET: (
+        "Per-URL crawl metrics (JS/rendered words, field CWV), anchor diversity, "
+        "and executive ROI estimates aligned with the Content Hub URL set."
     ),
     "FixPlan": (
         "Prioritized list of technical and content fixes with estimated effort."

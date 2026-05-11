@@ -65,8 +65,8 @@ DASHBOARD_KPI_ROW_COMMENTS: dict[str, str] = {
     "A6": format_help_layer(
         description="Site-wide technical health proxy from the Technical Diagnostics sheet.",
         calculation=(
-            "Excel ``B6``: ``AVERAGE('Technical Diagnostics'!E:E)/100`` where column **E** is "
-            "``SEO Health Score`` (header-driven layout)."
+            "Excel ``B6``: ``AVERAGE`` of ``SEO Health Score`` on Technical Diagnostics using "
+            "``INDEX``/``MATCH`` on row 1, divided by 100 for display as a percentage."
         ),
     ),
     "A7": format_help_layer(
@@ -80,8 +80,8 @@ DASHBOARD_KPI_ROW_COMMENTS: dict[str, str] = {
     "A18": format_help_layer(
         description="Count of inventory URLs that carry valid JSON-LD during the crawl.",
         calculation=(
-            "Excel ``B18`` uses ``COUNTIF`` on the Main ``Has Valid JSON-LD`` (or equivalent) "
-            "boolean column—see workbook formula for the live column letter."
+            "Excel ``B18`` uses ``COUNTIF`` over an ``OFFSET``/``MATCH`` range on Main row 1 "
+            "so ``Has Valid JSON-LD`` stays correct when Main columns are reordered."
         ),
     ),
     "A19": format_help_layer(

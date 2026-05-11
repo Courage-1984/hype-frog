@@ -339,16 +339,40 @@ def fetch_gsc_url_inspections_batch(
     conn = _open_inspection_cache_db()
     cache_lock = threading.Lock()
     out: dict[str, dict[str, str | None]] = {}
+    inspected_count = 0
+    total = len(inspection_urls)
+    log_every = 10
+    logger.info(
+        "GSC URL Inspection batch start: %s URLs (progress log every %s).",
+        total,
+        log_every,
+    )
+    started = time.perf_counter()
     try:
-        for raw_url in inspection_urls:
+        for idx, raw_url in enumerate(inspection_urls, start=1):
             u = str(raw_url or "").strip()
             if not u:
                 continue
             fields = _inspect_url_sync(service, site_url, u, conn, cache_lock)
+            inspected_count += 1
             out[u] = fields
             out[_normalize_url(u)] = fields
+            if idx == 1 or idx % log_every == 0 or idx == total:
+                elapsed = time.perf_counter() - started
+                logger.info(
+                    "GSC URL Inspection progress: %s/%s (%.1fs elapsed).",
+                    idx,
+                    total,
+                    elapsed,
+                )
     finally:
         conn.close()
+    logger.info(
+        "GSC URL Inspection batch complete: %s/%s processed in %.1fs.",
+        inspected_count,
+        total,
+        time.perf_counter() - started,
+    )
     return out
 
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import math
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from hype_frog.core import get_logger
@@ -40,6 +42,26 @@ from hype_frog.rules import get_summary_rules
 from hype_frog.core.url_normalization import normalize_url
 
 logger = get_logger(__name__)
+
+
+def _log_phase_banner(title: str) -> None:
+    bar = "=" * 72
+    logger.info("")
+    logger.info(bar)
+    logger.info(" %s", title)
+    logger.info(bar)
+    logger.info("")
+
+
+@contextmanager
+def _log_stage_timer(stage_name: str):
+    started = time.perf_counter()
+    logger.info(">> %s started", stage_name)
+    try:
+        yield
+    finally:
+        elapsed = time.perf_counter() - started
+        logger.info(">> %s completed in %.1fs", stage_name, elapsed)
 
 
 def normalize_url_key(url: object, keep_query: bool = True) -> str:
@@ -159,15 +181,18 @@ def _sync_main_rows_seo_fields_from_extra(
 
 
 async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult:
+    _log_phase_banner("ENRICHMENT: Starting post-crawl data pipeline")
     crawl_rows: list[CrawlRowPayload] = list(crawl_result.crawl_rows)
     main_rows = [row.main for row in crawl_rows]
     extra_rows = [row.extra for row in crawl_rows]
     sitemap_url_keys = {normalize_url_key(url) for url in crawl_result.sitemap_meta.keys()}
     async with create_session() as session:
+        _log_phase_banner("ENRICHMENT PHASE 1/5: Load GSC analytics context")
         try:
-            gsc_ctx: GSCEnrichmentContext = await asyncio.to_thread(
-                load_gsc_enrichment_context, crawl_result.target_input
-            )
+            with _log_stage_timer("GSC analytics context load"):
+                gsc_ctx = await asyncio.to_thread(
+                    load_gsc_enrichment_context, crawl_result.target_input
+                )
         except Exception as exc:
             logger.warning("GSC metrics unavailable due to runtime error: %s", exc)
             gsc_ctx = GSCEnrichmentContext({}, False, None, None)
@@ -207,18 +232,22 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             and gsc_ctx.service is not None
             and gsc_ctx.site_url is not None
         ):
+            _log_phase_banner(
+                "ENRICHMENT PHASE 2/5: GSC URL Inspection batch"
+            )
             logger.info(
                 "GSC URL Inspection smart gate: %s of %s crawled URLs qualify for inspection API.",
                 len(unique_inspection_urls),
                 len(extra_rows),
             )
             try:
-                inspection_by_url = await asyncio.to_thread(
-                    fetch_gsc_url_inspections_batch,
-                    gsc_ctx.service,
-                    gsc_ctx.site_url,
-                    unique_inspection_urls,
-                )
+                with _log_stage_timer("GSC URL Inspection lookups"):
+                    inspection_by_url = await asyncio.to_thread(
+                        fetch_gsc_url_inspections_batch,
+                        gsc_ctx.service,
+                        gsc_ctx.site_url,
+                        unique_inspection_urls,
+                    )
             except Exception as exc:
                 logger.warning("GSC URL Inspection batch failed: %s", exc)
                 inspection_by_url = {}
@@ -227,15 +256,17 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             psi_map: dict[str, dict[str, object]] = {}
             logger.info("PSI disabled for this run (max PSI URLs set to 0).")
         else:
-            psi_map = await fetch_psi_metrics_batch(
-                session,
-                [
-                    str(row.values.get("URL") or "")
-                    for row in extra_rows
-                    if row.values.get("URL")
-                ],
-                max_urls=crawl_result.max_psi_urls,
-            )
+            _log_phase_banner("ENRICHMENT PHASE 3/5: PSI metric batch")
+            with _log_stage_timer("PSI fetch"):
+                psi_map = await fetch_psi_metrics_batch(
+                    session,
+                    [
+                        str(row.values.get("URL") or "")
+                        for row in extra_rows
+                        if row.values.get("URL")
+                    ],
+                    max_urls=crawl_result.max_psi_urls,
+                )
             if crawl_result.max_psi_urls is not None:
                 logger.info(
                     "PSI URL cap applied: processed up to %s URLs.",
@@ -270,6 +301,7 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             for target in row.values.get("Internal Links List Full", []):
                 if normalize_url_key(target) not in status_by_url:
                     unresolved_targets.add(target)
+        _log_phase_banner("ENRICHMENT PHASE 4/5: Internal/external link status completion")
         if unresolved_targets:
             logger.info(
                 "Running lightweight status checks for %s internal links not in crawl set...",
@@ -284,6 +316,8 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             )
             for target, status in zip(unresolved_targets, checked_statuses):
                 status_by_url[normalize_url_key(target)] = status
+        else:
+            logger.info("No unresolved internal-link targets; skipping lightweight status checks.")
 
         external_by_netloc: dict[str, int | None] | None = None
         if crawl_result.check_external_link_status:
@@ -292,6 +326,8 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                 "External domain HEAD checks completed (%s unique hosts).",
                 len(external_by_netloc),
             )
+        else:
+            logger.info("External domain HEAD checks disabled for this run.")
 
         annotate_link_details_with_status(
             extra_work,
@@ -301,63 +337,67 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             normalize_url_key_fn=normalize_url_key,
         )
 
-    crawled_finals = {
-        normalize_url_key(row.values.get("Final URL"))
-        for row in extra_work
-        if row.values.get("Final URL")
-    }
-    extra_work = [
-        row_with_canonical_and_internal_links(
-            row,
-            crawled_finals=crawled_finals,
-            status_by_url=status_by_url,
-        )
-        for row in extra_work
-    ]
+    _log_phase_banner("ENRICHMENT PHASE 5/5: Scoring, intelligence, and row assembly")
+    with _log_stage_timer(
+        "Scoring + link graph + SEO health merge (no network; scales with URL count)"
+    ):
+        crawled_finals = {
+            normalize_url_key(row.values.get("Final URL"))
+            for row in extra_work
+            if row.values.get("Final URL")
+        }
+        extra_work = [
+            row_with_canonical_and_internal_links(
+                row,
+                crawled_finals=crawled_finals,
+                status_by_url=status_by_url,
+            )
+            for row in extra_work
+        ]
 
-    graph_metrics = compute_internal_link_intelligence(
-        extra_work, crawl_result.source_label
-    )
-    title_map, meta_map, segment_by_url = build_title_meta_segment_maps(main_rows)
-    summary_rules = get_summary_rules()
-    main_by_url_pre = main_by_url_map(main_rows)
-    inlinks_map = build_inlinks_map(extra_work)
-    extra_work = [
-        row_with_seo_health_enrichment(
-            row,
-            summary_rules=summary_rules,
-            sitemap_url_keys=sitemap_url_keys,
-            graph_metrics=graph_metrics,
-            inlinks_map=inlinks_map,
-            title_map=title_map,
-            meta_map=meta_map,
-            segment_by_url=segment_by_url,
-            main_by_url=main_by_url_pre,
+        graph_metrics = compute_internal_link_intelligence(
+            extra_work, crawl_result.source_label
         )
-        for row in extra_work
-    ]
-    enriched_extra_rows = enrich_extra_rows_with_composite_scores(
-        extra_work, main_by_url=main_by_url_pre
-    )
-    _apply_seo_health_export_defaults(enriched_extra_rows)
+        title_map, meta_map, segment_by_url = build_title_meta_segment_maps(main_rows)
+        summary_rules = get_summary_rules()
+        main_by_url_pre = main_by_url_map(main_rows)
+        inlinks_map = build_inlinks_map(extra_work)
+        extra_work = [
+            row_with_seo_health_enrichment(
+                row,
+                summary_rules=summary_rules,
+                sitemap_url_keys=sitemap_url_keys,
+                graph_metrics=graph_metrics,
+                inlinks_map=inlinks_map,
+                title_map=title_map,
+                meta_map=meta_map,
+                segment_by_url=segment_by_url,
+                main_by_url=main_by_url_pre,
+            )
+            for row in extra_work
+        ]
+        enriched_extra_rows = enrich_extra_rows_with_composite_scores(
+            extra_work, main_by_url=main_by_url_pre
+        )
+        _apply_seo_health_export_defaults(enriched_extra_rows)
 
-    extra_by_url: dict[str, ExtraRowPayload] = {
-        str(row.values.get("URL") or "").strip(): row
-        for row in enriched_extra_rows
-        if row.values.get("URL")
-    }
-    enriched_main_rows = [
-        assemble_enriched_row(
-            row,
-            extra_by_url.get(
-                str(row.values.get("URL") or "").strip(),
-                ExtraRowPayload.model_validate({}),
-            ),
-            sitemap_url_keys=sitemap_url_keys,
-        )
-        for row in main_rows
-    ]
-    _sync_main_rows_seo_fields_from_extra(enriched_main_rows, enriched_extra_rows)
+        extra_by_url: dict[str, ExtraRowPayload] = {
+            str(row.values.get("URL") or "").strip(): row
+            for row in enriched_extra_rows
+            if row.values.get("URL")
+        }
+        enriched_main_rows = [
+            assemble_enriched_row(
+                row,
+                extra_by_url.get(
+                    str(row.values.get("URL") or "").strip(),
+                    ExtraRowPayload.model_validate({}),
+                ),
+                sitemap_url_keys=sitemap_url_keys,
+            )
+            for row in main_rows
+        ]
+        _sync_main_rows_seo_fields_from_extra(enriched_main_rows, enriched_extra_rows)
 
     return EnrichmentResult(
         typed_main_rows=enriched_main_rows,

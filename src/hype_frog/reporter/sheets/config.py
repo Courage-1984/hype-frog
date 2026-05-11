@@ -9,6 +9,8 @@ STD_FROG_GREEN: str = "92D050"
 
 # Canonical UK spelling for the Content Hub worksheet title (must match workbook-wide).
 CONTENT_OPTIMISATION_HUB_SHEET: str = "Content Optimisation Hub"
+# Companion sheet: per-URL crawl metrics and executive ROI fields split from the Hub.
+CONTENT_HUB_METRICS_SHEET: str = "Content Hub Metrics"
 
 DATA_HEAVY_TABS: set[str] = {
     "Main",
@@ -19,6 +21,7 @@ DATA_HEAVY_TABS: set[str] = {
     "Summary",
     "Schema & Metadata",
     CONTENT_OPTIMISATION_HUB_SHEET,
+    CONTENT_HUB_METRICS_SHEET,
 }
 
 
@@ -44,6 +47,7 @@ __all__ = [
     "STD_BLUE",
     "STD_FROG_GREEN",
     "CONTENT_OPTIMISATION_HUB_SHEET",
+    "CONTENT_HUB_METRICS_SHEET",
     "DATA_HEAVY_TABS",
     "env_bool",
     "DEBUG_EXCEL_ISOLATION_MODE",

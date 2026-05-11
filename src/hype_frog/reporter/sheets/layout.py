@@ -342,6 +342,7 @@ MAIN_COLUMN_GROUP_DEFINITIONS: dict[str, list[str]] = {
         "Found via Sitemap",
         "Found via Crawl",
         "Discovery Source",
+        "Discovered On URL",
     ],
     "Raw State Group": [
         "Extraction State",
@@ -466,6 +467,31 @@ def hide_noisy_columns(worksheet: Worksheet, sheet_name: str) -> None:
             ].hidden = True
 
 
+def content_optimisation_hub_ordered_headers(
+    all_headers: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return Content Optimisation Hub column order after :func:`reorder_columns`.
+
+    The export pipeline writes row 1 headers then calls ``reorder_columns``,
+    which places ``_PREFERRED_COLUMN_ORDERS[Content Optimisation Hub]`` first
+    and appends any remaining headers in their original scan order. Formula
+    builders must use this same ordering so column letters match the physical
+    grid (not the pre-reorder DataFrame column list).
+
+    Args:
+        all_headers: Full header tuple in the initial write order (typically
+            ``_CONTENT_HUB_FIELDS_PRE_REORDER`` from ``engine_rows``).
+
+    Returns:
+        Header names in final worksheet column order.
+    """
+    preferred = _PREFERRED_COLUMN_ORDERS[CONTENT_OPTIMISATION_HUB_SHEET]
+    current = list(all_headers)
+    ordered = [h for h in preferred if h in current]
+    ordered.extend([h for h in current if h not in ordered])
+    return tuple(ordered)
+
+
 def reorder_columns(worksheet: Worksheet, sheet_name: str) -> None:
     """Reorder sheet columns according to preferred operational layouts.
 
@@ -579,6 +605,7 @@ def apply_column_widths(worksheet: Worksheet) -> None:
 
 __all__ = [
     "MAIN_COLUMN_GROUP_DEFINITIONS",
+    "content_optimisation_hub_ordered_headers",
     "sort_worksheet_rows",
     "apply_intelligent_sorting",
     "hide_noisy_columns",

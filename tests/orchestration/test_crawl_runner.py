@@ -40,6 +40,7 @@ from hype_frog.core.models import (
     MainRowPayload,
 )
 from hype_frog.orchestration.crawl_runner import (
+    _is_crawlable_html_candidate,
     _candidate_internal_links,
     _max_depth_from_env,
     execute_crawl,
@@ -240,6 +241,32 @@ def test_candidate_internal_links_filters_empty_strings() -> None:
     assert _candidate_internal_links(payload) == ["https://example.com/keep"]
 
 
+def test_candidate_internal_links_skips_binary_asset_urls() -> None:
+    payload = _make_payload(
+        "https://example.com/seed",
+        links=[
+            "https://example.com/page",
+            "https://example.com/wp-content/uploads/hero.jpg",
+            "https://example.com/assets/site.css",
+            "https://example.com/files/report.pdf",
+        ],
+    )
+    assert _candidate_internal_links(payload) == ["https://example.com/page"]
+
+
+def test_is_crawlable_html_candidate_allows_html_like_routes() -> None:
+    assert _is_crawlable_html_candidate("https://example.com/")
+    assert _is_crawlable_html_candidate("https://example.com/about-us")
+    assert _is_crawlable_html_candidate("https://example.com/blog/post-1?utm=1")
+
+
+def test_is_crawlable_html_candidate_rejects_common_non_html_assets() -> None:
+    assert not _is_crawlable_html_candidate("https://example.com/photo.webp")
+    assert not _is_crawlable_html_candidate("https://example.com/docs/file.pdf")
+    assert not _is_crawlable_html_candidate("https://example.com/sitemap.xml")
+    assert not _is_crawlable_html_candidate("https://example.com/app.js")
+
+
 # ---------------------------------------------------------------------------
 # execute_crawl — BFS frontier ordering
 # ---------------------------------------------------------------------------
@@ -423,3 +450,68 @@ async def test_execute_crawl_max_urls_seed_cap_truncates_frontier(
     # Seed (1) plus at most three children, totalling four URLs.
     assert len(call_order) <= 4
     assert call_order[0] == (seed, 0)
+
+
+async def test_execute_crawl_sitemap_seed_phase_completes_before_bfs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    sitemap_url = "https://example.com/page-sitemap.xml"
+    s1 = "https://example.com/s1"
+    s2 = "https://example.com/s2"
+    child = "https://example.com/child"
+    link_graph = {
+        s1: [child],
+        s2: [],
+        child: [],
+    }
+
+    call_order = _install_runner_mocks(monkeypatch, tmp_path, link_graph=link_graph)
+    monkeypatch.setenv("HF_MAX_DEPTH", "5")
+
+    async def fake_parse_sitemap(_url: str, _session: Any) -> tuple[list[str], dict[str, dict[str, Any]]]:
+        return [s1, s2], {s1: {}, s2: {}}
+
+    monkeypatch.setattr(
+        "hype_frog.orchestration.crawl_runner.parse_sitemap",
+        fake_parse_sitemap,
+    )
+
+    setup = _build_run_setup(target=sitemap_url)
+    await execute_crawl(setup)
+
+    visited = [url for url, _depth in call_order]
+    assert visited[:2] == [s1, s2]
+    assert visited[2:] == [child]
+
+
+async def test_execute_crawl_sets_discovered_on_url_for_non_sitemap_pages(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    sitemap_url = "https://example.com/page-sitemap.xml"
+    s1 = "https://example.com/s1"
+    child = "https://example.com/child"
+    link_graph = {
+        s1: [child],
+        child: [],
+    }
+
+    _ = _install_runner_mocks(monkeypatch, tmp_path, link_graph=link_graph)
+    monkeypatch.setenv("HF_MAX_DEPTH", "5")
+
+    async def fake_parse_sitemap(_url: str, _session: Any) -> tuple[list[str], dict[str, dict[str, Any]]]:
+        return [s1], {s1: {}}
+
+    monkeypatch.setattr(
+        "hype_frog.orchestration.crawl_runner.parse_sitemap",
+        fake_parse_sitemap,
+    )
+
+    setup = _build_run_setup(target=sitemap_url)
+    result = await execute_crawl(setup)
+    by_url = {str(row.main.values.get("URL")): row for row in result.crawl_rows}
+
+    assert by_url[s1].main.values.get("Discovered On URL") == ""
+    assert by_url[child].main.values.get("Discovered On URL") == s1
+    assert by_url[child].extra.values.get("Discovered On URL") == s1
