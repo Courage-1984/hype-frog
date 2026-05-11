@@ -36,7 +36,10 @@ from hype_frog.orchestration.export_registry import (
 from hype_frog.orchestration.run_setup import RunSetup
 from hype_frog.pipeline.export import sanitize_rows, to_excel_safe
 from hype_frog.reporter import adjust_sheet_format, apply_tab_hyperlinks
-from hype_frog.reporter.engine_rows import CONTENT_HUB_EXPORT_COLUMNS
+from hype_frog.reporter.engine_rows import (
+    CONTENT_HUB_EXPORT_COLUMNS,
+    CONTENT_HUB_METRICS_EXPORT_COLUMNS,
+)
 from hype_frog.reporter.excel_engine import (
     apply_workbook_export_guardrails,
     build_content_optimisation_hub_rows,
@@ -44,7 +47,10 @@ from hype_frog.reporter.excel_engine import (
     write_dict_rows_sheet,
 )
 from hype_frog.reporter.engine_io import apply_link_intelligence_summary_broken_formulas
-from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
+from hype_frog.reporter.sheets.config import (
+    CONTENT_HUB_METRICS_SHEET,
+    CONTENT_OPTIMISATION_HUB_SHEET,
+)
 from hype_frog.pipeline.link_inventory import unique_external_health_counts
 from hype_frog.reporter.sheets.merged_builders import (
     build_content_ai_readiness_rows,
@@ -312,12 +318,18 @@ def execute_export(
             )
             fixplan_df = pd.DataFrame(sorted(fixplan_rows, key=lambda item: (-item["Affected Count"], item["Severity"])))
             to_excel_safe(fixplan_df, writer, "FixPlan", index=False)
-            hub_base_rows = build_content_optimisation_hub_rows(
+            hub_base_rows, hub_metrics_rows = build_content_optimisation_hub_rows(
                 typed_main_rows, typed_extra_rows, fixplan_rows
             )
             content_hub_cols = list(CONTENT_HUB_EXPORT_COLUMNS)
             write_dict_rows_sheet(
                 writer, CONTENT_OPTIMISATION_HUB_SHEET, content_hub_cols, hub_base_rows
+            )
+            write_dict_rows_sheet(
+                writer,
+                CONTENT_HUB_METRICS_SHEET,
+                list(CONTENT_HUB_METRICS_EXPORT_COLUMNS),
+                hub_metrics_rows,
             )
             # Remaining dashboard/delta/report tabs preserved from prior flow
             priority_rows = build_priority_rows(
@@ -648,11 +660,7 @@ def execute_export(
                 apply_tab_hyperlinks(writer)
             elif final_step == "format_sheets":
                 for sname in get_sheet_sequence(registry_config):
-                    format_name = (
-                        CONTENT_OPTIMISATION_HUB_SHEET
-                        if sname == "Content Optimisation Hub"
-                        else sname
-                    )
+                    format_name = sname
                     if format_name in writer.sheets:
                         adjust_sheet_format(writer, format_name)
                     else:

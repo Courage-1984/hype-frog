@@ -31,6 +31,7 @@ from hype_frog.reporter.sheets.dashboard_config import (
     WARN_COLOR,
 )
 from hype_frog.reporter.sheets.config import (
+    CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     STD_BLUE,
     STD_NAVY,
@@ -42,8 +43,7 @@ from hype_frog.reporter.sheets.conditional import (
     apply_dashboard_metric_conditional_rules,
 )
 
-# Technical Diagnostics row 1 is the header; data rows only for URL-based denominators.
-_TD_URL_ROWS = "(COUNTA('Technical Diagnostics'!$A:$A)-1)"
+# Technical Diagnostics URL denominators: see ``_technical_url_row_denominator``.
 _MAIN_DYNAMIC_COLUMN = (
     'INDEX(\'Main\'!$1:$1048576,0,MATCH("{header}",\'Main\'!$1:$1,0))'
 )
@@ -51,9 +51,9 @@ _TD_DYNAMIC_COLUMN = (
     'INDEX(\'Technical Diagnostics\'!$1:$1048576,0,'
     'MATCH("{header}",\'Technical Diagnostics\'!$1:$1,0))'
 )
-_CONTENT_HUB_DYNAMIC_COLUMN = (
-    f'INDEX(\'{CONTENT_OPTIMISATION_HUB_SHEET}\'!$1:$1048576,0,'
-    f'MATCH("{{header}}",\'{CONTENT_OPTIMISATION_HUB_SHEET}\'!$2:$2,0))'
+_CONTENT_HUB_METRICS_DYNAMIC_COLUMN = (
+    f'INDEX(\'{CONTENT_HUB_METRICS_SHEET}\'!$1:$1048576,0,'
+    f'MATCH("{{header}}",\'{CONTENT_HUB_METRICS_SHEET}\'!$1:$1,0))'
 )
 # Hub data starts row 3 (row 1 banner, row 2 headers); F = Status per preferred column order.
 _CONTENT_HUB_STATUS_RANGE = f"'{CONTENT_OPTIMISATION_HUB_SHEET}'!F3:F10000"
@@ -65,6 +65,8 @@ _DASHBOARD_PERCENT_KPI_CELLS: tuple[str, ...] = (
     "B5",  # Average SEO Score
     "B6",  # Technical Health
     "B12",  # Crawl Success Rate % (2xx)
+    "B15",  # Projected health (Python-aligned)
+    "B16",  # Projected pass rate (Python-aligned)
     "B19",  # AEO Opportunity Gap (executive metrics row 19)
 )
 
@@ -88,6 +90,27 @@ _EXCEL_EXTERNAL_LINK_HEALTH_PCT = (
     'IFERROR(INDEX(\'RunMetadata\'!$B:$B,MATCH("External Link Unique Denominator",'
     '\'RunMetadata\'!$A:$A,0)),1),0)))'
 )
+
+_TD_SHEET = "Technical Diagnostics"
+
+
+def _technical_diagnostics_data_column(header: str) -> str:
+    """Excel OFFSET range for ``header`` on Technical Diagnostics (data rows 2–100000)."""
+    return (
+        f"OFFSET('{_TD_SHEET}'!$A$1,1,MATCH(\"{header}\",'{_TD_SHEET}'!$1:$1,0)-1,99999,1)"
+    )
+
+
+def _main_sheet_data_column(header: str) -> str:
+    """Excel OFFSET range for ``header`` on Main (data rows 2–100000)."""
+    return (
+        f"OFFSET('Main'!$A$1,1,MATCH(\"{header}\",'Main'!$1:$1,0)-1,99999,1)"
+    )
+
+
+def _technical_url_row_denominator() -> str:
+    """Stable URL count for Technical Diagnostics rate denominators (at least 1)."""
+    return f"MAX(1,COUNTA({_technical_diagnostics_data_column('URL')}))"
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -255,7 +278,9 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         )
         worksheet["B5"].number_format = "0%"
         worksheet["A6"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Technical Health")'
-        worksheet["B6"] = "=AVERAGE('Technical Diagnostics'!E:E)/100"
+        worksheet["B6"] = (
+            f'=IFERROR(AVERAGE({_TD_DYNAMIC_COLUMN.format(header="SEO Health Score")}),0)/100'
+        )
         worksheet["B6"].number_format = "0%"
         worksheet["A7"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Performance (PSI)")'
         worksheet["B7"] = (
@@ -269,38 +294,44 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             '=HYPERLINK("#\'Technical Diagnostics\'!A1","Mobile vs. Desktop Variance")'
         )
         worksheet["B8"] = (
-            "=ROUND(IFERROR("
-            "AVERAGE('Technical Diagnostics'!S:S)-AVERAGE('Technical Diagnostics'!R:R)"
-            ",0),1)"
+            f"=ROUND(IFERROR("
+            f"IFERROR(AVERAGE({_TD_DYNAMIC_COLUMN.format(header='Mobile PSI Score')}),0)-"
+            f"IFERROR(AVERAGE({_TD_DYNAMIC_COLUMN.format(header='Desktop PSI Score')}),0)"
+            f",0),1)"
         )
         worksheet["B8"].number_format = "0.0"
+        _td_sev = _technical_diagnostics_data_column("Severity Badge")
+        _td_sc = _technical_diagnostics_data_column("Status Code")
         worksheet["A9"] = '=HYPERLINK("#\'Priority URLs\'!A1","Critical URLs")'
-        worksheet["B9"] = "=COUNTIFS('Technical Diagnostics'!$D:$D,\"Critical\")"
+        worksheet["B9"] = f'=COUNTIFS({_td_sev},"Critical")'
         worksheet["A10"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Warning URLs")'
         worksheet["B10"] = (
-            "=COUNTIFS('Technical Diagnostics'!$D:$D,\"Warning\")"
-            "+COUNTIFS('Technical Diagnostics'!$D:$D,\"Needs Work\")"
+            f'=COUNTIFS({_td_sev},"Warning")+COUNTIFS({_td_sev},"Needs Work")'
         )
         worksheet["A11"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Error Rate % (4xx/5xx)")'
-        worksheet["B11"] = "=IFERROR((COUNTIFS('Technical Diagnostics'!$C:$C,\">=400\",'Technical Diagnostics'!$C:$C,\"<500\")+COUNTIFS('Technical Diagnostics'!$C:$C,\">=500\",'Technical Diagnostics'!$C:$C,\"<600\"))/COUNTIFS('Technical Diagnostics'!$C:$C,\">0\"),0)"
+        worksheet["B11"] = (
+            f"=IFERROR(("
+            f"COUNTIFS({_td_sc},\">=400\",{_td_sc},\"<500\")"
+            f"+COUNTIFS({_td_sc},\">=500\",{_td_sc},\"<600\"))"
+            f"/MAX(1,COUNTIFS({_td_sc},\">=200\",{_td_sc},\"<600\")),0)"
+        )
         worksheet["B11"].number_format = "0%"
         worksheet["A12"] = (
             '=HYPERLINK("#\'Technical Diagnostics\'!A1","Crawl Success Rate % (2xx)")'
         )
-        worksheet["B12"] = "=IFERROR(COUNTIFS('Technical Diagnostics'!$C:$C,\">=200\",'Technical Diagnostics'!$C:$C,\"<300\")/COUNTIFS('Technical Diagnostics'!$C:$C,\">0\"),0)"
+        worksheet["B12"] = (
+            f"=IFERROR(COUNTIFS({_td_sc},\">=200\",{_td_sc},\"<300\")"
+            f"/MAX(1,COUNTIFS({_td_sc},\">=200\",{_td_sc},\"<600\")),0)"
+        )
         worksheet["B12"].number_format = "0%"
         worksheet["A13"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Critical URL Rate %")'
-        worksheet["B13"] = f"=IFERROR(B9/{_TD_URL_ROWS},0)"
+        worksheet["B13"] = f"=IFERROR(B9/{_technical_url_row_denominator()},0)"
         worksheet["B13"].number_format = "0%"
         worksheet["A14"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Warning URL Rate %")'
-        worksheet["B14"] = f"=IFERROR(B10/{_TD_URL_ROWS},0)"
+        worksheet["B14"] = f"=IFERROR(B10/{_technical_url_row_denominator()},0)"
         worksheet["B14"].number_format = "0%"
         worksheet["A15"] = "Projected Health Score % (if all To Do done)"
-        worksheet["B15"] = "=MIN(1,B5+(B9*0.01))"
-        worksheet["B15"].number_format = "0%"
         worksheet["A16"] = "Projected Pass Rate % (if all To Do done)"
-        worksheet["B16"] = f"=IFERROR(IF({_TD_URL_ROWS}>0,1,0),0)"
-        worksheet["B16"].number_format = "0%"
         worksheet["A17"] = (
             f'=HYPERLINK("#\'{CONTENT_OPTIMISATION_HUB_SHEET}\'!A1",'
             f'"Content Hub Readiness (%)")'
@@ -312,7 +343,9 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         )
         worksheet["B17"].number_format = "0%"
         worksheet["A18"] = '=HYPERLINK("#\'Main\'!A1","URLs with Schema")'
-        worksheet["B18"] = "=COUNTIF('Main'!Q2:Q10000,TRUE)"
+        worksheet["B18"] = (
+            f"=IFERROR(COUNTIF({_main_sheet_data_column('Has Valid JSON-LD')},TRUE),0)"
+        )
         worksheet["B18"].number_format = "0"
         worksheet["A19"] = '=HYPERLINK("#\'Content & AI Readiness\'!A1","AEO Opportunity Gap")'
         worksheet["B19"] = (
@@ -334,31 +367,26 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet["A22"] = '=HYPERLINK("#\'Link Inventory\'!A1","External Link Health %")'
         worksheet["B22"] = _EXCEL_EXTERNAL_LINK_HEALTH_PCT
         worksheet["B22"].number_format = "0%"
-        # Sprint 6 — Executive ROI roll-ups sourced from the Content
-        # Optimisation Hub. Both formulas are name-keyed via the
-        # existing ``_CONTENT_HUB_DYNAMIC_COLUMN`` INDEX/MATCH pattern
-        # so they survive any Hub column re-ordering. Wrapped in
-        # ``IFERROR`` so a missing Hub or empty data range collapses
-        # to a clean ``0`` instead of ``#N/A``. ``SUMPRODUCT(--(...))``
-        # is used for the priority count because Excel ``COUNTIF``
-        # rejects array references returned by ``INDEX(..., 0, col)``.
+        # Sprint 6 — Executive ROI roll-ups sourced from Content Hub Metrics
+        # (same URL rows as the Hub; row-1 headers). INDEX/MATCH keeps
+        # formulas stable if column order changes.
         worksheet["A23"] = (
-            f'=HYPERLINK("#\'{CONTENT_OPTIMISATION_HUB_SHEET}\'!A1",'
-            f'"Total Estimated Monthly Traffic Lift")'
+            f'=HYPERLINK("#\'{CONTENT_HUB_METRICS_SHEET}\'!A1",'
+            f'"Total Potential Traffic Lift (sum)")'
         )
         worksheet["B23"] = (
             f"=IFERROR(SUM("
-            f'{_CONTENT_HUB_DYNAMIC_COLUMN.format(header="Potential Traffic Lift")}'
+            f'{_CONTENT_HUB_METRICS_DYNAMIC_COLUMN.format(header="Potential Traffic Lift")}'
             f"),0)"
         )
         worksheet["B23"].number_format = "#,##0"
         worksheet["A24"] = (
-            f'=HYPERLINK("#\'{CONTENT_OPTIMISATION_HUB_SHEET}\'!A1",'
+            f'=HYPERLINK("#\'{CONTENT_HUB_METRICS_SHEET}\'!A1",'
             f'"Critical Priority Pages")'
         )
         worksheet["B24"] = (
             f"=IFERROR(SUMPRODUCT(--("
-            f'{_CONTENT_HUB_DYNAMIC_COLUMN.format(header="Instant Priority")}'
+            f'{_CONTENT_HUB_METRICS_DYNAMIC_COLUMN.format(header="Instant Priority")}'
             f'="CRITICAL")),0)'
         )
         worksheet["B24"].number_format = "0"
@@ -447,16 +475,17 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         # ``dashboard_config.py``.
         _exec_roi_tooltips: dict[str, str] = {
             "A23": (
-                "Total Estimated Monthly Traffic Lift\n\n"
+                "Total Potential Traffic Lift (sum)\n\n"
                 "Sum of 'Potential Traffic Lift' across every URL on the "
-                "Content Optimisation Hub. Each row's lift is "
+                "Content Hub Metrics sheet (aligned with the Hub URL set). "
+                "Each row uses the same rule as the crawl export: "
                 "GSC Clicks * ((100 - Semantic AEO Score) / 100) * 0.25 "
-                "(25% AEO ceiling). Pages with no GSC traffic or no AEO "
-                "score contribute 0."
+                "(25% AEO ceiling), in click units for the GSC window used in the run. "
+                "Pages with no GSC traffic or no AEO score contribute 0."
             ),
             "A24": (
                 "Critical Priority Pages\n\n"
-                "Count of Hub rows whose 'Instant Priority' is "
+                "Count of Content Hub Metrics rows whose 'Instant Priority' is "
                 "'CRITICAL' — i.e. GSC Clicks > 500 AND (Semantic AEO "
                 "Score < 50 OR Field LCP > 2500ms)."
             ),
@@ -558,16 +587,18 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     pass_rate_pct = dashboard_metrics.pass_rate_pct
     critical_rate_pct = dashboard_metrics.critical_rate_pct
     warning_rate_pct = dashboard_metrics.warning_rate_pct
+    _td_sev2 = _technical_diagnostics_data_column("Severity Badge")
+    _td_sc2 = _technical_diagnostics_data_column("Status Code")
     worksheet["B8"] = (
-        "=ROUND(IFERROR("
-        "AVERAGE('Technical Diagnostics'!S:S)-AVERAGE('Technical Diagnostics'!R:R)"
-        ",0),1)"
+        f"=ROUND(IFERROR("
+        f"IFERROR(AVERAGE({_TD_DYNAMIC_COLUMN.format(header='Mobile PSI Score')}),0)-"
+        f"IFERROR(AVERAGE({_TD_DYNAMIC_COLUMN.format(header='Desktop PSI Score')}),0)"
+        f",0),1)"
     )
     worksheet["B8"].number_format = "0.0"
-    worksheet["B9"] = "=COUNTIFS('Technical Diagnostics'!$D:$D,\"Critical\")"
+    worksheet["B9"] = f'=COUNTIFS({_td_sev2},"Critical")'
     worksheet["B10"] = (
-        "=COUNTIFS('Technical Diagnostics'!$D:$D,\"Warning\")"
-        "+COUNTIFS('Technical Diagnostics'!$D:$D,\"Needs Work\")"
+        f'=COUNTIFS({_td_sev2},"Warning")+COUNTIFS({_td_sev2},"Needs Work")'
     )
     worksheet["B17"] = (
         f"=IF(COUNTA({_CONTENT_HUB_STATUS_RANGE})=0,0,"
@@ -575,7 +606,9 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         f"COUNTA({_CONTENT_HUB_STATUS_RANGE}))"
     )
     worksheet["B17"].number_format = "0%"
-    worksheet["B18"] = "=COUNTIF('Main'!Q2:Q10000,TRUE)"
+    worksheet["B18"] = (
+        f"=IFERROR(COUNTIF({_main_sheet_data_column('Has Valid JSON-LD')},TRUE),0)"
+    )
     worksheet["B18"].number_format = "0"
     worksheet["B19"] = (
         f"=MAX(0, IF({_CONTENT_AI_AEO_EXTRACTABILITY_AVG}>0, "
@@ -591,13 +624,21 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     worksheet["B21"].number_format = "0"
     worksheet["B22"] = _EXCEL_EXTERNAL_LINK_HEALTH_PCT
     worksheet["B22"].number_format = "0%"
-    worksheet["B11"] = "=IFERROR((COUNTIFS('Technical Diagnostics'!$C:$C,\">=400\",'Technical Diagnostics'!$C:$C,\"<500\")+COUNTIFS('Technical Diagnostics'!$C:$C,\">=500\",'Technical Diagnostics'!$C:$C,\"<600\"))/COUNTIFS('Technical Diagnostics'!$C:$C,\">0\"),0)"
+    worksheet["B11"] = (
+        f"=IFERROR(("
+        f"COUNTIFS({_td_sc2},\">=400\",{_td_sc2},\"<500\")"
+        f"+COUNTIFS({_td_sc2},\">=500\",{_td_sc2},\"<600\"))"
+        f"/MAX(1,COUNTIFS({_td_sc2},\">=200\",{_td_sc2},\"<600\")),0)"
+    )
     worksheet["B11"].number_format = "0%"
-    worksheet["B12"] = "=IFERROR(COUNTIFS('Technical Diagnostics'!$C:$C,\">=200\",'Technical Diagnostics'!$C:$C,\"<300\")/COUNTIFS('Technical Diagnostics'!$C:$C,\">0\"),0)"
+    worksheet["B12"] = (
+        f"=IFERROR(COUNTIFS({_td_sc2},\">=200\",{_td_sc2},\"<300\")"
+        f"/MAX(1,COUNTIFS({_td_sc2},\">=200\",{_td_sc2},\"<600\")),0)"
+    )
     worksheet["B12"].number_format = "0%"
-    worksheet["B13"] = f"=IFERROR(B9/{_TD_URL_ROWS},0)"
+    worksheet["B13"] = f"=IFERROR(B9/{_technical_url_row_denominator()},0)"
     worksheet["B13"].number_format = "0%"
-    worksheet["B14"] = f"=IFERROR(B10/{_TD_URL_ROWS},0)"
+    worksheet["B14"] = f"=IFERROR(B10/{_technical_url_row_denominator()},0)"
     worksheet["B14"].number_format = "0%"
     worksheet["B7"] = (
         f'=IFERROR(('
@@ -611,7 +652,9 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet.row_dimensions[row].height = 24
 
     avg_health_score = dashboard_metrics.avg_health_score
-    worksheet["B6"] = "=AVERAGE('Technical Diagnostics'!E:E)/100"
+    worksheet["B6"] = (
+        f'=IFERROR(AVERAGE({_TD_DYNAMIC_COLUMN.format(header="SEO Health Score")}),0)/100'
+    )
     worksheet["B6"].number_format = "0%"
     worksheet["B5"] = (
         f'=IFERROR(AVERAGE({_MAIN_DYNAMIC_COLUMN.format(header="SEO Score")}),'
@@ -758,7 +801,8 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     worksheet["A27"] = "URL Count"
     worksheet["B27"] = (
         '=IFERROR(INDEX(\'RunMetadata\'!$B:$B,'
-        'MATCH("Total URLs",\'RunMetadata\'!$A:$A,0)),B5)'
+        'MATCH("Total URLs",\'RunMetadata\'!$A:$A,0)),'
+        f"MAX(0,COUNTA({_main_sheet_data_column('URL')})))"
     )
     worksheet["A28"] = "Duration"
     worksheet["B28"] = (
@@ -812,11 +856,17 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             else WARN_COLOR if warning_rate_pct > 20 else GOOD_COLOR
         ),
     )
-    projected_pass_rate_pct = 100.0 if crawl_denominator > 0 else 0.0
     projected_health_pct = dashboard_metrics.projected_health_pct
-    worksheet["B15"] = "=MIN(1,B5+(B9*0.01))"
+    projected_pass_rate_pct = dashboard_metrics.projected_pass_rate_pct
+    worksheet["B15"] = round(
+        max(0.0, min(1.0, projected_health_pct / 100.0)),
+        6,
+    )
     worksheet["B15"].number_format = "0%"
-    worksheet["B16"] = f"=IFERROR(IF({_TD_URL_ROWS}>0,1,0),0)"
+    worksheet["B16"] = round(
+        max(0.0, min(1.0, projected_pass_rate_pct / 100.0)),
+        6,
+    )
     worksheet["B16"].number_format = "0%"
     worksheet["B15"].fill = PatternFill(
         "solid",

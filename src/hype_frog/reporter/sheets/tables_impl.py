@@ -27,6 +27,7 @@ from hype_frog.reporter.sheets.conditional import (
     finalize_content_hub_after_normalized_headers,
 )
 from hype_frog.reporter.sheets.config import (
+    CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     DATA_HEAVY_TABS,
     DEBUG_EXCEL_ISOLATION_MODE,
@@ -320,14 +321,16 @@ def adjust_sheet_format(writer, sheet_name):
     add_back_to_dashboard_link(worksheet, sheet_name)
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
         apply_content_hub_conditional_rules(worksheet, writer)
-        # Sprint 6 — executive ROI heatmaps. Runs AFTER the Hub
-        # conditional pipeline so the banner row insert in
+        # Sprint 6 — Semantic AEO heatmap on the Hub (Instant Priority
+        # moved to Content Hub Metrics). Runs AFTER the Hub conditional
+        # pipeline so the banner row insert in
         # ``apply_content_hub_conditional_rules`` has already pushed
-        # headers to row 2 / data to row 3, which is what the new
-        # helper expects.
+        # headers to row 2 / data to row 3.
         apply_executive_priority_formatting(worksheet, header_row=2)
+    elif sheet_name == CONTENT_HUB_METRICS_SHEET:
+        apply_executive_priority_formatting(worksheet, header_row=1)
     apply_sheet_text_wrap_columns(worksheet, sheet_name)
-    if sheet_name in {CONTENT_OPTIMISATION_HUB_SHEET, "AIOSEO"}:
+    if sheet_name in {CONTENT_OPTIMISATION_HUB_SHEET, CONTENT_HUB_METRICS_SHEET, "AIOSEO"}:
         apply_editor_url_column_hyperlinks(
             worksheet,
             sheet_name,

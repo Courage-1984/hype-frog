@@ -16,7 +16,10 @@ from hype_frog.reporter.engine_io import (
     _sanitize_excel_url,
 )
 from hype_frog.rules import owner_for_issue, workflow_metrics_for_issue
-from hype_frog.reporter.sheets.layout import main_sheet_url_column_letter
+from hype_frog.reporter.sheets.layout import (
+    content_optimisation_hub_ordered_headers,
+    main_sheet_url_column_letter,
+)
 from hype_frog.reporter.summary_builder import reference_tab_for_merged_workbook
 
 
@@ -53,6 +56,16 @@ def _round4(raw: object, default: float = 0.0) -> float:
     return round(val, 4)
 
 
+_HUB_INVISIBLE_CHARS_RE = re.compile(r"[\u200b-\u200d\ufeff]")
+
+
+def _hub_display_text(raw: object) -> str:
+    """Strip zero-width / BOM characters from hub-facing copy (CMS-safe display)."""
+    s = str(raw or "")
+    s = _HUB_INVISIBLE_CHARS_RE.sub("", s)
+    return s.strip()
+
+
 def _heading_levels_from_h_tag_structure(structure: object) -> dict[int, list[str]]:
     """Parse ``Current H-Tag Structure`` lines like ``H2: text`` into level → texts."""
     out: dict[int, list[str]] = {1: [], 2: [], 3: [], 4: [], 5: [], 6: []}
@@ -65,7 +78,7 @@ def _heading_levels_from_h_tag_structure(structure: object) -> dict[int, list[st
         tag = prefix.strip().upper()
         if len(tag) == 2 and tag.startswith("H") and tag[1].isdigit():
             level = int(tag[1])
-            heading_text = rest.strip()
+            heading_text = _hub_display_text(rest)
             if 1 <= level <= 6 and heading_text:
                 out[level].append(heading_text)
     return out
@@ -75,7 +88,7 @@ def _first_non_empty(mapping: dict[str, Any], *keys: str) -> str:
     """Return the first non-empty string value among candidate mapping keys."""
     for key in keys:
         val = mapping.get(key)
-        text = str(val or "").strip()
+        text = _hub_display_text(val)
         if text:
             return text
     return ""
@@ -86,7 +99,7 @@ def _join_pipe(values: list[str]) -> str:
     out: list[str] = []
     seen: set[str] = set()
     for raw in values:
-        text = str(raw or "").strip()
+        text = _hub_display_text(raw)
         if not text:
             continue
         key = text.casefold()
@@ -133,6 +146,29 @@ def _proposed_slug_value(seed_text: str) -> str:
         return ""
     text = re.sub(r"[^a-z0-9]+", "-", text)
     return text.strip("-")
+
+
+def _proposed_url_slug_for_hub(url: str, seed_text: str) -> str:
+    """Slug suggestion from keywords, else from the last URL path segment."""
+    slug = _proposed_slug_value(seed_text)
+    if slug:
+        return slug
+    parts = [p for p in urlparse(str(url or "").strip()).path.strip("/").split("/") if p]
+    if parts:
+        return _proposed_slug_value(parts[-1].replace("-", " ").replace("_", " "))
+    return ""
+
+
+def _slug_normalization_link_label(url: str, keyword_phrase: str) -> str:
+    """Human-readable HYPERLINK label for URL Slug Normalization (never duplicate full URL on /)."""
+    cleaned = _hub_display_text(keyword_phrase)
+    if cleaned:
+        return cleaned
+    parsed = urlparse(str(url or "").strip())
+    segments = [s for s in parsed.path.strip("/").split("/") if s]
+    if segments:
+        return segments[-1].replace("-", " ").replace("_", " ").title()
+    return "/"
 
 
 def _fallback_keyword(url: str, h1_text: str) -> str:
@@ -286,7 +322,9 @@ def write_snippet_candidates_chunked(
         ws.append(["", "", "", 0, ""])
 
 
-CONTENT_HUB_EXPORT_COLUMNS: tuple[str, ...] = (
+# Initial write order before ``reorder_columns``; kept so
+# ``content_optimisation_hub_ordered_headers`` can derive the physical grid.
+_CONTENT_HUB_FIELDS_PRE_REORDER: tuple[str, ...] = (
     "Action Required",
     "On-Page Optimization Score",
     "SEO Score",
@@ -296,21 +334,9 @@ CONTENT_HUB_EXPORT_COLUMNS: tuple[str, ...] = (
     "Top Entities",
     "Citation Candidate Count",
     "Semantic AEO Score",
-    # Sprint 5 — Sprint 2 "ghost data" surfaced for the Content Hub
-    # (raw vs. rendered DOM diff + field PerformanceObserver Web
-    # Vitals). ``Crawl Depth`` / ``Security: HSTS`` / ``Security: CSP``
-    # / ``Hreflang Signals`` were migrated to ``Technical Diagnostics``
-    # in this sprint; ``Anchor Text Diversity`` deliberately stays on
-    # the Hub because it is a copy/SEO authoring signal, not a tech
-    # diagnostic. None of these header strings hit the
-    # ``apply_south_african_formats`` date-like substring heuristic
-    # (date / timestamp / lastmod / updated).
-    "JS Dependent",
-    "Raw Words",
-    "Rendered Words",
-    "Field LCP (ms)",
-    "Field CLS",
-    "Anchor Text Diversity",
+    # Sprint 5 diagnostics (JS/rendered words/field CWV/anchor diversity)
+    # and Sprint 6 ROI columns live on ``Content Hub Metrics`` (same URL
+    # set as the Hub) so the Hub stays an editorial command center.
     "Status",
     "Assigned Owner",
     "URL",
@@ -336,14 +362,21 @@ CONTENT_HUB_EXPORT_COLUMNS: tuple[str, ...] = (
     "Current OG-Image URL",
     "OG Image Preview",
     "Open in Main",
-    # Sprint 6 — executive ROI correlation columns. Appended at the END
-    # so existing column-letter contracts (Status / Assigned Owner /
-    # URL / health formulas) stay stable. Values come from
-    # ``hype_frog.core.scoring.calculate_executive_roi`` which is fully
-    # ``None``-safe — missing GSC traffic, missing AEO score, or
-    # missing field LCP all collapse to ``0.0`` / ``"Standard"`` rather
-    # than raising. The ``Instant Priority`` column drives the
-    # ``apply_executive_priority_formatting`` red-row highlight.
+)
+
+CONTENT_HUB_EXPORT_COLUMNS: tuple[str, ...] = content_optimisation_hub_ordered_headers(
+    _CONTENT_HUB_FIELDS_PRE_REORDER
+)
+
+# Per-URL metrics companion to the Hub (row 1 headers; no banner row).
+CONTENT_HUB_METRICS_EXPORT_COLUMNS: tuple[str, ...] = (
+    "URL",
+    "JS Dependent",
+    "Raw Words",
+    "Rendered Words",
+    "Field LCP (ms)",
+    "Field CLS",
+    "Anchor Text Diversity",
     "Potential Traffic Lift",
     "AEO Visibility Gain",
     "Instant Priority",
@@ -352,7 +385,7 @@ CONTENT_HUB_EXPORT_COLUMNS: tuple[str, ...] = (
 
 
 def content_hub_column_letter(header: str) -> str:
-    """Excel column letter for a Content Optimisation Hub header (row 2 layout)."""
+    """Excel column letter for a Content Optimisation Hub header (post-reorder row 2)."""
     pos = CONTENT_HUB_EXPORT_COLUMNS.index(header) + 1
     return get_column_letter(pos)
 
@@ -416,7 +449,7 @@ def build_content_optimisation_hub_rows(
     main_rows: list[MainRowPayload],
     extra_rows: list[ExtraRowPayload],
     fixplan_rows: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     main_by_url = {
         _normalize_url_for_match(r.values.get("URL")): r
         for r in main_rows
@@ -479,6 +512,7 @@ def build_content_optimisation_hub_rows(
     f_l = content_hub_column_letter("URL")
 
     rows: list[dict[str, Any]] = []
+    metrics_rows: list[dict[str, Any]] = []
     for excel_row, url in enumerate(sorted(manual_content_urls), start=3):
         main_payload = main_by_url.get(url)
         extra_payload = extra_by_url.get(url)
@@ -524,12 +558,15 @@ def build_content_optimisation_hub_rows(
         if elementor_link:
             safe_url = str(elementor_link).replace('"', '""')
             elementor_cell = f'=HYPERLINK("{safe_url}","Open in Elementor")'
-        target_keywords = str(
-            e.get("Meta Keywords") or m.get("Meta Keywords") or ""
-        ).strip()
+        target_keywords = _hub_display_text(
+            str(e.get("Meta Keywords") or m.get("Meta Keywords") or "")
+        )
         if not target_keywords:
-            target_keywords = _fallback_keyword(
-                url, str(e.get("Current H-Tag Structure") or m.get("H1 Content") or "")
+            target_keywords = _hub_display_text(
+                _fallback_keyword(
+                    url,
+                    str(e.get("Current H-Tag Structure") or m.get("H1 Content") or ""),
+                )
             )
 
         h_by_level = _heading_levels_from_h_tag_structure(e.get("Current H-Tag Structure"))
@@ -591,13 +628,31 @@ def build_content_optimisation_hub_rows(
         action_formula = f'=IF({w_l}{excel_row}>=85,"Complete","Needs Copy")'
         open_main_formula = _content_hub_open_in_main_formula(f_l, excel_row)
 
+        metrics_rows.append(
+            {
+                "URL": _hyperlink_url_formula(raw_url),
+                "JS Dependent": bool(e.get("JS Dependent")),
+                "Raw Words": int(float(e.get("Raw Words") or 0)),
+                "Rendered Words": int(float(e.get("Rendered Words") or 0)),
+                "Field LCP (ms)": _round2(e.get("Field LCP (ms)"), default=0.0),
+                "Field CLS": _round4(e.get("Field CLS"), default=0.0),
+                "Anchor Text Diversity": _hub_display_text(
+                    str(e.get("Anchor Text Diversity") or "")
+                ),
+                "Potential Traffic Lift": int(round(roi["potential_traffic_lift"])),
+                "AEO Visibility Gain": _round2(roi["aeo_visibility_gain"]),
+                "Instant Priority": str(roi["instant_priority"]),
+                "Search Intent": _hub_display_text(str(e.get("Search Intent") or "Unknown"))
+                or "Unknown",
+            }
+        )
         rows.append(
             {
                 "SEO Score": _hub_score_value(e.get("SEO Score")),
                 "Technical Health": _hub_score_value(e.get("Technical Health")),
                 "Copy Score": _hub_score_value(e.get("Copy Score")),
                 "Entity Density (%)": _round2(e.get("Entity Density (%)")),
-                "Top Entities": str(e.get("Top Entities") or "").strip(),
+                "Top Entities": _hub_display_text(str(e.get("Top Entities") or "")),
                 # Display-safe string: the shared number formatter treats any
                 # header containing "date" as date-like, and "Candidate"
                 # includes that substring.
@@ -605,32 +660,19 @@ def build_content_optimisation_hub_rows(
                     int(float(e.get("Citation Candidate Count") or 0))
                 ),
                 "Semantic AEO Score": _round2(e.get("Semantic AEO Score")),
-                # Sprint 5 — Sprint 2 ghost data surfacing on the Hub.
-                # Boolean and integer coercions are intentional so the
-                # Excel formatter does not interpret a stray ``None`` as
-                # blank text on what is meant to be a numeric/flag
-                # column. Field LCP / CLS are passed through as-is so
-                # ``None`` (failed PerformanceObserver capture) renders
-                # as blank rather than misleading ``0.0``.
-                "JS Dependent": bool(e.get("JS Dependent")),
-                "Raw Words": int(float(e.get("Raw Words") or 0)),
-                "Rendered Words": int(float(e.get("Rendered Words") or 0)),
-                "Field LCP (ms)": _round2(e.get("Field LCP (ms)"), default=0.0),
-                "Field CLS": _round4(e.get("Field CLS"), default=0.0),
-                "Anchor Text Diversity": str(
-                    e.get("Anchor Text Diversity") or ""
-                ).strip(),
                 "Action Required": action_formula,
                 "Status": "To Do",
                 "Assigned Owner": "Copy Writer",
                 "URL": _hyperlink_url_formula(raw_url),
                 "URL Slug Normalization": _hyperlink_with_label_formula(
-                    raw_url, target_keywords
+                    raw_url,
+                    _slug_normalization_link_label(raw_url, target_keywords),
                 ),
-                "Proposed URL Slug": _proposed_slug_value(target_keywords),
-                "Current Title": str(m.get("Title") or "").strip() or "MISSING TITLE",
+                "Proposed URL Slug": _proposed_url_slug_for_hub(raw_url, target_keywords),
+                "Current Title": _hub_display_text(str(m.get("Title") or ""))
+                or "MISSING TITLE",
                 "Title Health": title_health,
-                "Current Meta Desc": str(m.get("Meta Description") or "").strip()
+                "Current Meta Desc": _hub_display_text(str(m.get("Meta Description") or ""))
                 or "MISSING DESCRIPTION",
                 "Meta Health": meta_health,
                 "H1": _h_joined(1),
@@ -650,25 +692,15 @@ def build_content_optimisation_hub_rows(
                 "Current OG-Image URL": _og_image_hyperlink_formula(e.get("OG Image")),
                 "OG Image Preview": "",
                 "Open in Main": open_main_formula,
-                # Sprint 6 — executive ROI mapping. Numeric metrics are
-                # written as plain floats so the SA number formatter
-                # treats them as currency-style two-decimal values; the
-                # priority flag is a literal string that the
-                # ``apply_executive_priority_formatting`` rule scans for.
-                "Potential Traffic Lift": int(round(roi["potential_traffic_lift"])),
-                "AEO Visibility Gain": _round2(roi["aeo_visibility_gain"]),
-                "Instant Priority": str(roi["instant_priority"]),
-                "Search Intent": str(e.get("Search Intent") or "Unknown").strip()
-                or "Unknown",
             }
         )
-    return rows
+    return rows, metrics_rows
 
 
 def build_content_optimization_hub_rows(
     main_rows: list[MainRowPayload],
     extra_rows: list[ExtraRowPayload],
     fixplan_rows: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Backward-compatible alias (US spelling) for :func:`build_content_optimisation_hub_rows`."""
     return build_content_optimisation_hub_rows(main_rows, extra_rows, fixplan_rows)

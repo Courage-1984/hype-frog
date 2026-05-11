@@ -17,6 +17,7 @@ from openpyxl.formatting.rule import (
 
 from hype_frog.reporter.engine_formatting import apply_global_conditional_formatting
 from hype_frog.reporter.sheets.config import (
+    CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     DEBUG_EXCEL_ISOLATION_MODE,
     DISABLE_CONDITIONAL_FORMATTING,
@@ -77,6 +78,7 @@ def apply_wrapped_row_heights(worksheet: Worksheet) -> None:
 _SHEET_WRAP_TARGETS: dict[str, tuple[int, tuple[str, ...]]] = {
     "Technical": (1, ("Redirect Hops", "X-Robots-Tag", "Content-Security-Policy")),
     "AEO": (1, ("Why It Matters", "Snippet Preview Mockup")),
+    CONTENT_HUB_METRICS_SHEET: (1, ("Anchor Text Diversity", "Search Intent")),
 }
 
 
@@ -380,7 +382,7 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
     worksheet.insert_rows(1)
     max_col = worksheet.max_column
     instruction = (
-        "CONTENT HUB (DIAGNOSTIC): Edit Title, Meta, and H1–H6 in-place; health columns "
+        "CONTENT HUB (DIAGNOSTIC): Edit Title, Meta, and H1-H6 in-place; health columns "
         "and On-Page score update live. | Use Elementor link for CMS edits. | "
         "Set Status to Completed when done. | "
         "NOTE: If images show '#BLOCKED!', enable external content in Excel security."

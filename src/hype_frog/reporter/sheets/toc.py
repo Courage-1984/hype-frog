@@ -4,13 +4,17 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.views import Selection
 
 from hype_frog.reporter.engine_guardrails import friendly_toc_description
-from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
+from hype_frog.reporter.sheets.config import (
+    CONTENT_HUB_METRICS_SHEET,
+    CONTENT_OPTIMISATION_HUB_SHEET,
+)
 
 # Canonical left-to-right workbook tab order (move_sheet targets).
 PREFERRED_WORKBOOK_TAB_ORDER: tuple[str, ...] = (
     "Table of Contents",
     "Dashboard",
     CONTENT_OPTIMISATION_HUB_SHEET,
+    CONTENT_HUB_METRICS_SHEET,
     "Quick Reference Guide",
     "Summary",
     "FixPlan",

@@ -25,9 +25,79 @@ from hype_frog.orchestration.run_setup import RunSetup
 
 logger = get_logger(__name__)
 
+_NON_HTML_PATH_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".gif",
+        ".webp",
+        ".svg",
+        ".ico",
+        ".bmp",
+        ".tif",
+        ".tiff",
+        ".avif",
+        ".pdf",
+        ".zip",
+        ".rar",
+        ".7z",
+        ".gz",
+        ".tar",
+        ".mp3",
+        ".wav",
+        ".ogg",
+        ".m4a",
+        ".mp4",
+        ".mov",
+        ".avi",
+        ".wmv",
+        ".mkv",
+        ".webm",
+        ".doc",
+        ".docx",
+        ".ppt",
+        ".pptx",
+        ".xls",
+        ".xlsx",
+        ".csv",
+        ".json",
+        ".xml",
+        ".txt",
+        ".js",
+        ".css",
+        ".woff",
+        ".woff2",
+        ".ttf",
+        ".otf",
+        ".eot",
+        ".map",
+    }
+)
+
 
 def _normalize_url_key(url: object) -> str:
     return normalize_url(url)
+
+
+def _is_crawlable_html_candidate(url: str) -> bool:
+    """Allow likely HTML document URLs and exclude binary/static assets."""
+    parsed = urlparse(str(url or "").strip())
+    if not parsed.scheme or not parsed.netloc:
+        return False
+    path = (parsed.path or "").strip().lower()
+    if not path:
+        return True
+    return not any(path.endswith(ext) for ext in _NON_HTML_PATH_EXTENSIONS)
+
+
+def _log_phase_banner(title: str) -> None:
+    bar = "=" * 72
+    logger.info("")
+    logger.info(bar)
+    logger.info(" %s", title)
+    logger.info(bar)
+    logger.info("")
 
 
 def _max_depth_from_env(default: int = 3) -> int:
@@ -48,7 +118,7 @@ def _candidate_internal_links(row: CrawlRowPayload) -> list[str]:
     out: list[str] = []
     for link in links:
         normalized = _normalize_url_key(link)
-        if normalized:
+        if normalized and _is_crawlable_html_candidate(normalized):
             out.append(normalized)
     return out
 
@@ -101,10 +171,12 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
 
     async with create_session() as session:
         if setup.target_input.lower().endswith(".xml"):
+            _log_phase_banner("SETUP: Parsing provided sitemap seed list")
             urls, sitemap_meta = await parse_sitemap(setup.target_input, session)
             parsed_source = urlparse(setup.target_input)
             source_label = parsed_source.netloc or "sitemap"
         else:
+            _log_phase_banner("SETUP: Single URL seed mode")
             parsed_target = urlparse(setup.target_input)
             if parsed_target.scheme and parsed_target.netloc:
                 urls = [setup.target_input]
@@ -118,10 +190,18 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             raise ValueError("No URLs to crawl. Exiting.")
 
         original_count = len(urls)
-        urls = list(dict.fromkeys(_normalize_url_key(url) for url in urls if url))
+        urls = list(
+            dict.fromkeys(
+                _normalize_url_key(url)
+                for url in urls
+                if url and _is_crawlable_html_candidate(str(url))
+            )
+        )
         if sitemap_meta:
             sitemap_meta = {
-                _normalize_url_key(url): meta for url, meta in sitemap_meta.items()
+                _normalize_url_key(url): meta
+                for url, meta in sitemap_meta.items()
+                if _is_crawlable_html_candidate(str(url))
             }
         if len(urls) != original_count:
             logger.info("Removed %s duplicate URLs.", original_count - len(urls))
@@ -256,26 +336,53 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
         completed_normalized = {
             _normalize_url_key(url) for url in completed_urls_runtime if url
         }
-        crawl_queue: deque[tuple[str, int]] = deque()
+        seed_queue: deque[tuple[str, int, str | None]] = deque()
+        bfs_queue: deque[tuple[str, int, str | None]] = deque()
         queued_urls: set[str] = set(completed_normalized)
         crawl_urls_runtime: list[str] = []
+        sitemap_seed_urls: set[str] = set()
         for url in urls:
             normalized = _normalize_url_key(url)
             if not normalized or normalized in queued_urls:
                 continue
-            crawl_queue.append((normalized, 0))
+            seed_queue.append((normalized, 0, None))
             queued_urls.add(normalized)
             crawl_urls_runtime.append(normalized)
+            sitemap_seed_urls.add(normalized)
         total_urls = len(crawl_urls_runtime) + len(checkpoint_completed_urls)
-        in_flight: dict[asyncio.Task[CrawlRowPayload], tuple[str, int]] = {}
+        in_flight: dict[
+            asyncio.Task[CrawlRowPayload], tuple[str, int, str | None, str]
+        ] = {}
         intent_analyzer = IntentAnalyzer()
+        seed_phase_active = bool(seed_queue)
 
         def _can_enqueue() -> bool:
             return setup.max_urls is None or len(queued_urls) < setup.max_urls
 
+        def _ready_for_bfs_phase() -> bool:
+            return (
+                seed_phase_active
+                and not seed_queue
+                and all(meta[3] != "seed" for meta in in_flight.values())
+            )
+
+        if seed_phase_active:
+            _log_phase_banner(
+                f"PHASE 1/2: Crawling sitemap seed URLs first ({len(seed_queue)} URLs)"
+            )
+
         def _schedule_available() -> None:
-            while crawl_queue and len(in_flight) < workers:
-                next_url, next_depth = crawl_queue.popleft()
+            while len(in_flight) < workers:
+                if seed_phase_active:
+                    if not seed_queue:
+                        break
+                    next_url, next_depth, discovered_on_url = seed_queue.popleft()
+                    phase = "seed"
+                else:
+                    if not bfs_queue:
+                        break
+                    next_url, next_depth, discovered_on_url = bfs_queue.popleft()
+                    phase = "bfs"
                 task = asyncio.create_task(
                     fetch_and_parse(
                         next_url,
@@ -291,7 +398,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                         depth=next_depth,
                     )
                 )
-                in_flight[task] = (next_url, next_depth)
+                in_flight[task] = (next_url, next_depth, discovered_on_url, phase)
 
         _schedule_available()
         while in_flight:
@@ -300,8 +407,20 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                 return_when=asyncio.FIRST_COMPLETED,
             )
             for done_task in done_tasks:
-                _scheduled_url, scheduled_depth = in_flight.pop(done_task)
+                (
+                    scheduled_url,
+                    scheduled_depth,
+                    discovered_on_url,
+                    scheduled_phase,
+                ) = in_flight.pop(done_task)
                 result_payload: CrawlRowPayload = await done_task
+                discovered_from = discovered_on_url or ""
+                if scheduled_url in sitemap_seed_urls:
+                    result_payload.main.values["Discovered On URL"] = ""
+                    result_payload.extra.values["Discovered On URL"] = ""
+                else:
+                    result_payload.main.values["Discovered On URL"] = discovered_from
+                    result_payload.extra.values["Discovered On URL"] = discovered_from
                 await _apply_search_intent(result_payload, analyzer=intent_analyzer)
                 typed_results.append(result_payload)
                 main_row, extra_row = result_payload.model_dump_rows()
@@ -319,7 +438,9 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                         if not _can_enqueue():
                             break
                         queued_urls.add(discovered_url)
-                        crawl_queue.append((discovered_url, scheduled_depth + 1))
+                        bfs_queue.append(
+                            (discovered_url, scheduled_depth + 1, scheduled_url)
+                        )
                         crawl_urls_runtime.append(discovered_url)
                     total_urls = len(crawl_urls_runtime) + len(checkpoint_completed_urls)
                 if len(pending_batch) >= flush_batch_size:
@@ -343,6 +464,15 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                         total_urls,
                         checkpoint_file,
                     )
+                if (
+                    seed_phase_active
+                    and scheduled_phase == "seed"
+                    and _ready_for_bfs_phase()
+                ):
+                    seed_phase_active = False
+                    _log_phase_banner(
+                        f"PHASE 2/2: BFS expansion from discovered internal links ({len(bfs_queue)} queued)"
+                    )
             _schedule_available()
         if pending_batch:
             cache.upsert_results(pending_batch)
@@ -355,7 +485,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                 checkpoint_completed_urls,
             )
 
-        logger.info("Generating Excel report...")
+        _log_phase_banner("FINALIZE: Crawl complete, generating Excel report")
         cache.close(cleanup_file=True)
         return CrawlExecutionResult(
             output_filename=output_filename,

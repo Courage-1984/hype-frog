@@ -228,6 +228,11 @@ def assemble_enriched_row(
             if found_via_sitemap
             else "Crawl"
         ),
+        "Discovered On URL": (
+            main_values.get("Discovered On URL")
+            or extra_values.get("Discovered On URL")
+            or ""
+        ),
         "Technical Health": round(technical_health, 2),
         "Copy Score": round(copy_score, 2),
         "SEO Score": round(seo_score, 2),

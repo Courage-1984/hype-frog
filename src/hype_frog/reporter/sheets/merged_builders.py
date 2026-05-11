@@ -32,14 +32,15 @@ TECHNICAL_DIAGNOSTICS_COLUMNS: tuple[str, ...] = (
     "GSC Index Status",
     "GSC Last Crawl",
     "GSC Coverage Category",
+    "Discovered On URL",
     "Source Legacy Tab",
     # Sprint 5 — structural / security / i18n diagnostics migrated from
     # the Content Optimisation Hub. Appended at the END so existing
     # column-position contracts (notably the
     # ``_link_main_technical_health_to_diagnostics`` VLOOKUP into
     # ``'Technical Diagnostics'!$A:$E,5,FALSE`` for ``SEO Health Score``)
-    # are preserved. ``Anchor Text Diversity`` deliberately stays on the
-    # Hub per the brief and is not mirrored here.
+    # are preserved. ``Anchor Text Diversity`` is on ``Content Hub Metrics``
+    # (not mirrored here).
     "Crawl Depth",
     "Security: HSTS",
     "Security: CSP",
@@ -283,6 +284,7 @@ def build_technical_diagnostics_rows(
                 "GSC Index Status": _to_str(row.get("GSC Inspection Verdict")),
                 "GSC Last Crawl": _to_str(row.get("GSC Inspection Last Crawl")),
                 "GSC Coverage Category": _to_str(row.get("GSC Inspection Coverage State")),
+                "Discovered On URL": _to_str(row.get("Discovered On URL")),
                 "Source Legacy Tab": _joined(sources),
                 # Sprint 5 — migrated from the Content Optimisation Hub.
                 # ``Crawl Depth`` is the BFS hop distance from the seed

@@ -89,10 +89,3 @@ src/hype_frog/reporter/sheets/view_state.py
 src/hype_frog/rules/__init__.py
 src/hype_frog/rules/registry.py
 src/hype_frog/rules/scoring.py
-tests/test_aeo_readiness_score.py
-tests/test_excel_engine.py
-tests/test_extractors.py
-tests/test_help_layer_tooltips.py
-tests/test_narrative_strategic.py
-tests/test_network_engine.py
-tests/test_scoring.py
