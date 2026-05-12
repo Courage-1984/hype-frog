@@ -61,6 +61,92 @@ def test_assemble_from_html_populates_typed_payload_offline() -> None:
     assert main["Extraction State"] == "skipped"
 
 
+def test_assemble_from_html_og_image_relative_resolves_to_absolute() -> None:
+    html = """
+    <html>
+      <head>
+        <title>Rel OG</title>
+        <meta property="og:image" content="/assets/share.png" />
+      </head>
+      <body><main><h1>H</h1><p>Body.</p></main></body>
+    </html>
+    """
+    main_payload, extra_payload = init_rows("https://example.com/blog/post", None)
+    assemble_from_html(
+        main_data=main_payload,
+        extra=extra_payload,
+        html=html,
+        resolved_url="https://example.com/blog/post",
+    )
+    finalize_row_state(main_payload, extra_payload)
+    assert main_payload.values["OG-Image"] == "https://example.com/assets/share.png"
+
+
+def test_assemble_from_html_og_image_secure_url_meta() -> None:
+    html = """
+    <html>
+      <head>
+        <title>Secure OG</title>
+        <meta property="og:image:secure_url" content="https://cdn.example.com/hi.webp" />
+      </head>
+      <body><main><h1>H</h1><p>Body.</p></main></body>
+    </html>
+    """
+    main_payload, extra_payload = init_rows("https://example.com/p", None)
+    assemble_from_html(
+        main_data=main_payload,
+        extra=extra_payload,
+        html=html,
+        resolved_url="https://example.com/p",
+    )
+    finalize_row_state(main_payload, extra_payload)
+    assert main_payload.values["OG-Image"] == "https://cdn.example.com/hi.webp"
+
+
+def test_assemble_from_html_og_image_from_json_ld_article() -> None:
+    html = """
+    <html>
+      <head>
+        <title>JSON-LD image</title>
+        <script type="application/ld+json">
+        {"@type": "Article", "image": "https://static.example.org/hero.jpg"}
+        </script>
+      </head>
+      <body><main><h1>H</h1><p>Body.</p></main></body>
+    </html>
+    """
+    main_payload, extra_payload = init_rows("https://example.com/news/a", None)
+    assemble_from_html(
+        main_data=main_payload,
+        extra=extra_payload,
+        html=html,
+        resolved_url="https://example.com/news/a",
+    )
+    finalize_row_state(main_payload, extra_payload)
+    assert main_payload.values["OG-Image"] == "https://static.example.org/hero.jpg"
+
+
+def test_assemble_from_html_og_image_scheme_relative_twitter() -> None:
+    html = """
+    <html>
+      <head>
+        <title>Protocol-relative</title>
+        <meta name="twitter:image" content="//img.example.net/x.png" />
+      </head>
+      <body><main><h1>H</h1><p>Body.</p></main></body>
+    </html>
+    """
+    main_payload, extra_payload = init_rows("https://example.com/", None)
+    assemble_from_html(
+        main_data=main_payload,
+        extra=extra_payload,
+        html=html,
+        resolved_url="https://example.com/",
+    )
+    finalize_row_state(main_payload, extra_payload)
+    assert main_payload.values["OG-Image"] == "https://img.example.net/x.png"
+
+
 def test_assemble_from_malformed_html_is_resilient() -> None:
     html = """
     <html>

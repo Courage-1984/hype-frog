@@ -689,7 +689,10 @@ def build_content_optimisation_hub_rows(
                 "H6 Health": h6_health,
                 "On-Page Optimization Score": on_page_score,
                 "Elementor Builder Link": elementor_cell,
-                "Current OG-Image URL": _og_image_hyperlink_formula(e.get("OG Image")),
+                # Extra uses ``OG Image``; Main uses ``OG-Image`` — prefer extra, fall back to Main.
+                "Current OG-Image URL": _og_image_hyperlink_formula(
+                    e.get("OG Image") or m.get("OG-Image") or m.get("OG Image")
+                ),
                 "OG Image Preview": "",
                 "Open in Main": open_main_formula,
             }
