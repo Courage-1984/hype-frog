@@ -33,6 +33,7 @@ TECHNICAL_DIAGNOSTICS_COLUMNS: tuple[str, ...] = (
     "GSC Last Crawl",
     "GSC Coverage Category",
     "Discovered On URL",
+    "Discovery Rank",
     "Source Legacy Tab",
     # Sprint 5 — structural / security / i18n diagnostics migrated from
     # the Content Optimisation Hub. Appended at the END so existing
@@ -285,6 +286,7 @@ def build_technical_diagnostics_rows(
                 "GSC Last Crawl": _to_str(row.get("GSC Inspection Last Crawl")),
                 "GSC Coverage Category": _to_str(row.get("GSC Inspection Coverage State")),
                 "Discovered On URL": _to_str(row.get("Discovered On URL")),
+                "Discovery Rank": row.get("Discovery Rank"),
                 "Source Legacy Tab": _joined(sources),
                 # Sprint 5 — migrated from the Content Optimisation Hub.
                 # ``Crawl Depth`` is the BFS hop distance from the seed

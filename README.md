@@ -79,6 +79,19 @@ uv run python -m hype_frog.main
 
 Follow CLI prompts for target URL or sitemap, limits, and profiles.
 
+### Validate secrets and APIs (no crawl)
+
+Check GSC OAuth files, PSI API access, and optional LLM keys before a full run:
+
+```bash
+uv run hype-frog --validate
+
+# Also confirm a crawl target matches a visible Search Console property
+uv run hype-frog --validate --validate-url "https://example.com/"
+```
+
+Exit code `0` means all required checks passed; `1` means at least one failed.
+
 ## Type-safe philosophy
 
 - Hype Frog uses a **Chain of Trust** model: row/state payloads are validated through Pydantic models in `src/hype_frog/core/models.py` before they move between engine boundaries.

@@ -22,7 +22,8 @@ def test_content_hub_operational_prefix_and_formula_letters() -> None:
         "Copy Score",
         "Status",
     )
-    assert content_hub_column_letter("URL") == "H"
+    assert content_hub_column_letter("URL Slug Normalization") == "H"
+    assert content_hub_column_letter("URL") == "I"
     assert content_hub_column_letter("Current Title") == "K"
     assert content_hub_column_letter("Title Health") == "L"
     assert content_hub_column_letter("On-Page Optimization Score") == "B"

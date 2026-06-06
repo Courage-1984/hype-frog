@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 
 from hype_frog.core import get_logger
+from hype_frog.core.discovery_order import order_main_and_extra_rows
 from hype_frog.crawler import (
     check_url_status_light_limited,
     create_session,
@@ -398,6 +399,11 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             for row in main_rows
         ]
         _sync_main_rows_seo_fields_from_extra(enriched_main_rows, enriched_extra_rows)
+        enriched_main_rows, enriched_extra_rows = order_main_and_extra_rows(
+            enriched_main_rows,
+            enriched_extra_rows,
+            crawl_result.crawl_urls,
+        )
 
     return EnrichmentResult(
         typed_main_rows=enriched_main_rows,

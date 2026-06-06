@@ -44,6 +44,14 @@ The TOC sheet lists each workbook tab with:
 
 New sheets must register a human-readable description there.
 
+## Content hub — freeze and slug column
+
+The Content Optimisation Hub freezes through column **H** (``Assigned Owner`` plus
+``URL Slug Normalization``) with ``freeze_panes = 'I3'`` (banner row 1, headers row 2,
+data from row 3). ``URL`` and editorial columns scroll from column **I** onward.
+The canonical freeze target is ``CONTENT_HUB_FREEZE_PANES`` in
+``reporter/sheets/config.py``.
+
 ## Content hub — Action Required
 
 Business logic for draft vs ready copy uses explicit literals:

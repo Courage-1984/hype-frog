@@ -22,6 +22,9 @@ uv sync --extra render
 
 uv run hype-frog --gsc-auth
 
+uv run hype-frog --validate
+uv run hype-frog --validate --validate-url "https://africanmarketingconfederation.org/"
+
 ==============================
 
 $env:Path += ";$HOME\.local\bin"
@@ -39,4 +42,14 @@ https://africanmarketingconfederation.org/page-sitemap.xml
 https://ticonafrica.org/page-sitemap.xml
 
 ========================================================================
+
+
+$env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
+
+# Check everything (no crawl)
+uv run hype-frog --validate
+
+# Also confirm a crawl target matches a Search Console property
+uv run hype-frog --validate --validate-url "https://africanmarketingconfederation.org/"
+
 

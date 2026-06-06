@@ -5,7 +5,10 @@ from openpyxl.worksheet.cell_range import CellRange
 from openpyxl.worksheet.views import Selection
 from openpyxl.worksheet.worksheet import Worksheet
 
-from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
+from hype_frog.reporter.sheets.config import (
+    CONTENT_HUB_FREEZE_PANES,
+    CONTENT_OPTIMISATION_HUB_SHEET,
+)
 
 
 def ranges_overlap(range_a: CellRange, range_b: CellRange) -> bool:
@@ -96,7 +99,7 @@ def apply_optimal_view_state(worksheet: Worksheet, sheet_name: str) -> None:
         return
 
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
-        set_freeze_panes_safe(worksheet, "H3")
+        set_freeze_panes_safe(worksheet, CONTENT_HUB_FREEZE_PANES)
         sanitize_sheet_view_selection(worksheet)
         return
 

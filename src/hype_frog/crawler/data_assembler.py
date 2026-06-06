@@ -21,6 +21,7 @@ from hype_frog.core.text_utils import (
 from hype_frog.core.url_normalization import normalize_url
 from hype_frog.extractors import (
     extract_aeo_snippets,
+    extract_heading_outline,
     parse_html_signals,
     parse_jsonld_summary,
     resolve_indexability_directive,
@@ -425,21 +426,20 @@ def assemble_from_html(
         extra_values["OG Title"] and extra_values["OG Description"] and extra_values["OG Image"]
     )
 
-    extra_values["H1 Count"] = int(parsed.get("h1_count") or 0)
-    h_tag_lines: list[str] = []
-    h1_tag = soup.find("h1")
-    if h1_tag:
-        h_tag_lines.append(f"H1: {h1_tag.get_text(' ', strip=True)}")
-    for tag in soup.find_all(["h2", "h3"]):
-        text = tag.get_text(" ", strip=True)
-        if not text:
+    heading_outline = extract_heading_outline(html)
+    extra_values["H1 Count"] = heading_outline.h1_count
+    extra_values["Current H-Tag Structure"] = heading_outline.current_h_tag_structure
+    extra_values["Missing H1 Flag"] = heading_outline.h1_count == 0
+    extra_values["Multiple H1 Flag"] = heading_outline.h1_count > 1
+    for level in range(1, 7):
+        texts = list(heading_outline.headings_by_level.get(level, ()))
+        content_key = f"H{level} Content"
+        length_key = f"H{level} Length"
+        if not texts:
             continue
-        h_tag_lines.append(f"{tag.name.upper()}: {text}")
-        if len(h_tag_lines) >= 6:
-            break
-    extra_values["Current H-Tag Structure"] = "\n".join(h_tag_lines).strip()
-    extra_values["Missing H1 Flag"] = extra_values["H1 Count"] == 0
-    extra_values["Multiple H1 Flag"] = extra_values["H1 Count"] > 1
+        joined = " | ".join(texts[:8])
+        main_values[content_key] = joined
+        main_values[length_key] = len(texts[0])
 
     has_list = False
     has_table = False
@@ -513,7 +513,11 @@ def assemble_from_html(
 
     aeo_snippets = extract_aeo_snippets(html)
     extra_values["aeo_snippets"] = aeo_snippets
-    extra_values["Question Heading Count"] = len({s["heading"] for s in aeo_snippets})
+    question_from_snippets = len({s["heading"] for s in aeo_snippets})
+    extra_values["Question Heading Count"] = max(
+        heading_outline.question_heading_count,
+        question_from_snippets,
+    )
     extra_values["Paragraphs 40-60 Words Count"] = len(aeo_snippets)
     first_60_words = " ".join((soup.get_text(" ", strip=True) or "").split()[:60]).lower()
     extra_values["Answer Block Detected (First 60 Words)"] = any(
@@ -554,7 +558,9 @@ def assemble_from_html(
         "mozambique",
     ]
     h_text = " ".join(
-        h.get_text(" ", strip=True) for h in soup.find_all(["h1", "h2", "h3"])
+        text
+        for level in range(1, 7)
+        for text in heading_outline.headings_by_level.get(level, ())
     ).lower()
     body_text_l = (soup.get_text(" ", strip=True) or "").lower()
     schema_text_l = " ".join(

@@ -146,8 +146,8 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "Copy Score",
         "Status",
         "Assigned Owner",
-        "URL",
         "URL Slug Normalization",
+        "URL",
         "Proposed URL Slug",
         "Current Title",
         "Title Health",
@@ -407,14 +407,14 @@ def apply_intelligent_sorting(worksheet: Worksheet, sheet_name: str) -> None:
                     str(r[ucol - 1] or "") if ucol else "",
                 ),
             )
-    elif sheet_name in {"Main", "Technical"}:
-        sccol = headers.get("Status Code")
+    elif sheet_name in {"Main", "Technical", "Technical Diagnostics"}:
+        rank_col = headers.get("Discovery Rank")
         ucol = headers.get("URL")
-        if sccol:
+        if rank_col:
             sort_worksheet_rows(
                 worksheet,
                 key_fn=lambda r: (
-                    -to_int(r[sccol - 1], 0),
+                    to_int(r[rank_col - 1], 10**9),
                     str(r[ucol - 1] or "") if ucol else "",
                 ),
             )

@@ -248,6 +248,7 @@ def _apply_content_hub_copywriter_column_layout(worksheet) -> None:
         "Open in Main": 22.57,
         "Current OG-Image URL": 15.0,
         "Assigned Owner": 15.0,
+        "URL Slug Normalization": 22.0,
         "On-Page Optimization Score": 12.0,
     }
     for name, col_idx in headers.items():
@@ -295,7 +296,13 @@ def adjust_sheet_format(writer, sheet_name):
     reorder_columns(worksheet, sheet_name)
     if sheet_name == "Main":
         apply_column_grouping(worksheet, MAIN_COLUMN_GROUP_DEFINITIONS)
-    if sheet_name in {"FixPlan", "Main", "Technical", "AIOSEO"}:
+    if sheet_name in {
+        "FixPlan",
+        "Main",
+        "Technical",
+        "Technical Diagnostics",
+        "AIOSEO",
+    }:
         apply_intelligent_sorting(worksheet, sheet_name)
     apply_generic_sheet_coloring(worksheet, sheet_name)
     apply_column_widths(worksheet)

@@ -376,6 +376,129 @@ def fetch_gsc_url_inspections_batch(
     return out
 
 
+def resolve_gsc_credentials_path(
+    credentials_file: str = "client_secrets.json",
+) -> Path:
+    """Return the resolved OAuth client secrets path (may not exist)."""
+    return _resolve_credentials_path(credentials_file)
+
+
+def resolve_gsc_token_path(token_file: str = "token.json") -> Path:
+    """Return the canonical OAuth token path (``./secrets``)."""
+    return _resolve_token_path(token_file)
+
+
+def load_gsc_credentials_readonly(
+    credentials_file: str = "client_secrets.json",
+    token_file: str = "token.json",
+) -> tuple[Credentials | None, str | None]:
+    """Load GSC credentials without opening a browser OAuth flow.
+
+    Returns:
+        ``(credentials, error)`` — on success ``error`` is ``None``; on failure
+        ``credentials`` is ``None`` and ``error`` explains the next step.
+    """
+    credentials_path = _resolve_credentials_path(credentials_file)
+    token_path = _resolve_token_path(token_file)
+    if not credentials_path.exists():
+        return None, f"Credentials file not found: {credentials_path}"
+    if not token_path.exists():
+        return (
+            None,
+            f"Token file not found: {token_path}. Run: uv run hype-frog --gsc-auth",
+        )
+    try:
+        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+    except Exception as exc:
+        return None, f"Token file is unreadable or malformed: {exc}"
+    if not creds.valid:
+        if creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+                token_path.parent.mkdir(parents=True, exist_ok=True)
+                token_path.write_text(creds.to_json(), encoding="utf-8")
+            except Exception as exc:
+                return (
+                    None,
+                    f"Token expired and refresh failed: {exc}. Re-run: uv run hype-frog --gsc-auth",
+                )
+        else:
+            return (
+                None,
+                "Token invalid or expired without a refresh token. Re-run: uv run hype-frog --gsc-auth",
+            )
+    return creds, None
+
+
+def probe_gsc_api_access(
+    target_url: str | None = None,
+    credentials_file: str = "client_secrets.json",
+    token_file: str = "token.json",
+) -> tuple[bool, str, list[str], str | None]:
+    """Verify Search Console API access and optionally match a crawl target.
+
+    Returns:
+        ``(ok, message, site_urls, matched_property)`` where ``site_urls`` lists
+        properties visible to the authenticated account and ``matched_property`` is
+        the GSC property URL that matches ``target_url`` when supplied.
+    """
+    creds, error = load_gsc_credentials_readonly(
+        credentials_file=credentials_file,
+        token_file=token_file,
+    )
+    if error or creds is None:
+        return False, error or "GSC credentials unavailable.", [], None
+    try:
+        service = build("searchconsole", "v1", credentials=creds, cache_discovery=False)
+        site_entries = service.sites().list().execute().get("siteEntry", [])
+    except HttpError as exc:
+        return False, f"Search Console API call failed: {exc}", [], None
+    except Exception as exc:
+        return False, f"Search Console API call failed: {exc}", [], None
+
+    site_urls = sorted(
+        {
+            str(entry.get("siteUrl") or "").strip()
+            for entry in site_entries
+            if str(entry.get("siteUrl") or "").strip()
+        }
+    )
+    if not site_urls:
+        return (
+            False,
+            "Authenticated successfully, but no Search Console properties are visible to this account.",
+            [],
+            None,
+        )
+
+    matched_property: str | None = None
+    if target_url:
+        matched_property = _resolve_site_url(service, target_url)
+        if matched_property:
+            return (
+                True,
+                f"Search Console API reachable; matched property {matched_property!r} for {target_url!r}.",
+                site_urls,
+                matched_property,
+            )
+        return (
+            False,
+            (
+                f"Search Console API reachable, but no property matches {target_url!r}. "
+                f"Visible properties: {', '.join(site_urls)}"
+            ),
+            site_urls,
+            None,
+        )
+
+    return (
+        True,
+        f"Search Console API reachable; {len(site_urls)} propert{'y' if len(site_urls) == 1 else 'ies'} visible.",
+        site_urls,
+        None,
+    )
+
+
 def ensure_gsc_oauth_token(
     credentials_file: str = "client_secrets.json",
     token_file: str = "token.json",
@@ -408,4 +531,8 @@ __all__ = [
     "fetch_gsc_page_metrics",
     "fetch_gsc_url_inspections_batch",
     "load_gsc_enrichment_context",
+    "load_gsc_credentials_readonly",
+    "probe_gsc_api_access",
+    "resolve_gsc_credentials_path",
+    "resolve_gsc_token_path",
 ]

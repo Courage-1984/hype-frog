@@ -405,3 +405,87 @@ async def fetch_psi_metrics_batch(
 
     logger.info("PSI batch complete: %s/%s URLs returned metrics.", len(results), total)
     return results
+
+
+async def probe_psi_api_key(
+    test_url: str = "https://example.com",
+    *,
+    timeout_seconds: float = 45.0,
+) -> tuple[bool, str, dict[str, Any] | None]:
+    """Verify ``PSI_API_KEY`` with a single mobile Lighthouse request.
+
+    Returns:
+        ``(ok, message, details)`` where ``details`` may include HTTP status,
+        parsed lab scores, and any Google API error payload.
+    """
+    api_key = get_psi_api_key()
+    if not api_key:
+        return False, "PSI_API_KEY is not set in .env.", None
+
+    endpoint = _build_endpoint(test_url, "mobile", api_key)
+    details: dict[str, Any] = {"test_url": test_url, "strategy": "mobile"}
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                endpoint,
+                timeout=aiohttp.ClientTimeout(total=timeout_seconds),
+            ) as response:
+                details["http_status"] = response.status
+                try:
+                    payload = await response.json()
+                except json.JSONDecodeError:
+                    payload = None
+
+                if response.status == 200 and isinstance(payload, dict):
+                    if "lighthouseResult" not in payload:
+                        return (
+                            False,
+                            "PSI responded with HTTP 200 but no lighthouseResult was present.",
+                            details,
+                        )
+                    lab = _lab_strategy_metrics(payload)
+                    details["lab_metrics"] = lab
+                    perf = lab.get("performance_score")
+                    seo = lab.get("seo_score")
+                    return (
+                        True,
+                        (
+                            "PageSpeed Insights API is reachable and returned Lighthouse data "
+                            f"(mobile performance={perf}, seo={seo})."
+                        ),
+                        details,
+                    )
+
+                error_message = None
+                if isinstance(payload, dict):
+                    error_block = payload.get("error") or {}
+                    if isinstance(error_block, dict):
+                        error_message = str(error_block.get("message") or "").strip() or None
+                        details["api_error"] = error_block
+
+                if response.status == 400:
+                    hint = (
+                        "Check that PSI_API_KEY is correct and belongs to an active Google Cloud project."
+                    )
+                    return False, f"PSI rejected the API key (HTTP 400). {error_message or hint}", details
+                if response.status == 403:
+                    hint = (
+                        "Enable the PageSpeed Insights API for this key's Google Cloud project "
+                        "and confirm the key is not over-restricted."
+                    )
+                    return False, f"PSI access denied (HTTP 403). {error_message or hint}", details
+                if response.status == 429:
+                    return (
+                        True,
+                        "PSI API key is valid but quota/rate limit was hit (HTTP 429). Retry later.",
+                        details,
+                    )
+
+                return (
+                    False,
+                    f"PSI request failed with HTTP {response.status}. {error_message or 'No error detail returned.'}",
+                    details,
+                )
+    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+        return False, f"PSI request failed: {exc}", details

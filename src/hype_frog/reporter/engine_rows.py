@@ -339,8 +339,8 @@ _CONTENT_HUB_FIELDS_PRE_REORDER: tuple[str, ...] = (
     # set as the Hub) so the Hub stays an editorial command center.
     "Status",
     "Assigned Owner",
-    "URL",
     "URL Slug Normalization",
+    "URL",
     "Proposed URL Slug",
     "Current Title",
     "Title Health",

@@ -5,6 +5,7 @@ from openpyxl.worksheet.views import Selection
 
 from hype_frog.reporter.engine_guardrails import friendly_toc_description
 from hype_frog.reporter.sheets.config import (
+    CONTENT_HUB_FREEZE_PANES,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
 )
@@ -217,7 +218,11 @@ def apply_workbook_toc_and_links(
             "Priority URLs",
         }
         if tab_name == CONTENT_OPTIMISATION_HUB_SHEET:
-            target_freeze = "H3" if ws.max_row >= 3 and ws.max_column >= 8 else None
+            target_freeze = (
+                CONTENT_HUB_FREEZE_PANES
+                if ws.max_row >= 3 and ws.max_column >= 9
+                else None
+            )
             _set_freeze_panes_safe(ws, target_freeze)
         elif tab_name in standard_data_sheets:
             target_freeze = "B2" if ws.max_row >= 2 and ws.max_column >= 2 else None

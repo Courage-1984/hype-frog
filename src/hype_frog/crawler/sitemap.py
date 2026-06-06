@@ -29,7 +29,8 @@ def _strip_default_namespace(xml_data: str) -> ET.Element:
 async def parse_sitemap(url: str, session: aiohttp.ClientSession) -> tuple[list[str], dict[str, dict[str, Any]]]:
     logger.info("Fetching sitemap from: %s", url)
     visited_sitemaps: set[str] = set()
-    discovered_urls: set[str] = set()
+    discovered_urls: list[str] = []
+    seen_page_urls: set[str] = set()
     sitemap_meta: dict[str, dict[str, Any]] = {}
 
     async def _walk(sitemap_url: str, depth: int) -> None:
@@ -63,7 +64,9 @@ async def parse_sitemap(url: str, session: aiohttp.ClientSession) -> tuple[list[
             page_url = loc_node.text.strip()
             if not page_url:
                 continue
-            discovered_urls.add(page_url)
+            if page_url not in seen_page_urls:
+                seen_page_urls.add(page_url)
+                discovered_urls.append(page_url)
             if page_url not in sitemap_meta:
                 sitemap_meta[page_url] = {
                     "changefreq": url_node.findtext("changefreq").strip() if url_node.findtext("changefreq") else None,
@@ -74,7 +77,7 @@ async def parse_sitemap(url: str, session: aiohttp.ClientSession) -> tuple[list[
 
     try:
         await _walk(url, depth=0)
-        urls = sorted(discovered_urls)
+        urls = list(discovered_urls)
         logger.info(
             "Found %s URLs across %s sitemap file(s).",
             len(urls),

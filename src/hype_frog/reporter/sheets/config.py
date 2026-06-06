@@ -11,6 +11,8 @@ STD_FROG_GREEN: str = "92D050"
 CONTENT_OPTIMISATION_HUB_SHEET: str = "Content Optimisation Hub"
 # Companion sheet: per-URL crawl metrics and executive ROI fields split from the Hub.
 CONTENT_HUB_METRICS_SHEET: str = "Content Hub Metrics"
+# Freeze through Assigned Owner + URL Slug Normalization; URL scrolls from column I.
+CONTENT_HUB_FREEZE_PANES: str = "I3"
 
 DATA_HEAVY_TABS: set[str] = {
     "Main",
@@ -48,6 +50,7 @@ __all__ = [
     "STD_FROG_GREEN",
     "CONTENT_OPTIMISATION_HUB_SHEET",
     "CONTENT_HUB_METRICS_SHEET",
+    "CONTENT_HUB_FREEZE_PANES",
     "DATA_HEAVY_TABS",
     "env_bool",
     "DEBUG_EXCEL_ISOLATION_MODE",

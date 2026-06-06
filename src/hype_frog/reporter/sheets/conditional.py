@@ -17,6 +17,7 @@ from openpyxl.formatting.rule import (
 
 from hype_frog.reporter.engine_formatting import apply_global_conditional_formatting
 from hype_frog.reporter.sheets.config import (
+    CONTENT_HUB_FREEZE_PANES,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     DEBUG_EXCEL_ISOLATION_MODE,
@@ -407,7 +408,7 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
     worksheet["A1"].font = Font(color=STD_NAVY, bold=True)
     worksheet["A1"].alignment = Alignment(horizontal="left", vertical="center")
     worksheet.row_dimensions[1].height = 28
-    set_freeze_panes_safe(worksheet, "H3")
+    set_freeze_panes_safe(worksheet, CONTENT_HUB_FREEZE_PANES)
     headers = {
         str(cell.value): idx
         for idx, cell in enumerate(worksheet[2], start=1)
@@ -692,7 +693,7 @@ def finalize_content_hub_after_normalized_headers(worksheet: Worksheet) -> None:
         except (AttributeError, TypeError):
             pass
     # Reassert Content Hub freeze target after downstream header normalization passes.
-    set_freeze_panes_safe(worksheet, "H3")
+    set_freeze_panes_safe(worksheet, CONTENT_HUB_FREEZE_PANES)
 
 
 def apply_psi_conditional_rules(worksheet: Worksheet) -> None:
