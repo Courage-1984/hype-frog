@@ -273,7 +273,7 @@ def apply_cross_sheet_links(
                         cell = worksheet.cell(row=r, column=issue_col)
                         cell.hyperlink = f"#FixPlan!A{target_row}"
                         cell.style = "Hyperlink"
-    if sheet_name == "AIOSEO":
+    if sheet_name == "AIOSEO Recommendations":
         url_col = headers.get("URL")
         if url_col:
             technical_col = headers.get("Open in Technical")
@@ -321,7 +321,7 @@ def apply_editor_url_column_hyperlinks(
     """Turn Elementor / AIOSEO edit URLs into real outbound hyperlinks (when enabled)."""
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
         header_row, first_data_row, column_name = 2, 3, "Elementor Builder Link"
-    elif sheet_name == "AIOSEO":
+    elif sheet_name == "AIOSEO Recommendations":
         header_row, first_data_row, column_name = 1, 2, "Direct Edit Link"
     else:
         return

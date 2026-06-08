@@ -27,6 +27,7 @@ from hype_frog.reporter.sheets.conditional import (
     finalize_content_hub_after_normalized_headers,
 )
 from hype_frog.reporter.sheets.config import (
+    AIOSEO_RECOMMENDATIONS_SHEET,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     DATA_HEAVY_TABS,
@@ -247,6 +248,7 @@ def _apply_content_hub_copywriter_column_layout(worksheet) -> None:
         "Elementor Builder Link": 18.14,
         "Open in Main": 22.57,
         "Current OG-Image URL": 15.0,
+        "OG Image Health": 42.0,
         "Assigned Owner": 15.0,
         "URL Slug Normalization": 22.0,
         "On-Page Optimization Score": 12.0,
@@ -301,7 +303,7 @@ def adjust_sheet_format(writer, sheet_name):
         "Main",
         "Technical",
         "Technical Diagnostics",
-        "AIOSEO",
+        AIOSEO_RECOMMENDATIONS_SHEET,
     }:
         apply_intelligent_sorting(worksheet, sheet_name)
     apply_generic_sheet_coloring(worksheet, sheet_name)
@@ -319,7 +321,7 @@ def adjust_sheet_format(writer, sheet_name):
     )
     add_url_navigation_links(writer, worksheet, sheet_name)
     apply_cross_sheet_links(writer, worksheet, sheet_name)
-    if sheet_name == "AIOSEO":
+    if sheet_name == AIOSEO_RECOMMENDATIONS_SHEET:
         status_col = header_index(worksheet).get("Status")
         if status_col:
             apply_status_dropdown(worksheet, status_col)
@@ -337,7 +339,11 @@ def adjust_sheet_format(writer, sheet_name):
     elif sheet_name == CONTENT_HUB_METRICS_SHEET:
         apply_executive_priority_formatting(worksheet, header_row=1)
     apply_sheet_text_wrap_columns(worksheet, sheet_name)
-    if sheet_name in {CONTENT_OPTIMISATION_HUB_SHEET, CONTENT_HUB_METRICS_SHEET, "AIOSEO"}:
+    if sheet_name in {
+        CONTENT_OPTIMISATION_HUB_SHEET,
+        CONTENT_HUB_METRICS_SHEET,
+        AIOSEO_RECOMMENDATIONS_SHEET,
+    }:
         apply_editor_url_column_hyperlinks(
             worksheet,
             sheet_name,

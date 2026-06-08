@@ -27,10 +27,13 @@ from hype_frog.crawler.data_assembler import (
     init_rows,
 )
 from hype_frog.crawler.network_engine import (
+    PlaywrightSessionManager,
+    RenderedFetchDiagnostics,
     fetch_http,
     fetch_rendered_with_diagnostics,
 )
 from hype_frog.core.models import CrawlRowPayload
+from hype_frog.pipeline.content_hub_metrics import backfill_extra_content_hub_metrics
 from hype_frog.core.text_utils import status_class
 from hype_frog.core.url_normalization import normalize_url
 
@@ -43,6 +46,68 @@ def normalize_url_key(url: object, keep_query: bool = True) -> str:
 
 _AEO_ENGINE_BOTS: tuple[str, ...] = ("gptbot", "perplexitybot", "ccbot")
 _LEGACY_AI_BOTS: tuple[str, ...] = ("gptbot", "claudebot", "perplexitybot")
+_RENDER_RETRY_RENDER_WAIT_BUMP_MS = 2000
+_RENDER_RETRY_SELECTOR_WAIT_BUMP_MS = 1000
+_MAX_RENDER_WAIT_MS = 15000
+_MAX_SELECTOR_WAIT_MS = 10000
+
+
+async def _fetch_render_diagnostics(
+    render_url: str,
+    *,
+    render_wait_ms: int,
+    selector_wait_ms: int,
+    playwright_session_manager: PlaywrightSessionManager | None,
+) -> RenderedFetchDiagnostics:
+    return await fetch_rendered_with_diagnostics(
+        render_url,
+        render_wait_ms=render_wait_ms,
+        selector_wait_ms=selector_wait_ms,
+        session_manager=playwright_session_manager,
+    )
+
+
+async def _fetch_render_with_retries(
+    *,
+    primary_url: str,
+    fallback_url: str | None,
+    render_wait_ms: int,
+    selector_wait_ms: int,
+    playwright_session_manager: PlaywrightSessionManager | None,
+) -> RenderedFetchDiagnostics:
+    """Attempt rendered capture on the final URL with one extended retry."""
+    diagnostics = await _fetch_render_diagnostics(
+        primary_url,
+        render_wait_ms=render_wait_ms,
+        selector_wait_ms=selector_wait_ms,
+        playwright_session_manager=playwright_session_manager,
+    )
+    if diagnostics["html"]:
+        return diagnostics
+
+    retry_render_wait = min(render_wait_ms + _RENDER_RETRY_RENDER_WAIT_BUMP_MS, _MAX_RENDER_WAIT_MS)
+    retry_selector_wait = min(
+        selector_wait_ms + _RENDER_RETRY_SELECTOR_WAIT_BUMP_MS,
+        _MAX_SELECTOR_WAIT_MS,
+    )
+    if retry_render_wait != render_wait_ms or retry_selector_wait != selector_wait_ms:
+        diagnostics = await _fetch_render_diagnostics(
+            primary_url,
+            render_wait_ms=retry_render_wait,
+            selector_wait_ms=retry_selector_wait,
+            playwright_session_manager=playwright_session_manager,
+        )
+        if diagnostics["html"]:
+            return diagnostics
+
+    if fallback_url and fallback_url != primary_url:
+        diagnostics = await _fetch_render_diagnostics(
+            fallback_url,
+            render_wait_ms=retry_render_wait,
+            selector_wait_ms=retry_selector_wait,
+            playwright_session_manager=playwright_session_manager,
+        )
+    return diagnostics
 
 
 async def _populate_robots_cache(
@@ -89,6 +154,8 @@ async def fetch_and_parse(
     render_wait_ms: int = 4000,
     selector_wait_ms: int = 3000,
     depth: int = 0,
+    render_pages: bool = False,
+    playwright_session_manager: PlaywrightSessionManager | None = None,
 ) -> CrawlRowPayload:
     """Crawl a single URL and return a populated row payload.
 
@@ -203,17 +270,17 @@ async def fetch_and_parse(
             extraction_source = "raw_http"
             extraction_state_hint = "complete"
             rendered_headers: dict[str, str] = {}
-            if crawl_mode == "accurate":
-                # Switched from the legacy 4-tuple ``fetch_rendered`` wrapper
-                # to the rich diagnostics flavour so Sprint 2 raw-vs-rendered
-                # signals (JS-dependent flag, raw/rendered word counts,
-                # field PerformanceObserver LCP/CLS) reach the row payload
-                # for cache + workbook export. Failures still degrade
-                # gracefully — see ``_empty_diagnostics``.
-                diagnostics = await fetch_rendered_with_diagnostics(
-                    url,
+            if render_pages or crawl_mode == "accurate":
+                # Render the post-redirect final URL so extraction aligns with the
+                # HTTP payload we already fetched. A shared Playwright session per
+                # crawl (when provided) keeps browser startup consistent across URLs.
+                render_target = resolved_url or url
+                diagnostics = await _fetch_render_with_retries(
+                    primary_url=render_target,
+                    fallback_url=url if render_target != url else None,
                     render_wait_ms=render_wait_ms,
                     selector_wait_ms=selector_wait_ms,
+                    playwright_session_manager=playwright_session_manager,
                 )
                 rendered_html = diagnostics["html"]
                 if rendered_html:
@@ -226,6 +293,11 @@ async def fetch_and_parse(
                     }
                 else:
                     extraction_state_hint = diagnostics["extraction_state"]
+                    extra_values["Extraction Source Fallback"] = True
+                    logger.info(
+                        "Render unavailable for %s; using raw_http HTML for extraction.",
+                        render_target,
+                    )
                 # Always surface the Sprint 2 ghost data — even when
                 # ``rendered_html`` was empty the raw_word_count /
                 # is_js_dependent values are still meaningful (and the
@@ -240,6 +312,8 @@ async def fetch_and_parse(
                 extra_values["Field CLS"] = diagnostics["field_cls"]
             main_values["Extraction Source"] = extraction_source
             extra_values["Extraction Source"] = extraction_source
+            if extraction_source == "rendered_browser":
+                extra_values["Extraction Source Fallback"] = False
             if rendered_headers:
                 extra_values["Cache-Control"] = rendered_headers.get(
                     "cache-control", extra_values["Cache-Control"]
@@ -287,6 +361,7 @@ async def fetch_and_parse(
         if main_values["Load Time (s)"] is None:
             main_values["Load Time (s)"] = round(time.time() - start_time, 3)
         finalize_row_state(main_data, extra)
+        backfill_extra_content_hub_metrics(extra_values, main_values)
         logger.info("[%s] Crawled: %s", main_values["Status Code"], url)
         delay_seconds = (
             request_delay if request_delay is not None else DELAY_BETWEEN_REQUESTS

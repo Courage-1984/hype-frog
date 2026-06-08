@@ -42,12 +42,13 @@ SEVERITY_ROW_STYLE: list[tuple[str, str]] = [
 ]
 
 QUICK_LINKS: list[tuple[str, str]] = [
+    ("Issue Summary", "#Summary!A1"),
     ("Fix Plan", "#FixPlan!A1"),
     ("Main URL Data", "#Main!A1"),
     ("Technical Diagnostics", "#'Technical Diagnostics'!A1"),
     ("Indexability", "#'Technical Diagnostics'!A1"),
     ("AEO Opportunities", "#'Content & AI Readiness'!A1"),
-    ("AIOSEO Action Queue", "#AIOSEO!A1"),
+    ("AIOSEO Recommendations", "#'AIOSEO Recommendations'!A1"),
 ]
 
 DASHBOARD_KPI_ROW_COMMENTS: dict[str, str] = {
@@ -84,6 +85,17 @@ DASHBOARD_KPI_ROW_COMMENTS: dict[str, str] = {
             "so ``Has Valid JSON-LD`` stays correct when Main columns are reordered."
         ),
     ),
+    "A20": format_help_layer(
+        description=(
+            "Total broken internal link instances (anchor-level) on Link Inventory "
+            "where the target returned HTTP 4xx/5xx."
+        ),
+        calculation=(
+            "Excel ``B20``: ``SUMPRODUCT`` over Link Inventory columns "
+            "``Link Type`` = Internal and ``Status Code`` in 400–599. "
+            "Matches FixPlan instance totals and Business Impact narrative."
+        ),
+    ),
     "A19": format_help_layer(
         description=(
             "Headroom for AI-search improvements: high values mean extractability or blended SEO "
@@ -106,7 +118,7 @@ DASHBOARD_KPI_ROW_COMMENTS: dict[str, str] = {
     "A22": format_help_layer(
         description="Share of unique external targets that returned HTTP 200 when probed.",
         calculation=(
-            "Excel ``B22`` references RunMetadata keys for external sniff coverage (see "
+            "Excel ``B22`` references Audit Run Details keys for external sniff coverage (see "
             "``_EXCEL_EXTERNAL_LINK_HEALTH_PCT`` in ``dashboard.py``); blank when sniff skipped."
         ),
     ),

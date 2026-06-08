@@ -11,6 +11,9 @@ from hype_frog.core.models import (
     MainRowPayload,
     harden_page_row_metrics,
 )
+from hype_frog.crawler.psi_engine import psi_index_key
+from hype_frog.pipeline.gsc_coverage import apply_gsc_coverage_fields
+from hype_frog.pipeline.broken_links import count_broken_internal_from_link_details
 from hype_frog.pipeline.content_cluster import compute_content_cluster_id
 from hype_frog.pipeline.enrich import value_or_default
 from hype_frog.pipeline.graph_engine import build_inlinks_map
@@ -201,21 +204,23 @@ def assemble_enriched_row(
         "Health Icon": extra_values.get("Health Icon"),
         "Extraction State": main_values.get("Extraction State")
         or extra_values.get("Extraction State", "skipped"),
-        "Extraction Source": main_values.get("Extraction Source")
-        or extra_values.get("Extraction Source", "raw_http"),
+        "Extraction Source": extra_values.get("Extraction Source")
+        or main_values.get("Extraction Source", "raw_http"),
         "CWV LCP (s)": extra_values.get("CWV LCP (s)"),
         "CWV CLS": extra_values.get("CWV CLS"),
         "Field vs Lab": extra_values.get("Field vs Lab"),
         "Regional Authority Score": extra_values.get("Regional Authority Score"),
-        "Desktop PSI Score": extra_values.get("Desktop PSI Score", 0),
-        "Mobile PSI Score": extra_values.get("Mobile PSI Score", 0),
-        "Mobile LCP (s)": extra_values.get("Mobile LCP (s)", 0.0),
-        "Mobile CLS": extra_values.get("Mobile CLS", 0.0),
-        "Mobile TTFB (s)": extra_values.get("Mobile TTFB (s)", 0.0),
+        "Desktop PSI Score": extra_values.get("Desktop PSI Score"),
+        "Mobile PSI Score": extra_values.get("Mobile PSI Score"),
+        "Mobile LCP (s)": extra_values.get("Mobile LCP (s)"),
+        "Mobile CLS": extra_values.get("Mobile CLS"),
+        "Mobile TTFB (s)": extra_values.get("Mobile TTFB (s)"),
         "GSC Clicks": extra_values.get("GSC Clicks", 0.0),
         "GSC Impressions": extra_values.get("GSC Impressions", 0.0),
         "GSC CTR": extra_values.get("GSC CTR", 0.0),
         "GSC Avg Position": extra_values.get("GSC Avg Position", 0.0),
+        "GSC Data Freshness": extra_values.get("GSC Data Freshness"),
+        "GSC Coverage Note": extra_values.get("GSC Coverage Note"),
         "Click Depth": extra_values.get("Click Depth"),
         "Orphan Pages": extra_values.get("Orphan Pages", False),
         "Internal PageRank": extra_values.get("Internal PageRank", 0.0),
@@ -243,6 +248,30 @@ def assemble_enriched_row(
     return MainRowPayload.model_validate(validated.main)
 
 
+def _lookup_psi_entry(
+    psi_map: Mapping[str, Any],
+    *,
+    url_key: str,
+    normalized_key: str,
+    seed_url: str,
+) -> dict[str, Any] | None:
+    for key in (url_key, normalized_key, psi_index_key(seed_url), psi_index_key(url_key)):
+        if key and key in psi_map:
+            entry = psi_map[key]
+            if isinstance(entry, dict):
+                return entry
+    return None
+
+
+def _psi_numeric(value: object) -> float | None:
+    if value is None or str(value).strip() == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def row_with_psi_gsc_harden(
     row: ExtraRowPayload,
     *,
@@ -251,56 +280,56 @@ def row_with_psi_gsc_harden(
     psi_map: Mapping[str, Any],
     gsc_metrics: Mapping[str, Any],
     normalize_url_key_fn: Callable[[object], str] | None = None,
+    gsc_analytics_succeeded: bool = False,
+    gsc_data_freshness: str | None = None,
 ) -> ExtraRowPayload:
     norm = normalize_url_key_fn or normalize_url_key
     row_values = row.values
-    psi = psi_map.get(url_key) or psi_map.get(normalized_key)
+    seed_url = str(row_values.get("URL") or url_key or "").strip()
+    psi = _lookup_psi_entry(
+        psi_map,
+        url_key=url_key,
+        normalized_key=normalized_key,
+        seed_url=seed_url,
+    )
     if psi:
-        mobile_lcp = float(psi.get("Mobile LCP") or 0.0)
-        mobile_cls = float(psi.get("Mobile CLS") or 0.0)
-        cwv_lcp = psi.get("CWV LCP (s)")
-        cwv_cls = psi.get("CWV CLS")
-        cwv_inp = psi.get("CWV INP (ms)")
+        mobile_lcp = _psi_numeric(psi.get("Mobile LCP"))
+        mobile_cls = _psi_numeric(psi.get("Mobile CLS"))
+        cwv_lcp = _psi_numeric(psi.get("CWV LCP (s)"))
+        cwv_cls = _psi_numeric(psi.get("CWV CLS"))
+        cwv_inp = _psi_numeric(psi.get("CWV INP (ms)"))
         merged: dict[str, object] = {
             **row_values,
-            "Desktop PSI Score": psi.get("Desktop Score", 0),
-            "Mobile PSI Score": psi.get("Mobile Score", 0),
+            "PSI Data Status": psi.get("PSI Data Status", "Unavailable"),
+            "Desktop PSI Score": psi.get("Desktop Score"),
+            "Mobile PSI Score": psi.get("Mobile Score"),
             "Mobile LCP (s)": mobile_lcp,
             "Mobile CLS": mobile_cls,
-            "Mobile TTFB (s)": psi.get("Mobile TTFB", 0.0),
-            "CWV LCP (s)": float(cwv_lcp) if cwv_lcp is not None else mobile_lcp,
-            "CWV CLS": float(cwv_cls) if cwv_cls is not None else mobile_cls,
-            "CWV INP (ms)": float(cwv_inp) if cwv_inp is not None else 0.0,
+            "Mobile TTFB (s)": _psi_numeric(psi.get("Mobile TTFB")),
+            "CWV LCP (s)": cwv_lcp if cwv_lcp is not None else mobile_lcp,
+            "CWV CLS": cwv_cls if cwv_cls is not None else mobile_cls,
+            "CWV INP (ms)": cwv_inp,
             "CWV Data Source": psi.get("CWV Data Source", "PSI API"),
             "Field vs Lab": psi.get("Field vs Lab", "Lab"),
         }
+    elif psi_map:
+        merged = {
+            **row_values,
+            "PSI Data Status": "Not measured",
+        }
     else:
         merged = {
             **row_values,
-            "Desktop PSI Score": 0,
-            "Mobile PSI Score": 0,
-            "Mobile LCP (s)": 0.0,
-            "Mobile CLS": 0.0,
-            "Mobile TTFB (s)": 0.0,
-            "CWV INP (ms)": 0.0,
+            "PSI Data Status": "Not measured (PSI disabled)",
         }
-    gsc = gsc_metrics.get(url_key) or gsc_metrics.get(normalized_key)
-    if gsc:
-        merged = {
-            **merged,
-            "GSC Clicks": gsc.get("GSC Clicks", 0.0),
-            "GSC Impressions": gsc.get("GSC Impressions", 0.0),
-            "GSC CTR": gsc.get("GSC CTR", 0.0),
-            "GSC Avg Position": gsc.get("GSC Average Position", 0.0),
-        }
-    else:
-        merged = {
-            **merged,
-            "GSC Clicks": 0.0,
-            "GSC Impressions": 0.0,
-            "GSC CTR": 0.0,
-            "GSC Avg Position": 0.0,
-        }
+    apply_gsc_coverage_fields(
+        merged,
+        gsc_map=gsc_metrics,
+        url_key=url_key,
+        normalized_key=normalized_key,
+        analytics_succeeded=gsc_analytics_succeeded,
+        gsc_data_freshness=gsc_data_freshness,
+    )
     return ExtraRowPayload.model_validate({**merged, **harden_page_row_metrics(merged)})
 
 
@@ -332,18 +361,23 @@ def row_with_canonical_and_internal_links(
         out["Hreflang Reciprocal Check"] = norm(
             row_values.get("Final URL", "")
         ) in crawled_finals and bool(row_values.get("Hreflang Self Reference"))
-    broken_internal = 0
+    link_details = row_values.get("Link Details") or []
+    broken_internal = count_broken_internal_from_link_details(link_details)
     unresolved_internal = 0
     link_statuses: list[str] = []
     for target in row_values.get("Internal Links List Full", []):
         status = status_by_url.get(norm(target))
-        if isinstance(status, int) and status >= 400:
-            broken_internal += 1
-        elif status is None:
+        if status is None:
             unresolved_internal += 1
         link_statuses.append(
             f"{target} => {status if status is not None else 'Not crawled'}"
         )
+    if not link_details:
+        broken_internal = 0
+        for target in row_values.get("Internal Links List Full", []):
+            status = status_by_url.get(norm(target))
+            if isinstance(status, int) and status >= 400:
+                broken_internal += 1
     out["Broken Internal Links Count"] = broken_internal
     out["Unresolved Internal Links Count"] = unresolved_internal
     out["Internal Link Statuses"] = (

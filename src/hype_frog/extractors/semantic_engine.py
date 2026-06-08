@@ -29,6 +29,7 @@ from typing import Any, TypedDict
 
 from hype_frog.core import get_logger
 from hype_frog.core.api_clients import SEARCH_INTENT_LABELS, classify_search_intent_with_llm
+from hype_frog.extractors.semantic_setup import SEMANTIC_INSTALL_HINT
 
 logger = get_logger(__name__)
 
@@ -73,6 +74,57 @@ class SemanticAnalysisResult(TypedDict):
     top_entities: list[str] | None
     citation_count: int | None
     aeo_score: float | None
+    analysis_mode: str
+
+
+_FALLBACK_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "about",
+        "after",
+        "also",
+        "been",
+        "being",
+        "both",
+        "from",
+        "have",
+        "into",
+        "more",
+        "most",
+        "only",
+        "other",
+        "over",
+        "such",
+        "than",
+        "that",
+        "their",
+        "them",
+        "then",
+        "there",
+        "these",
+        "they",
+        "this",
+        "those",
+        "through",
+        "under",
+        "until",
+        "very",
+        "what",
+        "when",
+        "where",
+        "which",
+        "while",
+        "with",
+        "would",
+        "your",
+    }
+)
+
+_PROPER_NOUN_PHRASE_RE = re.compile(
+    r"\b(?:[A-Z][a-z]+(?:'[a-z]+)?)"
+    r"(?:\s+(?:[A-Z][a-z]+|&|[A-Z]{2,})){0,3}\b"
+)
+_ACRONYM_RE = re.compile(r"\b[A-Z]{2,6}\b")
+_TOKEN_RE = re.compile(r"[a-zA-Z][a-zA-Z'-]{3,}")
 
 
 def _empty_result(citation_count: int = 0) -> SemanticAnalysisResult:
@@ -82,16 +134,69 @@ def _empty_result(citation_count: int = 0) -> SemanticAnalysisResult:
         top_entities=[],
         citation_count=citation_count,
         aeo_score=0.0,
+        analysis_mode="No content",
     )
 
 
-def _spacy_unavailable_result(citation_count: int) -> SemanticAnalysisResult:
-    """Returned when spaCy/model is missing; entity half is None on purpose."""
+def extract_keyword_entities_fallback(
+    text: str,
+    *,
+    max_terms: int = 40,
+) -> list[str]:
+    """Lightweight entity proxy when spaCy NER is unavailable."""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return []
+
+    entities: list[str] = []
+    seen: set[str] = set()
+
+    for match in _PROPER_NOUN_PHRASE_RE.finditer(cleaned):
+        phrase = " ".join(match.group(0).split())
+        key = phrase.casefold()
+        if len(phrase) < 3 or key in seen or phrase.lower() in _FALLBACK_STOPWORDS:
+            continue
+        seen.add(key)
+        entities.append(phrase)
+
+    for match in _ACRONYM_RE.finditer(cleaned):
+        token = match.group(0)
+        key = token.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        entities.append(token)
+
+    freq = Counter(
+        token
+        for token in _TOKEN_RE.findall(cleaned.lower())
+        if token not in _FALLBACK_STOPWORDS and not token.isdigit()
+    )
+    for word, _count in freq.most_common(max_terms):
+        key = word.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        entities.append(word.title())
+
+    return entities[:max_terms]
+
+
+def _keyword_fallback_result(
+    cleaned: str,
+    citation_count: int,
+    entities: list[str],
+) -> SemanticAnalysisResult:
+    word_count = len(cleaned.split())
+    density = (len(entities) / word_count) * 100.0 if word_count > 0 else 0.0
+    top_entities = _top_entities_by_frequency(entities, n=3)
+    aeo_score = _compute_aeo_score(density, citation_count)
     return SemanticAnalysisResult(
-        entity_density=None,
-        top_entities=None,
+        entity_density=round(density, 2),
+        top_entities=top_entities,
         citation_count=citation_count,
-        aeo_score=None,
+        aeo_score=aeo_score,
+        analysis_mode="Keyword fallback",
     )
 
 
@@ -207,6 +312,7 @@ class SemanticAnalyzer:
 
     _model_cache: Any = None
     _spacy_unavailable: bool = False
+    _fallback_warned: bool = False
 
     def __init__(
         self,
@@ -228,6 +334,7 @@ class SemanticAnalyzer:
         """Drop the cached spaCy model (test hook; production should not use)."""
         cls._model_cache = None
         cls._spacy_unavailable = False
+        cls._fallback_warned = False
 
     def _load_model(self) -> Any | None:
         """Lazy-load spaCy + ``en_core_web_sm``; return ``None`` on any failure."""
@@ -242,8 +349,8 @@ class SemanticAnalyzer:
             import spacy
         except ImportError:
             logger.warning(
-                "spaCy is not installed; semantic entity extraction disabled. "
-                "Install with: uv add spacy && uv run python -m spacy download en_core_web_sm"
+                "spaCy is not installed; entity columns will use keyword fallback. %s",
+                SEMANTIC_INSTALL_HINT,
             )
             cls._spacy_unavailable = True
             return None
@@ -256,9 +363,8 @@ class SemanticAnalyzer:
             )
         except OSError:
             logger.warning(
-                "spaCy model %s is missing; semantic entity extraction disabled. "
-                "Install with: uv run python -m spacy download %s",
-                self._model_name,
+                "spaCy model %s is missing; entity columns will use keyword fallback. "
+                "Run: uv run hype-frog --install-semantic",
                 self._model_name,
             )
             cls._spacy_unavailable = True
@@ -312,10 +418,16 @@ class SemanticAnalyzer:
 
         entities = self._extract_entities(cleaned)
         if entities is None:
-            # spaCy unavailable: surface the regex-only citation count and
-            # leave the entity half explicitly None so downstream readers
-            # can distinguish "no entities" from "could not measure".
-            return _spacy_unavailable_result(citation_count=citation_count)
+            cls = type(self)
+            if not cls._fallback_warned:
+                logger.warning(
+                    "Semantic engine using keyword fallback for entity density / "
+                    "Top Entities / Semantic AEO Score. %s",
+                    SEMANTIC_INSTALL_HINT,
+                )
+                cls._fallback_warned = True
+            fallback_entities = extract_keyword_entities_fallback(cleaned)
+            return _keyword_fallback_result(cleaned, citation_count, fallback_entities)
 
         word_count = len(cleaned.split())
         density = (len(entities) / word_count) * 100.0 if word_count > 0 else 0.0
@@ -327,6 +439,7 @@ class SemanticAnalyzer:
             top_entities=top_entities,
             citation_count=citation_count,
             aeo_score=aeo_score,
+            analysis_mode="spaCy NER",
         )
 
 
@@ -374,5 +487,6 @@ __all__ = [
     "SemanticAnalysisResult",
     "SemanticAnalyzer",
     "count_citation_candidates",
+    "extract_keyword_entities_fallback",
     "get_default_analyzer",
 ]

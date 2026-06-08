@@ -9,6 +9,12 @@ import pandas as pd
 from hype_frog.core.models import ExtraRowPayload
 from hype_frog.core.text_utils import normalize_text_hash
 from hype_frog.core.url_normalization import normalize_url
+from hype_frog.reporter.sheets.config import (
+    AIOSEO_RECOMMENDATIONS_SHEET,
+    AUDIT_RUN_DETAILS_SHEET,
+    CONTENT_HUB_METRICS_SHEET,
+    CONTENT_OPTIMISATION_HUB_SHEET,
+)
 from hype_frog.reporter.sheets.merged_builders import (
     CONTENT_AI_READINESS_COLUMNS,
     ISSUE_REGISTER_COLUMNS,
@@ -31,6 +37,7 @@ class ExportRegistryConfig:
 STANDARD_SHEET_COLUMNS: dict[str, list[str]] = {
     "Technical": [
         "URL", "Content Cluster ID", "Extraction State", "Extraction Source",
+        "Extraction Source Fallback",
         "Health Icon", "Severity Badge", "SEO Health Score", "SEO Score",
         "Technical Health", "Copy Score", "Action Needed", "Owner", "Sprint",
         "Status", "Status Code", "Final URL", "Protocol", "Redirect Chain Length",
@@ -49,16 +56,19 @@ STANDARD_SHEET_COLUMNS: dict[str, list[str]] = {
         "AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)",
         "AEO Robots AI Bot Coverage",
         "llms.txt Present",
-        "Desktop PSI Score", "Mobile PSI Score", "Mobile LCP (s)", "Mobile CLS",
+        "PSI Data Status", "Desktop PSI Score", "Mobile PSI Score", "Mobile LCP (s)", "Mobile CLS",
         "Mobile TTFB (s)", "CWV LCP (s)", "CWV CLS", "CWV Data Source",
         "Field vs Lab", "GSC Clicks", "GSC Impressions", "GSC CTR",
-        "GSC Avg Position", "Click Depth", "Internal Inlinks", "Orphan Pages",
+        "GSC Avg Position", "GSC Data Freshness", "GSC Coverage Note",
+        "Click Depth", "Internal Inlinks", "Orphan Pages",
         "Internal PageRank", "Discovered On URL", "Regional Authority Score", "Regional Entity Hits",
         "Answer Block Detected (First 60 Words)", "AEO Extractability Score",
         "Critical Issues Count", "Warning Issues Count", "Observation Issues Count",
         "Inlinks Bucket", "Important But Underlinked", "SERP Title Truncation Risk",
         "SERP Meta Truncation Risk", "SERP Title Pixel Approx", "SERP Meta Pixel Approx",
-        "Cannibalization Hint", "Stable Issue IDs", "URL Depth", "Param URL Flag",
+        "Cannibalization Hint", "Draft Page Flag", "Probable Duplicate Flag",
+        "Duplicate Of URL", "Content Similarity %", "Heading Structure Cluster Size",
+        "Stable Issue IDs", "URL Depth", "Param URL Flag",
     ],
     "Content": [
         "URL", "H1 Count", "Missing H1 Flag", "Multiple H1 Flag", "Title Missing",
@@ -89,7 +99,7 @@ STANDARD_SHEET_COLUMNS: dict[str, list[str]] = {
         "AEO Extractability Score", "Snippet Preview Mockup", "Title Missing",
         "Meta Description Missing",
     ],
-    "AIOSEO": [
+    AIOSEO_RECOMMENDATIONS_SHEET: [
         "URL", "WordPress Post ID", "Direct Edit Link", "AIOSEO Panel", "Severity",
         "Issue", "Current Value", "Recommended Target", "Why It Matters", "How to Fix in AIOSEO",
         "Reference Tab", "Reference Field", "Action Needed", "Owner", "Status",
@@ -113,24 +123,26 @@ STANDARD_SHEET_COLUMNS: dict[str, list[str]] = {
 
 _FULL_SUITE_FORMAT_SHEETS: list[str] = [
     "Dashboard",
-    "FixPlan",
+    "Summary",
     "Priority URLs",
-    "Content Optimisation Hub",
-    "Content Hub Metrics",
+    "FixPlan",
+    CONTENT_OPTIMISATION_HUB_SHEET,
+    CONTENT_HUB_METRICS_SHEET,
+    "Main",
+    AIOSEO_RECOMMENDATIONS_SHEET,
+    "Link Inventory",
+    "SitemapQA",
+    "Template & Duplication Risks",
+    "Playbook",
     "Issue Register",
+    "IssueInventory",
     "Technical Diagnostics",
     "Content & AI Readiness",
     "Link Intelligence",
-    "Link Inventory",
-    "Template & Duplication Risks",
-    "Playbook",
-    # Deep-audit tail (far right)
-    "AIOSEO",
-    "SitemapQA",
+    "Redirects",
     "ResolvedIssues",
     "DeltaFromPreviousRun",
-    "RunMetadata",
-    "Main",
+    AUDIT_RUN_DETAILS_SHEET,
 ]
 
 _BASE_SHEETS: list[str] = ["Main"]
@@ -161,7 +173,10 @@ def get_finalization_steps() -> tuple[str, ...]:
     return ("apply_tab_hyperlinks", "format_sheets", "apply_workbook_export_guardrails")
 
 
-def build_duplicates_rows(main_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def build_duplicates_rows(
+    main_rows: list[dict[str, Any]],
+    extra_rows: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     title_groups: defaultdict[str, list[str]] = defaultdict(list)
     desc_groups: defaultdict[str, list[str]] = defaultdict(list)
     for row in main_rows:
@@ -172,12 +187,20 @@ def build_duplicates_rows(main_rows: list[dict[str, Any]]) -> list[dict[str, Any
         if desc_key:
             desc_groups[desc_key].append(str(row.get("URL") or ""))
 
+    extra_by_url: dict[str, dict[str, Any]] = {}
+    if extra_rows:
+        for row in extra_rows:
+            url = str(row.get("URL") or "").strip()
+            if url:
+                extra_by_url[url] = row
     duplicate_rows: list[dict[str, Any]] = []
     for row in main_rows:
+        url = str(row.get("URL") or "")
         title_key = normalize_text_hash(row.get("Title"))
         desc_key = normalize_text_hash(row.get("Meta Description"))
         title_urls = title_groups.get(title_key, []) if title_key else []
         desc_urls = desc_groups.get(desc_key, []) if desc_key else []
+        extra = extra_by_url.get(url, {})
         duplicate_rows.append(
             {
                 "URL": row.get("URL"),
@@ -189,6 +212,11 @@ def build_duplicates_rows(main_rows: list[dict[str, Any]]) -> list[dict[str, Any
                 "Meta Duplicate URLs": " | ".join(desc_urls)
                 if len(desc_urls) > 1
                 else None,
+                "Draft Page Flag": extra.get("Draft Page Flag"),
+                "Probable Duplicate Flag": extra.get("Probable Duplicate Flag"),
+                "Duplicate Of URL": extra.get("Duplicate Of URL"),
+                "Content Similarity %": extra.get("Content Similarity %"),
+                "Heading Structure Cluster Size": extra.get("Heading Structure Cluster Size"),
             }
         )
     return duplicate_rows
@@ -320,6 +348,8 @@ def build_priority_rows(
                 "Canonical Type": row.get("Canonical Type"),
                 "GSC Impressions": row.get("GSC Impressions", 0.0),
                 "GSC CTR": round(value_or_default_fn(row.get("GSC CTR"), 0.0), 4),
+                "GSC Data Freshness": row.get("GSC Data Freshness"),
+                "GSC Coverage Note": row.get("GSC Coverage Note"),
                 "Revenue Intent": revenue_intent,
                 "Why Prioritized": " | ".join(reasons) if reasons else "Monitor",
                 "Action Needed": "Yes" if risk_score >= 30 else "No",
@@ -335,6 +365,9 @@ def build_priority_rows(
     )
 
 
+BASELINE_DELTA_NOTE = "No previous run found — this is a baseline report."
+
+
 def build_delta_and_trend_rows(
     *,
     issue_inventory_df: pd.DataFrame,
@@ -344,6 +377,7 @@ def build_delta_and_trend_rows(
     prev_fixed_issue_ids: set[str],
     prev_counts: dict[str, int],
     previous_issue_inventory_df: pd.DataFrame,
+    baseline_report: bool = False,
 ) -> tuple[list[dict[str, Any]], pd.DataFrame]:
     current_issue_ids = {
         str(value).strip()
@@ -352,8 +386,27 @@ def build_delta_and_trend_rows(
         .tolist()
         if str(value).strip()
     }
+    if baseline_report:
+        delta_rows: list[dict[str, Any]] = [
+            {"Metric": "Report Status", "Count": BASELINE_DELTA_NOTE},
+            {
+                "Metric": "Current Issues (baseline inventory)",
+                "Count": len(current_issue_ids),
+            },
+        ]
+        resolved_issues_df = pd.DataFrame(
+            [
+                {
+                    "Stable Issue ID": "",
+                    "Issue": BASELINE_DELTA_NOTE,
+                    "URL": "",
+                }
+            ]
+        )
+        return delta_rows, resolved_issues_df
+
     resolved_issues = prev_issue_ids - current_issue_ids
-    delta_rows: list[dict[str, Any]] = [
+    delta_rows = [
         {"Metric": "New Issues", "Count": len(current_issue_ids - prev_issue_ids)},
         {"Metric": "Resolved Issues", "Count": len(resolved_issues)},
         {"Metric": "Unchanged Issues", "Count": len(current_issue_ids & prev_issue_ids)},

@@ -17,6 +17,7 @@ if TYPE_CHECKING:  # pragma: no cover - import only for type hints
 
 logger = get_logger(__name__)
 _PLAYWRIGHT_SEMAPHORE = asyncio.Semaphore(max(1, int(PLAYWRIGHT_MAX_SESSIONS)))
+_SUBPROCESS_PROBE_RESULT: bool | None = None
 
 
 class HttpFetchResult(TypedDict):
@@ -382,8 +383,12 @@ async def _probe_subprocess_supported() -> bool:
 
     Some Windows event loops (notably the Selector loop pytest may install)
     cannot spawn subprocesses; Playwright launch then deadlocks. We probe
-    once and fall back to the pure-HTTP path on ``NotImplementedError``.
+    once per process and fall back to the pure-HTTP path on
+    ``NotImplementedError``.
     """
+    global _SUBPROCESS_PROBE_RESULT
+    if _SUBPROCESS_PROBE_RESULT is not None:
+        return _SUBPROCESS_PROBE_RESULT
     try:
         probe = await asyncio.create_subprocess_exec(
             "python",
@@ -393,13 +398,14 @@ async def _probe_subprocess_supported() -> bool:
             stderr=asyncio.subprocess.PIPE,
         )
         await probe.communicate()
-        return True
+        _SUBPROCESS_PROBE_RESULT = True
     except NotImplementedError:
         logger.warning(
             "Accurate mode requested but this asyncio event loop cannot spawn subprocesses. "
             "Falling back to HTTP mode."
         )
-        return False
+        _SUBPROCESS_PROBE_RESULT = False
+    return _SUBPROCESS_PROBE_RESULT
 
 
 def _empty_diagnostics(extraction_state: str = "partial") -> RenderedFetchDiagnostics:
@@ -517,6 +523,9 @@ async def fetch_rendered_with_diagnostics(
                     "meta[name='description']",
                     "link[rel='canonical']",
                     "script[type='application/ld+json']",
+                    "h1",
+                    "[role='heading'][aria-level='1']",
+                    "h1.elementor-heading-title",
                 ):
                     try:
                         await page.wait_for_selector(

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
+from hype_frog.pipeline.broken_links import is_broken_http_status, is_internal_link_type
 
 _DEFAULT_NO_CRAWL = "No data available. Please run a full crawl to generate insights."
 
@@ -75,16 +76,19 @@ def _avg_extractability_from_content_rows(rows: list[dict[str, Any]]) -> float:
 
 
 def _has_psi_lab_data(extra_rows: list[ExtraRowPayload]) -> bool:
-    """True when at least one URL has a non-zero Mobile or Desktop PSI lab score."""
+    """True when at least one URL has measured Mobile or Desktop PSI lab scores."""
     for row in extra_rows:
         v = row.values
+        status = str(v.get("PSI Data Status") or "").strip().lower()
+        if status.startswith("unavailable") or status.startswith("not measured"):
+            continue
         for key in ("Mobile PSI Score", "Desktop PSI Score"):
             raw = v.get(key)
             try:
                 if raw is None or str(raw).strip() == "":
                     continue
-                if float(raw) > 0.0:
-                    return True
+                float(raw)
+                return True
             except (TypeError, ValueError):
                 continue
     return False
@@ -118,26 +122,17 @@ def _psi_variance_mobile_minus_desktop(extra_rows: list[ExtraRowPayload]) -> flo
     return sum(mobiles) / len(mobiles) - sum(desktops) / len(desktops)
 
 
-def _broken_internal_404_stats(link_rows: list[dict[str, Any]]) -> tuple[int, str]:
+def _broken_internal_stats(link_rows: list[dict[str, Any]]) -> tuple[int, str]:
+    """Return (instance_count, top_broken_target_url) from Link Inventory rows."""
     targets: list[str] = []
-    for r in link_rows:
-        if str(r.get("Link Type") or "").strip() != "Internal":
+    for row in link_rows:
+        if not is_internal_link_type(row.get("Link Type")):
             continue
-        code = r.get("Status Code")
-        is_404 = False
-        if isinstance(code, int) and code == 404:
-            is_404 = True
-        elif isinstance(code, float) and int(code) == 404:
-            is_404 = True
-        else:
-            s = str(code).strip()
-            if s == "404" or s.startswith("404"):
-                is_404 = True
-        if not is_404:
+        if not is_broken_http_status(row.get("Status Code")):
             continue
-        t = str(r.get("Target URL") or "").strip()
-        if t:
-            targets.append(t)
+        target = str(row.get("Target URL") or "").strip()
+        if target:
+            targets.append(target)
     if not targets:
         return 0, ""
     top_url, _count = Counter(targets).most_common(1)[0]
@@ -169,11 +164,11 @@ class NarrativeEngine:
             return _DEFAULT_NO_CRAWL
 
         lines: list[str] = []
-        broken_n, top_url = _broken_internal_404_stats(link_inventory_rows)
+        broken_n, top_url = _broken_internal_stats(link_inventory_rows)
         if broken_n > 0 and top_url:
             url_display = _break_url_for_cell_wrap(top_url)
             lines.append(
-                f"⚠️ Link Integrity Risk: {broken_n} broken links found. "
+                f"⚠️ Link Integrity Risk: {broken_n} broken internal link instances found. "
                 f"The most impacted destination is {url_display}."
             )
 

@@ -28,6 +28,7 @@ class RunSetup:
     checkpoint_every_preset: int | None
     resume_checkpoint_mode: ResumeCheckpointMode
     check_external_link_status: bool
+    bfs_max_depth: int | None = None
 
 
 def resolve_run_setup(run: RunConfig | None) -> RunSetup:
@@ -53,6 +54,7 @@ def resolve_run_setup(run: RunConfig | None) -> RunSetup:
             checkpoint_every_preset=run.checkpoint_every,
             resume_checkpoint_mode=run.resume_checkpoint,
             check_external_link_status=run.check_external_link_status,
+            bfs_max_depth=run.bfs_max_depth,
         )
 
     (
@@ -80,4 +82,5 @@ def resolve_run_setup(run: RunConfig | None) -> RunSetup:
         checkpoint_every_preset=None,
         resume_checkpoint_mode="prompt",
         check_external_link_status=check_external_link_status,
+        bfs_max_depth=None,
     )

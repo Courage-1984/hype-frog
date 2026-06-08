@@ -27,6 +27,7 @@ from typing import Any
 import pytest
 
 from hype_frog.extractors.semantic_engine import (
+    extract_keyword_entities_fallback,
     CITATION_MAX_WORDS,
     CITATION_MIN_WORDS,
     DEFAULT_DEFINITION_TRIGGERS,
@@ -176,6 +177,16 @@ def test_compute_aeo_score_negative_inputs_clamped_to_zero() -> None:
     assert _compute_aeo_score(-5.0, -3) == 0.0
 
 
+def test_keyword_fallback_extracts_proper_nouns_and_keywords() -> None:
+    text = (
+        "The African Marketing Confederation provides resources for SEO teams. "
+        "Marketing teams use analytics across Africa."
+    )
+    entities = extract_keyword_entities_fallback(text)
+    assert any("African Marketing Confederation" in ent for ent in entities)
+    assert any(ent.lower() in {"marketing", "analytics", "resources"} for ent in entities)
+
+
 # ---------------------------------------------------------------------------
 # SemanticAnalyzer — happy path with an injected fake spaCy model
 # ---------------------------------------------------------------------------
@@ -228,6 +239,7 @@ def test_semantic_analyzer_happy_path_with_injected_model() -> None:
     assert (result["citation_count"] or 0) >= 1
     assert result["aeo_score"] is not None
     assert 0.0 <= result["aeo_score"] <= 100.0
+    assert result["analysis_mode"] == "spaCy NER"
     assert fake_nlp.calls == 1
 
 
@@ -239,6 +251,7 @@ def test_semantic_analyzer_empty_body_returns_safe_defaults() -> None:
     assert result["top_entities"] == []
     assert result["citation_count"] == 0
     assert result["aeo_score"] == 0.0
+    assert result["analysis_mode"] == "No content"
 
 
 # ---------------------------------------------------------------------------
@@ -274,9 +287,10 @@ def test_semantic_analyzer_poison_flag_set_after_first_import_failure(
     with caplog.at_level(logging.WARNING, logger="hype_frog.extractors.semantic_engine"):
         result = analyzer.analyze(body_text=body)
 
-    assert result["entity_density"] is None
-    assert result["top_entities"] is None
-    assert result["aeo_score"] is None
+    assert result["analysis_mode"] == "Keyword fallback"
+    assert result["entity_density"] is not None
+    assert result["top_entities"] is not None
+    assert result["aeo_score"] is not None
     # Citation half (regex-only) keeps working even without spaCy.
     assert (result["citation_count"] or 0) >= 1
 
@@ -330,9 +344,10 @@ def test_semantic_analyzer_respects_pre_set_poison_flag(
     )
     result = analyzer.analyze(body_text=paragraph, paragraphs=[paragraph])
 
-    assert result["entity_density"] is None
-    assert result["top_entities"] is None
-    assert result["aeo_score"] is None
+    assert result["analysis_mode"] == "Keyword fallback"
+    assert result["entity_density"] is not None
+    assert result["top_entities"] is not None
+    assert result["aeo_score"] is not None
     assert result["citation_count"] == 1
 
 

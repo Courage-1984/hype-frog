@@ -40,7 +40,7 @@ class DashboardComputationResult(BaseModel):
     warning_urls: int
     avg_ttfb_ms: float
     schema_urls: int
-    broken_links_total: int
+    broken_link_instances_total: int
     crawl_denominator: int
     error_count: int
     success_count: int
@@ -81,7 +81,7 @@ def compute_dashboard_metrics(
     critical_urls = 0
     warning_urls = 0
     schema_urls = 0
-    broken_links_total = 0
+    broken_link_instances_total = 0
     ttfb_values: list[float] = []
     health_values: list[float] = []
 
@@ -110,7 +110,9 @@ def compute_dashboard_metrics(
             warning_urls += 1
 
         schema_urls += 1 if int(extra_row.get("Schema Types Count") or 0) > 0 else 0
-        broken_links_total += int(extra_row.get("Broken Internal Links Count") or 0)
+        broken_link_instances_total += int(
+            extra_row.get("Broken Internal Links Count") or 0
+        )
 
         raw_ttfb = extra_row.get("TTFB (ms)")
         try:
@@ -230,7 +232,7 @@ def compute_dashboard_metrics(
         warning_urls=warning_urls,
         avg_ttfb_ms=avg_ttfb_ms,
         schema_urls=schema_urls,
-        broken_links_total=broken_links_total,
+        broken_link_instances_total=broken_link_instances_total,
         crawl_denominator=crawl_denominator,
         error_count=error_count,
         success_count=success_count,

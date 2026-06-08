@@ -16,6 +16,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google_auth_oauthlib.flow import InstalledAppFlow
 
+from hype_frog.config import SECRETS_DIR
 from hype_frog.core import get_logger
 
 SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
@@ -122,48 +123,55 @@ def _build_candidate_site_urls(target_url: str) -> list[str]:
 
 
 def _load_credentials(credentials_path: Path, token_path: Path) -> Credentials:
+    """Interactive OAuth bootstrap for ``--gsc-auth`` only (may open a browser)."""
     creds: Credentials | None = None
     if token_path.exists():
         try:
             creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
         except Exception:
             creds = None
-    if not creds or not creds.valid:
-        logger.info("No valid token found, initiating browser auth.")
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(str(credentials_path), SCOPES)
-            creds = flow.run_local_server(port=0)
+
+    if creds and creds.expired and creds.refresh_token:
+        logger.info("GSC token expired; refreshing from refresh token.")
+        creds.refresh(Request())
         token_path.parent.mkdir(parents=True, exist_ok=True)
         token_path.write_text(creds.to_json(), encoding="utf-8")
-    else:
-        logger.info("Loaded existing GSC token")
+        return creds
+
+    if creds and creds.valid:
+        logger.info("Loaded existing GSC token from %s", token_path)
+        return creds
+
+    logger.info("No valid GSC token at %s; opening browser OAuth flow.", token_path)
+    flow = InstalledAppFlow.from_client_secrets_file(str(credentials_path), SCOPES)
+    creds = flow.run_local_server(port=0)
+    token_path.parent.mkdir(parents=True, exist_ok=True)
+    token_path.write_text(creds.to_json(), encoding="utf-8")
     return creds
 
 
 def _resolve_credentials_path(filename: str) -> Path:
-    """Resolve OAuth client secrets with ``./secrets`` preferred."""
+    """Resolve OAuth client secrets with ``secrets/`` preferred."""
     base = Path(filename)
     if base.is_absolute():
         return base
     candidates = (
-        _REPO_ROOT / "secrets" / base.name,
+        SECRETS_DIR / base.name,
         _PROJECT_DIR / base,
         _REPO_ROOT / base,
     )
     for candidate in candidates:
         if candidate.exists():
             return candidate
-    return _REPO_ROOT / "secrets" / base.name
+    return SECRETS_DIR / base.name
 
 
 def _resolve_token_path(filename: str) -> Path:
-    """Resolve OAuth token path with ``./secrets`` as canonical write location."""
+    """Resolve OAuth token path with ``secrets/`` as canonical read/write location."""
     base = Path(filename)
     if base.is_absolute():
         return base
-    return _REPO_ROOT / "secrets" / base.name
+    return SECRETS_DIR / base.name
 
 
 def _resolve_site_url(service: Any, target_url: str) -> str | None:
@@ -265,6 +273,9 @@ class GSCEnrichmentContext:
     analytics_query_succeeded: bool
     service: Any | None
     site_url: str | None
+    period_start: date | None = None
+    period_end: date | None = None
+    analytics_row_count: int = 0
 
 
 def load_gsc_enrichment_context(
@@ -278,7 +289,14 @@ def load_gsc_enrichment_context(
         return GSCEnrichmentContext({}, False, None, None)
 
     token_path = _resolve_token_path(token_file)
-    creds = _load_credentials(credentials_path=credentials_path, token_path=token_path)
+    creds, error = load_gsc_credentials_readonly(
+        credentials_file=credentials_file,
+        token_file=token_file,
+    )
+    if error or creds is None:
+        logger.warning("GSC enrichment skipped: %s", error or "credentials unavailable")
+        return GSCEnrichmentContext({}, False, None, None)
+
     service = build("searchconsole", "v1", credentials=creds, cache_discovery=False)
     site_url = _resolve_site_url(service, target_url)
     if not site_url:
@@ -312,7 +330,15 @@ def load_gsc_enrichment_context(
             _ROW_LIMIT,
         )
     page_metrics = _rows_to_page_metrics(rows)
-    return GSCEnrichmentContext(page_metrics, True, service, site_url)
+    return GSCEnrichmentContext(
+        page_metrics,
+        True,
+        service,
+        site_url,
+        period_start=start_date,
+        period_end=end_date,
+        analytics_row_count=len(rows),
+    )
 
 
 def fetch_gsc_page_metrics(

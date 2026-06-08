@@ -22,6 +22,36 @@ _CHROME_SELECTORS: tuple[str, ...] = (
     "[role='contentinfo']",
     "[role='complementary']",
 )
+_LIGHT_CHROME_SELECTORS: tuple[str, ...] = (
+    "nav",
+    "script",
+    "style",
+    "noscript",
+    "template",
+    "[role='navigation']",
+)
+_AGGRESSIVE_CHROME_SELECTORS: tuple[str, ...] = (
+    "header",
+    "footer",
+    "aside",
+    "[role='banner']",
+    "[role='contentinfo']",
+    "[role='complementary']",
+)
+_CMS_PRIMARY_H1_SELECTORS: tuple[str, ...] = (
+    "main h1",
+    "article h1",
+    "[role='main'] h1",
+    "h1.entry-title",
+    "h1.page-title",
+    "h1.post-title",
+    "h1.elementor-heading-title",
+    ".elementor-widget-heading h1",
+    ".wp-block-post-title",
+    "#content h1",
+    ".content-area h1",
+    "header h1",
+)
 _HIDDEN_CLASS_RE = re.compile(
     r"(?:^|\s)(?:sr-only|screen-reader|screenreader|visually-hidden|elementor-screen-only|"
     r"hide-text|hidden|wpcf7-screen-reader-response)(?:\s|$)",
@@ -66,15 +96,30 @@ def _is_hidden_heading(tag: Tag) -> bool:
     return False
 
 
-def _prepare_content_root(soup: BeautifulSoup) -> Tag | None:
-    for selector in _CHROME_SELECTORS:
+def _clone_soup(html: str) -> BeautifulSoup:
+    return BeautifulSoup(html or "", "lxml")
+
+
+def _decompose_selectors(soup: BeautifulSoup, selectors: tuple[str, ...]) -> None:
+    for selector in selectors:
         for tag in soup.select(selector):
             tag.decompose()
+
+
+def _prepare_content_root(
+    soup: BeautifulSoup,
+    *,
+    aggressive_chrome: bool = True,
+) -> Tag | None:
+    working = BeautifulSoup(str(soup), "lxml")
+    _decompose_selectors(working, _LIGHT_CHROME_SELECTORS)
+    if aggressive_chrome:
+        _decompose_selectors(working, _AGGRESSIVE_CHROME_SELECTORS)
     return (
-        soup.find("main")
-        or soup.find("article")
-        or soup.find(attrs={"role": "main"})
-        or soup.body
+        working.find("main")
+        or working.find("article")
+        or working.find(attrs={"role": "main"})
+        or working.body
     )
 
 
@@ -98,6 +143,15 @@ def _is_inside_head(tag: Tag) -> bool:
     return False
 
 
+def _is_nested_within_heading(tag: Tag) -> bool:
+    for parent in tag.parents:
+        if parent is tag:
+            continue
+        if isinstance(parent, Tag) and _heading_level_from_tag(parent) is not None:
+            return True
+    return False
+
+
 def _iter_content_headings(root: Tag, *, allow_headings_in_head: bool = False) -> list[tuple[int, str]]:
     discovered: list[tuple[int, str]] = []
     seen_ids: set[int] = set()
@@ -114,6 +168,8 @@ def _iter_content_headings(root: Tag, *, allow_headings_in_head: bool = False) -
         if level is None:
             continue
         if not allow_headings_in_head and _is_inside_head(element):
+            continue
+        if _is_nested_within_heading(element):
             continue
         if _is_hidden_heading(element):
             continue
@@ -149,29 +205,89 @@ def _outline_from_discovered(discovered: list[tuple[int, str]]) -> HeadingOutlin
     )
 
 
-def extract_heading_outline(html: str) -> HeadingOutline:
-    """Extract H1–H6 headings from main content, excluding chrome and hidden nodes."""
-    soup = BeautifulSoup(html or "", "lxml")
-    prepared = _prepare_content_root(BeautifulSoup(html or "", "lxml"))
-    discovered = _iter_content_headings(prepared) if prepared is not None else []
+def _empty_heading_outline() -> HeadingOutline:
+    empty_counts = {level: 0 for level in range(1, 7)}
+    return HeadingOutline(
+        h1_count=0,
+        counts_by_level=empty_counts,
+        headings_by_level={level: () for level in range(1, 7)},
+        outline_lines=(),
+        question_heading_count=0,
+    )
 
-    # Damaged markup can leave headings in ``<head>``; recover after chrome strip only.
+
+def _merge_discovered(
+    primary: list[tuple[int, str]],
+    extra: list[tuple[int, str]],
+) -> list[tuple[int, str]]:
+    seen = {(level, text.casefold()) for level, text in primary}
+    merged = list(primary)
+    for level, text in extra:
+        key = (level, text.casefold())
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append((level, text))
+    return merged
+
+
+def _has_h1(discovered: list[tuple[int, str]]) -> bool:
+    return any(level == 1 for level, _ in discovered)
+
+
+def _cms_primary_h1_fallback(soup: BeautifulSoup) -> list[tuple[int, str]]:
+    """Recover a primary H1 from common CMS / builder selectors (JS-rendered pages)."""
+    working = _clone_soup(str(soup))
+    _decompose_selectors(working, _LIGHT_CHROME_SELECTORS)
+    found: list[tuple[int, str]] = []
+    seen_text: set[str] = set()
+    for selector in _CMS_PRIMARY_H1_SELECTORS:
+        for tag in working.select(selector):
+            if _is_hidden_heading(tag) or _is_nested_within_heading(tag):
+                continue
+            text = _normalise_heading_text(tag.get_text(" ", strip=True))
+            if not text:
+                continue
+            key = text.casefold()
+            if key in seen_text:
+                continue
+            seen_text.add(key)
+            found.append((1, text))
+    return found
+
+
+def extract_heading_outline(html: str) -> HeadingOutline:
+    """Extract H1–H6 headings with tiered content scoping and CMS fallbacks."""
+    if not str(html or "").strip():
+        return _empty_heading_outline()
+
+    soup = _clone_soup(html)
+
+    # Tier 1 — main/article content; strip global chrome (header/footer/nav).
+    strict_root = _prepare_content_root(soup, aggressive_chrome=True)
+    discovered = _iter_content_headings(strict_root) if strict_root is not None else []
+
+    # Tier 2 — relaxed chrome keeps header/footer (homepage heroes outside ``<main>``).
+    if not _has_h1(discovered):
+        relaxed_root = _prepare_content_root(soup, aggressive_chrome=False)
+        if relaxed_root is not None:
+            discovered = _merge_discovered(
+                discovered,
+                _iter_content_headings(relaxed_root),
+            )
+
+    # Tier 3 — CMS selector sweep when semantic outline still lacks an H1.
+    if not _has_h1(discovered):
+        discovered = _merge_discovered(discovered, _cms_primary_h1_fallback(soup))
+
+    # Tier 4 — damaged markup can leave headings in ``<head>``.
     if not discovered:
-        rescue = BeautifulSoup(html or "", "lxml")
-        for selector in _CHROME_SELECTORS:
-            for tag in rescue.select(selector):
-                tag.decompose()
+        rescue = _clone_soup(html)
+        _decompose_selectors(rescue, _CHROME_SELECTORS)
         discovered = _iter_content_headings(rescue, allow_headings_in_head=True)
 
     if not discovered:
-        empty_counts = {level: 0 for level in range(1, 7)}
-        return HeadingOutline(
-            h1_count=0,
-            counts_by_level=empty_counts,
-            headings_by_level={level: () for level in range(1, 7)},
-            outline_lines=(),
-            question_heading_count=0,
-        )
+        return _empty_heading_outline()
 
     return _outline_from_discovered(discovered)
 

@@ -6,9 +6,10 @@ import argparse
 import asyncio
 
 from hype_frog.core.integration_validator import run_validation_cli
-from hype_frog.core.run_config import RunConfig, quick_test_run_config
+from hype_frog.core.quick_test import QuickTestOptions, run_quick_test_gate
 from hype_frog.app_orchestrator import main as _async_main
 from hype_frog.crawler.gsc_engine import ensure_gsc_oauth_token
+from hype_frog.extractors.semantic_setup import install_semantic_model
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -17,8 +18,36 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--quick-test",
         action="store_true",
         help=(
-            "Run a fixed 10-URL smoke crawl (sitemap + Playwright + full suite) "
-            "with no interactive prompts"
+            "Comprehensive smoke gate: preflight checks, focused pytest, "
+            "10-URL sitemap crawl (Playwright + full suite), workbook audit"
+        ),
+    )
+    parser.add_argument(
+        "--quick-test-fast",
+        action="store_true",
+        help="Same crawl/export as --quick-test but skip preflight and pytest",
+    )
+    parser.add_argument(
+        "--quick-test-skip-preflight",
+        action="store_true",
+        help="With --quick-test: skip GSC/PSI preflight checks",
+    )
+    parser.add_argument(
+        "--quick-test-skip-pytest",
+        action="store_true",
+        help="With --quick-test: skip focused pytest regression subset",
+    )
+    parser.add_argument(
+        "--quick-test-skip-audit",
+        action="store_true",
+        help="With --quick-test: skip post-export workbook audit",
+    )
+    parser.add_argument(
+        "--install-semantic",
+        action="store_true",
+        help=(
+            "Install/verify the spaCy en_core_web_sm model "
+            "(requires: uv sync --extra semantic)"
         ),
     )
     parser.add_argument(
@@ -26,7 +55,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help=(
             "Trigger Google Search Console OAuth flow only and create/refresh "
-            "src/hype_frog/token.json from src/hype_frog/client_secrets.json"
+            "secrets/token.json from secrets/client_secrets.json"
         ),
     )
     parser.add_argument(
@@ -64,6 +93,10 @@ def run(argv: list[str] | None = None) -> None:
                 psi_probe_url=args.psi_probe_url,
             )
         )
+    if args.install_semantic:
+        ok, message = install_semantic_model()
+        print(message)
+        raise SystemExit(0 if ok else 1)
     if args.gsc_auth:
         ok, token_path = ensure_gsc_oauth_token()
         if ok:
@@ -71,11 +104,17 @@ def run(argv: list[str] | None = None) -> None:
         else:
             print(
                 "GSC OAuth token bootstrap failed. Ensure "
-                "src/hype_frog/client_secrets.json exists and re-run --gsc-auth."
+                "secrets/client_secrets.json exists and re-run --gsc-auth."
             )
         return
-    preset: RunConfig | None = quick_test_run_config() if args.quick_test else None
-    asyncio.run(_async_main(preset))
+    if args.quick_test or args.quick_test_fast:
+        options = QuickTestOptions(
+            skip_preflight=args.quick_test_fast or args.quick_test_skip_preflight,
+            skip_pytest=args.quick_test_fast or args.quick_test_skip_pytest,
+            skip_workbook_audit=args.quick_test_skip_audit,
+        )
+        raise SystemExit(asyncio.run(run_quick_test_gate(options)))
+    asyncio.run(_async_main(None))
 
 
 if __name__ == "__main__":

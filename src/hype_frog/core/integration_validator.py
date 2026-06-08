@@ -24,6 +24,10 @@ from hype_frog.crawler.gsc_engine import (
     SCOPES,
 )
 from hype_frog.crawler.psi_engine import get_psi_api_key, probe_psi_api_key
+from hype_frog.extractors.semantic_setup import (
+    SemanticEngineStatus,
+    probe_semantic_engine,
+)
 
 _DEFAULT_PSI_PROBE_URL = "https://example.com"
 _GSC_READONLY_SCOPE = SCOPES[0]
@@ -255,6 +259,25 @@ async def check_psi_api_live(test_url: str) -> IntegrationCheck:
     )
 
 
+def check_semantic_engine() -> IntegrationCheck:
+    probe = probe_semantic_engine()
+    if probe.status == SemanticEngineStatus.READY:
+        return IntegrationCheck(
+            name="Semantic engine (spaCy NER)",
+            status=CheckStatus.PASS,
+            message=probe.message,
+            details={"model": probe.model_name, "mode": "spaCy NER"},
+        )
+    return IntegrationCheck(
+        name="Semantic engine (spaCy NER)",
+        status=CheckStatus.WARN,
+        message=(
+            f"{probe.message} Crawls still populate entity columns via keyword fallback."
+        ),
+        details={"model": probe.model_name, "mode": "Keyword fallback"},
+    )
+
+
 def check_optional_llm_keys() -> list[IntegrationCheck]:
     checks: list[IntegrationCheck] = []
     for env_name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
@@ -294,6 +317,7 @@ async def run_integration_validation(
         check_psi_api_key_present(),
     ]
     checks.extend(check_optional_llm_keys())
+    checks.append(check_semantic_engine())
 
     token_check = checks[2]
     if token_check.status == CheckStatus.PASS:

@@ -1,0 +1,86 @@
+"""Extraction source consistency helpers in the HTTP/render fetch path."""
+
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from hype_frog.crawler.fetcher import _fetch_render_with_retries
+from hype_frog.crawler.network_engine import RenderedFetchDiagnostics
+
+
+def _diag(*, html: str | None, source: str = "rendered_browser") -> RenderedFetchDiagnostics:
+    return RenderedFetchDiagnostics(
+        html=html,
+        raw_html=None,
+        extraction_source=source,
+        extraction_state="complete" if html else "partial",
+        response_headers={},
+        field_lcp_ms=None,
+        field_cls=None,
+        raw_word_count=0,
+        rendered_word_count=0,
+        is_js_dependent=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_render_with_retries_uses_primary_url_first() -> None:
+    calls: list[str] = []
+
+    async def fake_fetch(
+        render_url: str,
+        *,
+        render_wait_ms: int,
+        selector_wait_ms: int,
+        playwright_session_manager: object | None,
+    ) -> RenderedFetchDiagnostics:
+        del render_wait_ms, selector_wait_ms, playwright_session_manager
+        calls.append(render_url)
+        if render_url.endswith("/final"):
+            return _diag(html="<html>ok</html>")
+        return _diag(html=None)
+
+    with patch("hype_frog.crawler.fetcher._fetch_render_diagnostics", side_effect=fake_fetch):
+        result = await _fetch_render_with_retries(
+            primary_url="https://example.com/final",
+            fallback_url="https://example.com/start",
+            render_wait_ms=4000,
+            selector_wait_ms=3000,
+            playwright_session_manager=None,
+        )
+
+    assert result["html"] == "<html>ok</html>"
+    assert calls[0] == "https://example.com/final"
+
+
+@pytest.mark.asyncio
+async def test_fetch_render_with_retries_falls_back_to_seed_url() -> None:
+    calls: list[str] = []
+
+    async def fake_fetch(
+        render_url: str,
+        *,
+        render_wait_ms: int,
+        selector_wait_ms: int,
+        playwright_session_manager: object | None,
+    ) -> RenderedFetchDiagnostics:
+        del render_wait_ms, selector_wait_ms, playwright_session_manager
+        calls.append(render_url)
+        if render_url == "https://example.com/start":
+            return _diag(html="<html>seed</html>")
+        return _diag(html=None)
+
+    with patch("hype_frog.crawler.fetcher._fetch_render_diagnostics", side_effect=fake_fetch):
+        result = await _fetch_render_with_retries(
+            primary_url="https://example.com/final",
+            fallback_url="https://example.com/start",
+            render_wait_ms=4000,
+            selector_wait_ms=3000,
+            playwright_session_manager=None,
+        )
+
+    assert result["html"] == "<html>seed</html>"
+    assert "https://example.com/final" in calls
+    assert "https://example.com/start" in calls

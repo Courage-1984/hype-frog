@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from collections import deque
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -19,6 +20,7 @@ from hype_frog.core import get_logger
 from hype_frog.core.file_utils import build_output_filename
 from hype_frog.core.url_normalization import normalize_url
 from hype_frog.crawler import create_session, fetch_and_parse, parse_sitemap
+from hype_frog.crawler.network_engine import PlaywrightSessionManager
 from hype_frog.core.models import CrawlResult, CrawlRowPayload
 from hype_frog.extractors.semantic_engine import IntentAnalyzer
 from hype_frog.orchestration.run_setup import RunSetup
@@ -160,6 +162,7 @@ class CrawlExecutionResult:
     checkpoint_every: int
     crawl_completed: bool
     check_external_link_status: bool
+    crawl_duration_seconds: float = 0.0
 
 
 async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
@@ -211,7 +214,11 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                 "Applied initial seed cap: limiting run to first %s URLs.",
                 len(urls),
             )
-        max_depth = _max_depth_from_env(default=3)
+        max_depth = (
+            setup.bfs_max_depth
+            if setup.bfs_max_depth is not None
+            else _max_depth_from_env(default=3)
+        )
 
         if setup.workers_preset is not None:
             workers = setup.workers_preset
@@ -223,7 +230,11 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             full_suite = bool(setup.full_suite_preset)
             previous_audit_path = (setup.previous_audit_path_preset or "").strip()
             checkpoint_every = int(setup.checkpoint_every_preset or 0)
-            logger.info("Crawl safety profile: preset (Faster: 4 workers, 1.5s delay)")
+            logger.info(
+                "Crawl safety profile: preset (%s workers, %ss delay)",
+                workers,
+                request_delay,
+            )
             logger.info("Run mode: Full SEO suite (preset)")
             logger.info("Checkpoint save: disabled (preset)")
         else:
@@ -284,6 +295,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
 
         logger.info("Output file: %s", output_filename)
         print("\n" + "=" * 30)
+        crawl_started = time.perf_counter()
         logger.info("Starting crawl of %s URLs...", len(urls))
         logger.info(
             f"Max Workers: {workers} | Delay: {request_delay}s | "
@@ -293,6 +305,21 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
 
         semaphore = asyncio.Semaphore(workers)
         robots_cache: dict[str, dict[str, object]] = {}
+        playwright_manager: PlaywrightSessionManager | None = None
+        accurate_render_available = setup.crawl_mode == "accurate"
+        if accurate_render_available:
+            playwright_manager = PlaywrightSessionManager()
+            probe_url = urls[0] if urls else setup.target_input
+            if await playwright_manager.get_context(str(probe_url)) is None:
+                logger.warning(
+                    "Accurate crawl mode requested but Playwright is unavailable; "
+                    "using raw_http extraction for all URLs in this run."
+                )
+                accurate_render_available = False
+            else:
+                logger.info(
+                    "Accurate crawl mode: shared Playwright session active for rendered_browser extraction."
+                )
         resumed_results: list[CrawlResult] = []
         checkpoint_completed_urls: set[str] = set()
         if os.path.exists(checkpoint_file):
@@ -396,84 +423,90 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                         render_wait_ms=setup.render_wait_ms,
                         selector_wait_ms=setup.selector_wait_ms,
                         depth=next_depth,
+                        render_pages=accurate_render_available,
+                        playwright_session_manager=playwright_manager,
                     )
                 )
                 in_flight[task] = (next_url, next_depth, discovered_on_url, phase)
 
-        _schedule_available()
-        while in_flight:
-            done_tasks, _pending = await asyncio.wait(
-                set(in_flight),
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            for done_task in done_tasks:
-                (
-                    scheduled_url,
-                    scheduled_depth,
-                    discovered_on_url,
-                    scheduled_phase,
-                ) = in_flight.pop(done_task)
-                result_payload: CrawlRowPayload = await done_task
-                discovered_from = discovered_on_url or ""
-                if scheduled_url in sitemap_seed_urls:
-                    result_payload.main.values["Discovered On URL"] = ""
-                    result_payload.extra.values["Discovered On URL"] = ""
-                else:
-                    result_payload.main.values["Discovered On URL"] = discovered_from
-                    result_payload.extra.values["Discovered On URL"] = discovered_from
-                await _apply_search_intent(result_payload, analyzer=intent_analyzer)
-                typed_results.append(result_payload)
-                main_row, extra_row = result_payload.model_dump_rows()
-                result: CrawlResult = {"main": main_row, "extra": extra_row}
-                pending_batch.append(result)
-                crawled_count += 1
-                url_done = main_row.get("URL")
-                if url_done:
-                    completed_urls_runtime.add(url_done)
-                    completed_normalized.add(_normalize_url_key(url_done))
-                if scheduled_depth < max_depth:
-                    for discovered_url in _candidate_internal_links(result_payload):
-                        if discovered_url in queued_urls:
-                            continue
-                        if not _can_enqueue():
-                            break
-                        queued_urls.add(discovered_url)
-                        bfs_queue.append(
-                            (discovered_url, scheduled_depth + 1, scheduled_url)
-                        )
-                        crawl_urls_runtime.append(discovered_url)
-                    total_urls = len(crawl_urls_runtime) + len(checkpoint_completed_urls)
-                if len(pending_batch) >= flush_batch_size:
-                    cache.upsert_results(pending_batch)
-                    pending_batch = []
-                done_count = crawled_count
-                if checkpoint_every > 0 and done_count % checkpoint_every == 0:
-                    if pending_batch:
+        try:
+            _schedule_available()
+            while in_flight:
+                done_tasks, _pending = await asyncio.wait(
+                    set(in_flight),
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for done_task in done_tasks:
+                    (
+                        scheduled_url,
+                        scheduled_depth,
+                        discovered_on_url,
+                        scheduled_phase,
+                    ) = in_flight.pop(done_task)
+                    result_payload: CrawlRowPayload = await done_task
+                    discovered_from = discovered_on_url or ""
+                    if scheduled_url in sitemap_seed_urls:
+                        result_payload.main.values["Discovered On URL"] = ""
+                        result_payload.extra.values["Discovered On URL"] = ""
+                    else:
+                        result_payload.main.values["Discovered On URL"] = discovered_from
+                        result_payload.extra.values["Discovered On URL"] = discovered_from
+                    await _apply_search_intent(result_payload, analyzer=intent_analyzer)
+                    typed_results.append(result_payload)
+                    main_row, extra_row = result_payload.model_dump_rows()
+                    result: CrawlResult = {"main": main_row, "extra": extra_row}
+                    pending_batch.append(result)
+                    crawled_count += 1
+                    url_done = main_row.get("URL")
+                    if url_done:
+                        completed_urls_runtime.add(url_done)
+                        completed_normalized.add(_normalize_url_key(url_done))
+                    if scheduled_depth < max_depth:
+                        for discovered_url in _candidate_internal_links(result_payload):
+                            if discovered_url in queued_urls:
+                                continue
+                            if not _can_enqueue():
+                                break
+                            queued_urls.add(discovered_url)
+                            bfs_queue.append(
+                                (discovered_url, scheduled_depth + 1, scheduled_url)
+                            )
+                            crawl_urls_runtime.append(discovered_url)
+                        total_urls = len(crawl_urls_runtime) + len(checkpoint_completed_urls)
+                    if len(pending_batch) >= flush_batch_size:
                         cache.upsert_results(pending_batch)
                         pending_batch = []
-                    checkpoint_results = cache.all_results()
-                    save_checkpoint(
-                        checkpoint_file,
-                        checkpoint_results,
-                        crawl_urls_runtime,
-                        checkpoint_completed_urls,
-                    )
-                    logger.info(
-                        "Checkpoint saved: %s/%s -> %s",
-                        done_count,
-                        total_urls,
-                        checkpoint_file,
-                    )
-                if (
-                    seed_phase_active
-                    and scheduled_phase == "seed"
-                    and _ready_for_bfs_phase()
-                ):
-                    seed_phase_active = False
-                    _log_phase_banner(
-                        f"PHASE 2/2: BFS expansion from discovered internal links ({len(bfs_queue)} queued)"
-                    )
-            _schedule_available()
+                    done_count = crawled_count
+                    if checkpoint_every > 0 and done_count % checkpoint_every == 0:
+                        if pending_batch:
+                            cache.upsert_results(pending_batch)
+                            pending_batch = []
+                        checkpoint_results = cache.all_results()
+                        save_checkpoint(
+                            checkpoint_file,
+                            checkpoint_results,
+                            crawl_urls_runtime,
+                            checkpoint_completed_urls,
+                        )
+                        logger.info(
+                            "Checkpoint saved: %s/%s -> %s",
+                            done_count,
+                            total_urls,
+                            checkpoint_file,
+                        )
+                    if (
+                        seed_phase_active
+                        and scheduled_phase == "seed"
+                        and _ready_for_bfs_phase()
+                    ):
+                        seed_phase_active = False
+                        _log_phase_banner(
+                            f"PHASE 2/2: BFS expansion from discovered internal links ({len(bfs_queue)} queued)"
+                        )
+                    _schedule_available()
+        finally:
+            if playwright_manager is not None:
+                await playwright_manager.aclose()
         if pending_batch:
             cache.upsert_results(pending_batch)
         if checkpoint_every > 0:
@@ -485,7 +518,34 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                 checkpoint_completed_urls,
             )
 
+        rendered_rows = sum(
+            1
+            for row in typed_results
+            if row.main.values.get("Extraction Source") == "rendered_browser"
+        )
+        raw_rows = sum(
+            1
+            for row in typed_results
+            if row.main.values.get("Extraction Source") == "raw_http"
+        )
+        fallback_rows = sum(
+            1 for row in typed_results if row.extra.values.get("Extraction Source Fallback")
+        )
+        crawl_duration_seconds = round(time.perf_counter() - crawl_started, 1)
         _log_phase_banner("FINALIZE: Crawl complete, generating Excel report")
+        logger.info(
+            "Crawl finished in %.1fs (%s URLs, %s workers).",
+            crawl_duration_seconds,
+            len(typed_results),
+            workers,
+        )
+        logger.info(
+            "Extraction sources: rendered_browser=%s raw_http=%s render_fallback=%s (crawl_mode=%s).",
+            rendered_rows,
+            raw_rows,
+            fallback_rows,
+            setup.crawl_mode,
+        )
         cache.close(cleanup_file=True)
         return CrawlExecutionResult(
             output_filename=output_filename,
@@ -502,4 +562,5 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             checkpoint_every=checkpoint_every,
             crawl_completed=True,
             check_external_link_status=setup.check_external_link_status,
+            crawl_duration_seconds=crawl_duration_seconds,
         )

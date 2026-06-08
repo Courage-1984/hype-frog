@@ -624,6 +624,26 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
                 ),
             )
 
+    og_health_col = headers.get("OG Image Health")
+    if og_health_col and end_row >= start_row:
+        health_letter = get_column_letter(og_health_col)
+        health_rng = f"{health_letter}{start_row}:{health_letter}{end_row}"
+        worksheet.conditional_formatting.add(
+            health_rng,
+            FormulaRule(
+                formula=[
+                    f'OR(ISNUMBER(SEARCH("Outlier",{health_letter}{start_row})),'
+                    f'ISNUMBER(SEARCH("Legacy",{health_letter}{start_row})),'
+                    f'ISNUMBER(SEARCH("legacy",{health_letter}{start_row})),'
+                    f'ISNUMBER(SEARCH("Generic",{health_letter}{start_row})),'
+                    f'ISNUMBER(SEARCH("Missing",{health_letter}{start_row})))'
+                ],
+                stopIfTrue=True,
+                fill=PatternFill("solid", fgColor="FCE4D6"),
+                font=Font(color="833C0C", bold=True),
+            ),
+        )
+
     og_url_col = headers.get("Current OG-Image URL")
     og_preview_col = headers.get("OG Image Preview")
     if og_preview_col and og_url_col and end_row >= start_row:

@@ -314,6 +314,8 @@ async def test_execute_crawl_bfs_visits_depth_1_before_depth_2(
     for prev, nxt in zip(depths, depths[1:]):
         assert prev <= nxt, f"BFS invariant violated: {prev} → {nxt}"
 
+    assert result.crawl_duration_seconds >= 0.0
+
     # Rule #3: every emitted payload carries an explicit Extraction State.
     assert len(result.crawl_rows) == 7
     for row in result.crawl_rows:

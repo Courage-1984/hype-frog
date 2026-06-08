@@ -544,6 +544,14 @@ wheels = [
 ]
 
 [[package]]
+name = "en-core-web-sm"
+version = "3.8.0"
+source = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
+wheels = [
+    { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl", hash = "sha256:1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85" },
+]
+
+[[package]]
 name = "et-xmlfile"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -837,7 +845,6 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "scipy" },
-    { name = "spacy" },
 ]
 
 [package.optional-dependencies]
@@ -853,11 +860,16 @@ llm = [
 render = [
     { name = "playwright" },
 ]
+semantic = [
+    { name = "en-core-web-sm" },
+    { name = "spacy" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.10.0" },
     { name = "beautifulsoup4", specifier = ">=4.12.0" },
+    { name = "en-core-web-sm", marker = "extra == 'semantic'", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" },
     { name = "google-api-python-client", specifier = ">=2.0.0" },
     { name = "google-auth-oauthlib", specifier = ">=1.0.0" },
     { name = "lxml", specifier = ">=5.0.0" },
@@ -874,9 +886,9 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
     { name = "scipy", specifier = ">=1.11.0" },
-    { name = "spacy", specifier = ">=3.8.14" },
+    { name = "spacy", marker = "extra == 'semantic'", specifier = ">=3.8.14" },
 ]
-provides-extras = ["dev", "render", "llm"]
+provides-extras = ["semantic", "dev", "render", "llm"]
 
 [[package]]
 name = "idna"

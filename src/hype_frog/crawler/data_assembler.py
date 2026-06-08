@@ -427,8 +427,10 @@ def assemble_from_html(
     )
 
     heading_outline = extract_heading_outline(html)
+    h1_texts = list(heading_outline.headings_by_level.get(1, ()))
     extra_values["H1 Count"] = heading_outline.h1_count
     extra_values["Current H-Tag Structure"] = heading_outline.current_h_tag_structure
+    extra_values["Primary H1 Content"] = h1_texts[0] if h1_texts else None
     extra_values["Missing H1 Flag"] = heading_outline.h1_count == 0
     extra_values["Multiple H1 Flag"] = heading_outline.h1_count > 1
     for level in range(1, 7):
@@ -500,6 +502,7 @@ def assemble_from_html(
                 "top_entities": None,
                 "citation_count": 0,
                 "aeo_score": None,
+                "analysis_mode": "Error",
             }
         extra_values["Entity Density (%)"] = semantic.get("entity_density")
         top_entities = semantic.get("top_entities")
@@ -510,6 +513,7 @@ def assemble_from_html(
             semantic.get("citation_count") or 0
         )
         extra_values["Semantic AEO Score"] = semantic.get("aeo_score")
+        extra_values["Semantic Analysis Mode"] = semantic.get("analysis_mode")
 
     aeo_snippets = extract_aeo_snippets(html)
     extra_values["aeo_snippets"] = aeo_snippets

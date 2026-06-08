@@ -94,10 +94,10 @@ class PageRowMetricsModel(BaseModel):
     )
 
     url: str = Field(default="", alias="URL")
-    desktop_psi_score: int = Field(default=0, alias="Desktop PSI Score")
-    mobile_psi_score: int = Field(default=0, alias="Mobile PSI Score")
-    mobile_lcp_s: float = Field(default=0.0, alias="Mobile LCP (s)")
-    cwv_lcp_s: float = Field(default=0.0, alias="CWV LCP (s)")
+    desktop_psi_score: int | None = Field(default=None, alias="Desktop PSI Score")
+    mobile_psi_score: int | None = Field(default=None, alias="Mobile PSI Score")
+    mobile_lcp_s: float | None = Field(default=None, alias="Mobile LCP (s)")
+    cwv_lcp_s: float | None = Field(default=None, alias="CWV LCP (s)")
     gsc_clicks: float = Field(default=0.0, alias="GSC Clicks")
     gsc_impressions: float = Field(default=0.0, alias="GSC Impressions")
 
@@ -106,12 +106,25 @@ class PageRowMetricsModel(BaseModel):
         "mobile_psi_score",
         "mobile_lcp_s",
         "cwv_lcp_s",
-        "gsc_clicks",
-        "gsc_impressions",
         mode="before",
     )
     @classmethod
-    def _coerce_numeric_defaults(cls, value: Any) -> Any:
+    def _coerce_optional_psi_metrics(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return None
+        if math.isnan(numeric) or math.isinf(numeric):
+            return None
+        return value
+
+    @field_validator("gsc_clicks", "gsc_impressions", mode="before")
+    @classmethod
+    def _coerce_gsc_numeric_defaults(cls, value: Any) -> Any:
         if value is None:
             return 0
         if isinstance(value, str) and not value.strip():
@@ -139,10 +152,18 @@ def harden_page_row_metrics(row: dict[str, Any]) -> dict[str, Any]:
         validated = PageRowMetricsModel.model_validate(row)
     except ValidationError:
         fallback = dict(row)
-        fallback["Desktop PSI Score"] = int(_safe_float(fallback.get("Desktop PSI Score") or 0))
-        fallback["Mobile PSI Score"] = int(_safe_float(fallback.get("Mobile PSI Score") or 0))
-        fallback["Mobile LCP (s)"] = _safe_float(fallback.get("Mobile LCP (s)") or 0.0)
-        fallback["CWV LCP (s)"] = _safe_float(fallback.get("CWV LCP (s)") or 0.0)
+        for psi_key in ("Desktop PSI Score", "Mobile PSI Score"):
+            raw = fallback.get(psi_key)
+            if raw is None or str(raw).strip() == "":
+                fallback[psi_key] = None
+            else:
+                fallback[psi_key] = int(_safe_float(raw))
+        for lcp_key in ("Mobile LCP (s)", "CWV LCP (s)"):
+            raw = fallback.get(lcp_key)
+            if raw is None or str(raw).strip() == "":
+                fallback[lcp_key] = None
+            else:
+                fallback[lcp_key] = _safe_float(raw)
         fallback["GSC Clicks"] = _safe_float(fallback.get("GSC Clicks") or 0.0)
         fallback["GSC Impressions"] = _safe_float(fallback.get("GSC Impressions") or 0.0)
         return fallback
@@ -153,6 +174,7 @@ MAIN_ROW_DEFAULTS: dict[str, Any] = {
     "URL": "",
     "Extraction State": "skipped",
     "Extraction Source": "raw_http",
+    "Extraction Source Fallback": False,
     "Status Code": None,
     "Load Time (s)": None,
     "Indexability": "Indexable",
@@ -183,15 +205,18 @@ MAIN_ROW_DEFAULTS: dict[str, Any] = {
     "CWV CLS": None,
     "Field vs Lab": "Lab",
     "Regional Authority Score": 0,
-    "Desktop PSI Score": 0,
-    "Mobile PSI Score": 0,
-    "Mobile LCP (s)": 0.0,
-    "Mobile CLS": 0.0,
-    "Mobile TTFB (s)": 0.0,
+    "PSI Data Status": "Not measured",
+    "Desktop PSI Score": None,
+    "Mobile PSI Score": None,
+    "Mobile LCP (s)": None,
+    "Mobile CLS": None,
+    "Mobile TTFB (s)": None,
     "GSC Clicks": 0.0,
     "GSC Impressions": 0.0,
     "GSC CTR": 0.0,
     "GSC Avg Position": 0.0,
+    "GSC Data Freshness": None,
+    "GSC Coverage Note": None,
     "Click Depth": None,
     "Orphan Pages": False,
     "Internal PageRank": 0.0,
@@ -211,6 +236,7 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "URL": "",
     "Extraction State": "skipped",
     "Extraction Source": "raw_http",
+    "Extraction Source Fallback": False,
     "Status Code": None,
     "Final URL": None,
     "Protocol": None,
@@ -246,6 +272,7 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "Pagination rel=next": False,
     "Pagination rel=prev": False,
     "H1 Count": 0,
+    "Primary H1 Content": None,
     "Current H-Tag Structure": None,
     "Current Page Copy Snippet": None,
     "Missing H1 Flag": False,
@@ -270,6 +297,13 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "Nofollow Internal Links Count": 0,
     "Nofollow External Links Count": 0,
     "Generic Anchor Text Count": 0,
+    "Broken Internal Links Count": 0,
+    "Unresolved Internal Links Count": 0,
+    "JS Dependent": False,
+    "Raw Words": 0,
+    "Rendered Words": 0,
+    "Field LCP (ms)": None,
+    "Field CLS": None,
     "Param URL Flag": False,
     "URL Depth": 0,
     "Image Count": 0,
@@ -312,6 +346,11 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "Inlinks Bucket": None,
     "Important But Underlinked": False,
     "Cannibalization Hint": None,
+    "Draft Page Flag": False,
+    "Probable Duplicate Flag": False,
+    "Duplicate Of URL": None,
+    "Content Similarity %": None,
+    "Heading Structure Cluster Size": 0,
     "FAQ Section Count": 0,
     "Question Heading Count": 0,
     "HowTo Signal": False,
@@ -339,15 +378,18 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "Warning Issues Count": 0,
     "Observation Issues Count": 0,
     "Matched Issues": None,
-    "Desktop PSI Score": 0,
-    "Mobile PSI Score": 0,
-    "Mobile LCP (s)": 0.0,
-    "Mobile CLS": 0.0,
-    "Mobile TTFB (s)": 0.0,
+    "PSI Data Status": "Not measured",
+    "Desktop PSI Score": None,
+    "Mobile PSI Score": None,
+    "Mobile LCP (s)": None,
+    "Mobile CLS": None,
+    "Mobile TTFB (s)": None,
     "GSC Clicks": 0.0,
     "GSC Impressions": 0.0,
     "GSC CTR": 0.0,
     "GSC Avg Position": 0.0,
+    "GSC Data Freshness": None,
+    "GSC Coverage Note": None,
     "GSC Inspection Coverage": None,
     "GSC Inspection Verdict": None,
     "GSC Inspection Coverage State": None,
@@ -387,6 +429,7 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "Top Entities": None,
     "Citation Candidate Count": 0,
     "Semantic AEO Score": None,
+    "Semantic Analysis Mode": "No content",
     # LLM intent classifier. Populated as one of: Informational,
     # Transactional, Navigational, Commercial Investigation, or Unknown.
     # Defaults to Unknown so missing API keys and skipped LLM calls remain

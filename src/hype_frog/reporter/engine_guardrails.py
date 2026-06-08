@@ -53,7 +53,9 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     ),
     "Media": "Image inventory, alt coverage, filename quality, and mixed content flags.",
     "Schema & Metadata": "JSON-LD, microdata, Open Graph, and Twitter card signals.",
-    "AIOSEO": "Plugin-aligned recommendations and edit links for AIOSEO users.",
+    "AIOSEO Recommendations": (
+        "Plugin-aligned recommendations and edit links for AIOSEO users."
+    ),
     "Security": "Transport and hardening headers (HSTS, CSP, XFO, referrer policy, etc.).",
     "PSI Performance": "Lab PageSpeed scores and mobile CWV-related proxies.",
     "Indexability": "Robots directives, canonicals, and indexability classification.",
@@ -66,12 +68,34 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "SitemapQA": "Sitemap coverage, URL membership checks, and sitemap metadata QA.",
     "Quick Reference Guide": "In-workbook SEO and AEO copy standards and guardrails.",
     "Glossary & Legend": "Definitions for metrics, badges, and workbook conventions.",
-    "RunMetadata": "Run configuration, timestamps, and environment notes.",
-    "DeltaFromPreviousRun": (
-        "New, fixed, and persistent issues compared to a prior audit workbook."
+    "Audit Run Details": "Run configuration, timestamps, and environment notes.",
+    "Playbook": (
+        "SEO and AEO copy standards, glossary, and workflow reference (start here for rules)."
     ),
-    "ResolvedIssues": "Issues marked resolved when compared to the previous export.",
+    "DeltaFromPreviousRun": (
+        "New, fixed, and persistent issues compared to a prior audit workbook. "
+        "First runs show a baseline note when no previous export was supplied."
+    ),
+    "ResolvedIssues": (
+        "Issues marked resolved when compared to the previous export. "
+        "First runs show a baseline note when no previous export was supplied."
+    ),
     "CrawlGraph": "Derived link graph metrics (click depth, inlinks, PageRank proxy).",
+    "Issue Register": (
+        "Unified issue log: site-wide rollups from Summary plus per-URL rows from Issue Inventory."
+    ),
+    "Technical Diagnostics": (
+        "Per-URL technical, indexability, redirect, security, PSI, and Search Console signals."
+    ),
+    "Content & AI Readiness": (
+        "Per-URL content depth, schema, media, and answer-engine readiness metrics."
+    ),
+    "Link Intelligence": (
+        "Per-URL internal link summary rows plus anchor-level detail for broken-link triage."
+    ),
+    "Template & Duplication Risks": (
+        "Duplicate titles/meta, draft/copy pages, and folder-level template pattern risks."
+    ),
 }
 
 
@@ -163,6 +187,9 @@ _HEADER_TOOLTIP_MESSAGES: dict[str, str] = {
     "FAQ/QA Draft": ("Draft FAQ or Q&A pairs for structured answers and AEO coverage."),
     "Current OG-Image URL": (
         "Open Graph image URL detected on the page. Used for preview and sharing QA."
+    ),
+    "OG Image Health": (
+        "Flags OG images that differ from the site-wide default or look like legacy social assets."
     ),
     "OG Image Preview": CONTENT_HUB_HEADER_COMMENT_OG_IMAGE_PREVIEW,
     "Social Share Note": ("Optional note for social snippets or share messaging."),

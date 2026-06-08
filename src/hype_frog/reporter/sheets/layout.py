@@ -86,6 +86,8 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "SEO Health Score",
         "GSC Impressions",
         "GSC CTR",
+        "GSC Data Freshness",
+        "GSC Coverage Note",
         "Revenue Intent",
         "Critical Issues Count",
         "Warning Issues Count",
@@ -119,7 +121,7 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "Nofollow External Links Count",
         "Internal Link Statuses",
     ],
-    "AIOSEO": [
+    "AIOSEO Recommendations": [
         "URL",
         "WordPress Post ID",
         "Direct Edit Link",
@@ -167,6 +169,7 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "H6 Health",
         "Elementor Builder Link",
         "Current OG-Image URL",
+        "OG Image Health",
         "OG Image Preview",
         "Open in Main",
     ],
@@ -281,6 +284,10 @@ CONTENT_HUB_ROW2_HEADER_COMMENTS: dict[str, str] = {
         "title, and heading language before publishing."
     ),
     "Current OG-Image URL": "Sanitized Open Graph image URL from the crawl.",
+    "OG Image Health": (
+        "Compares this page's OG image filename to the most common asset across the crawl. "
+        "Flags legacy/outlier social images (for example old event art vs a new og-image.png default)."
+    ),
     "OG Image Preview": CONTENT_HUB_HEADER_COMMENT_OG_IMAGE_PREVIEW,
     "Open in Main": "Jumps to Main (URL column) or Technical Diagnostics column A for this URL.",
 }
@@ -418,7 +425,7 @@ def apply_intelligent_sorting(worksheet: Worksheet, sheet_name: str) -> None:
                     str(r[ucol - 1] or "") if ucol else "",
                 ),
             )
-    elif sheet_name == "AIOSEO":
+    elif sheet_name == "AIOSEO Recommendations":
         severity_rank = {"Critical": 0, "Warning": 1, "Observation": 2}
         sev_col = headers.get("Severity")
         pri_col = headers.get("Priority Score")
@@ -596,6 +603,7 @@ def apply_column_widths(worksheet: Worksheet) -> None:
         "Assigned Owner": 15.0,
         "Elementor Builder Link": 18.14,
         "Current OG-Image URL": 15.0,
+        "OG Image Health": 42.0,
         "Open in Main": 22.57,
     }.items():
         col_idx = headers.get(header_name)

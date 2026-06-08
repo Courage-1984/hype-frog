@@ -36,6 +36,10 @@ from hype_frog.orchestration.export_registry import (
 from hype_frog.orchestration.run_setup import RunSetup
 from hype_frog.pipeline.export import sanitize_rows, to_excel_safe
 from hype_frog.reporter import adjust_sheet_format, apply_tab_hyperlinks
+from hype_frog.reporter.sheets.config import (
+    AIOSEO_RECOMMENDATIONS_SHEET,
+    AUDIT_RUN_DETAILS_SHEET,
+)
 from hype_frog.reporter.engine_rows import (
     CONTENT_HUB_EXPORT_COLUMNS,
     CONTENT_HUB_METRICS_EXPORT_COLUMNS,
@@ -70,6 +74,7 @@ from hype_frog.rules import (
     root_cause_and_fix,
 )
 from hype_frog.core.url_normalization import normalize_url
+from hype_frog.extractors.semantic_setup import probe_semantic_engine
 
 logger = get_logger(__name__)
 
@@ -189,7 +194,12 @@ def execute_export(
             sheet_columns = get_standard_sheet_columns()
             merged_columns = get_merged_sheet_columns()
             aioseo_rows = build_aioseo_rows_fn(extra_rows, main_by_url, DEFAULT_OWNER_BY_SEVERITY)
-            write_dict_rows_sheet(writer, "AIOSEO", sheet_columns["AIOSEO"], aioseo_rows)
+            write_dict_rows_sheet(
+                writer,
+                AIOSEO_RECOMMENDATIONS_SHEET,
+                sheet_columns[AIOSEO_RECOMMENDATIONS_SHEET],
+                aioseo_rows,
+            )
             redirects_rows = []
             for row in extra_rows:
                 redirects_rows.append({
@@ -225,7 +235,7 @@ def execute_export(
                             "Crawlable": crawlable,
                         }
                     )
-            duplicate_rows = build_duplicates_rows(main_rows)
+            duplicate_rows = build_duplicates_rows(main_rows, extra_rows)
             pattern_rows, template_issue_counts = build_pattern_rows(
                 extra_rows,
                 extract_subfolder_fn=extract_subfolder_fn,
@@ -250,8 +260,12 @@ def execute_export(
                 main_rows=typed_main_rows,
             )
             issue_inventory_df = pd.DataFrame(issue_inventory_rows)
-            technical_diagnostics_rows = build_technical_diagnostics_rows(extra_rows)
-            content_ai_rows = build_content_ai_readiness_rows(extra_rows)
+            technical_diagnostics_rows = build_technical_diagnostics_rows(
+                extra_rows, main_rows=main_rows
+            )
+            content_ai_rows = build_content_ai_readiness_rows(
+                extra_rows, main_rows=main_rows
+            )
             issue_register_rows = build_issue_register_rows(
                 summary_rows=summary_rows,
                 issue_inventory_rows=issue_inventory_rows,
@@ -264,7 +278,11 @@ def execute_export(
                 extra_rows=extra_rows,
                 link_detail_rows=link_rows,
                 crawlgraph_rows=graph_rows,
+                main_rows=main_rows,
             )
+            summary_df = pd.DataFrame(summary_rows)
+            to_excel_safe(summary_df, writer, "Summary", index=False)
+            to_excel_safe(issue_inventory_df, writer, "IssueInventory", index=False)
             template_duplication_rows = build_template_duplication_risks_rows(
                 duplicate_rows=duplicate_rows,
                 pattern_rows=pattern_rows,
@@ -582,10 +600,77 @@ def execute_export(
                 },
             ]
             playbook_rows = list(quick_reference_rows)
+            semantic_probe = probe_semantic_engine()
+            crawl_semantic_modes = {
+                str(row.values.get("Semantic Analysis Mode") or "").strip()
+                for row in typed_extra_rows
+                if str(row.values.get("Semantic Analysis Mode") or "").strip()
+            }
+            gsc_freshness = next(
+                (
+                    str(row.values.get("GSC Data Freshness") or "").strip()
+                    for row in typed_extra_rows
+                    if str(row.values.get("GSC Data Freshness") or "").strip()
+                ),
+                "",
+            )
+            gsc_matched_urls = sum(
+                1
+                for row in typed_extra_rows
+                if str(row.values.get("GSC Coverage Note") or "").startswith("Matched in GSC")
+            )
+            gsc_unmatched_urls = sum(
+                1
+                for row in typed_extra_rows
+                if "No Search Analytics row matched" in str(row.values.get("GSC Coverage Note") or "")
+            )
+            gsc_low_volume_urls = sum(
+                1
+                for row in typed_extra_rows
+                if "low impressions" in str(row.values.get("GSC Coverage Note") or "").lower()
+            )
+            crawl_duration_s = round(crawl_result.crawl_duration_seconds, 1)
+            rendered_source_count = sum(
+                1 for row in typed_extra_rows if row.values.get("Extraction Source") == "rendered_browser"
+            )
+            raw_source_count = sum(
+                1 for row in typed_extra_rows if row.values.get("Extraction Source") == "raw_http"
+            )
+            render_fallback_count = sum(
+                1 for row in typed_extra_rows if row.values.get("Extraction Source Fallback")
+            )
+            logger.info("Crawl duration for Dashboard RunMetadata: %.1fs", crawl_duration_s)
             run_meta_rows = [
                 {"Key": "Run Timestamp", "Value": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")},
                 {"Key": "Total URLs", "Value": len(urls)},
+                {"Key": "Duration (s)", "Value": crawl_duration_s},
+                {"Key": "Crawl Mode", "Value": setup.crawl_mode},
+                {
+                    "Key": "Extraction Source Rendered Count",
+                    "Value": rendered_source_count,
+                },
+                {"Key": "Extraction Source Raw HTTP Count", "Value": raw_source_count},
+                {"Key": "Extraction Source Fallback Count", "Value": render_fallback_count},
+                {"Key": "GSC Data Freshness", "Value": gsc_freshness or "Not available"},
+                {
+                    "Key": "GSC Coverage Note",
+                    "Value": (
+                        f"{gsc_matched_urls} URL(s) matched Search Analytics; "
+                        f"{gsc_unmatched_urls} unmatched; "
+                        f"{gsc_low_volume_urls} low-impression (CTR directional only)"
+                        if gsc_freshness
+                        else "GSC Search Analytics not loaded for this run"
+                    ),
+                },
                 {"Key": "Mode", "Value": "Full Suite"},
+                {
+                    "Key": "Semantic Engine (install probe)",
+                    "Value": semantic_probe.message,
+                },
+                {
+                    "Key": "Semantic Analysis Modes (crawl)",
+                    "Value": ", ".join(sorted(crawl_semantic_modes)) or "N/A",
+                },
                 {"Key": "Workers", "Value": workers},
                 {"Key": "Delay Seconds", "Value": request_delay},
                 {"Key": "Retries", "Value": MAX_RETRIES},
@@ -602,7 +687,9 @@ def execute_export(
                     "Value": int(1 if setup.check_external_link_status else 0),
                 },
             ]
-            to_excel_safe(pd.DataFrame(run_meta_rows), writer, "RunMetadata", index=False)
+            to_excel_safe(
+                pd.DataFrame(run_meta_rows), writer, AUDIT_RUN_DETAILS_SHEET, index=False
+            )
             delta_rows, resolved_issues_df = build_delta_and_trend_rows(
                 issue_inventory_df=issue_inventory_df,
                 typed_extra_rows=typed_extra_rows,
@@ -611,6 +698,7 @@ def execute_export(
                 prev_fixed_issue_ids=prev_fixed_issue_ids,
                 prev_counts=prev_counts,
                 previous_issue_inventory_df=previous_issue_inventory_df,
+                baseline_report=not previous_audit_exists,
             )
             to_excel_safe(pd.DataFrame(delta_rows), writer, "DeltaFromPreviousRun", index=False)
             to_excel_safe(resolved_issues_df, writer, "ResolvedIssues", index=False)
@@ -669,12 +757,6 @@ def execute_export(
                         )
             elif final_step == "apply_workbook_export_guardrails":
                 apply_workbook_export_guardrails(writer.book)
-        if full_suite:
-            desired_order = ["Table of Contents"] + get_sheet_sequence(registry_config)
-            wb = writer.book
-            for idx, tab_name in enumerate(desired_order):
-                if tab_name in wb.sheetnames:
-                    wb.move_sheet(wb[tab_name], offset=-wb.index(wb[tab_name]) + idx)
         logger.info("Audit complete! Report saved to %s", output_filename)
     finally:
         if writer is not None:

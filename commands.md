@@ -16,9 +16,12 @@ $env:Path += ";$HOME\.local\bin"
 .\.venv\Scripts\activate
 
 uv run playwright install chromium
-uv run python -m spacy download en_core_web_sm
 
-uv sync --extra render
+# Semantic / AEO entity columns (spaCy NER — optional; keyword fallback works without this)
+uv sync --extra semantic
+uv run hype-frog --install-semantic
+
+uv sync --extra render --extra semantic
 
 uv run hype-frog --gsc-auth
 
@@ -31,7 +34,8 @@ $env:Path += ";$HOME\.local\bin"
 
 .\.venv\Scripts\activate
 
-uv run hype-frog --quick-test
+uv run hype-frog --quick-test          # full gate: preflight + pytest + 10-URL crawl + workbook audit
+uv run hype-frog --quick-test-fast     # crawl + workbook audit only (~5 min)
 
 uv run hype-frog
 
@@ -53,3 +57,11 @@ uv run hype-frog --validate
 uv run hype-frog --validate --validate-url "https://africanmarketingconfederation.org/"
 
 
+uv sync --extra semantic
+
+uv run hype-frog --install-semantic
+uv run hype-frog --validate
+
+uv sync --extra semantic --extra render --extra dev
+uv run playwright install chromium
+uv run hype-frog --install-semantic

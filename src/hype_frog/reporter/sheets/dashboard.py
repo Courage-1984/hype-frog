@@ -31,14 +31,24 @@ from hype_frog.reporter.sheets.dashboard_config import (
     WARN_COLOR,
 )
 from hype_frog.reporter.sheets.config import (
+    AUDIT_RUN_DETAILS_SHEET,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     STD_BLUE,
     STD_NAVY,
 )
+from hype_frog.reporter.sheets.workbook_layout import (
+    DASHBOARD_ADVANCED_SHEET_LINKS,
+    DASHBOARD_ADVANCED_SHEETS_NOTE,
+    excel_sheet_link_target,
+)
 from hype_frog.reporter.sheets.style_helpers import header_index, to_int
 from hype_frog.reporter.sheets.validation import apply_comment_dimensions
 from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
+from hype_frog.pipeline.broken_links import (
+    count_broken_internal_instances,
+    link_inventory_broken_internal_total_formula,
+)
 from hype_frog.reporter.sheets.conditional import (
     apply_dashboard_metric_conditional_rules,
 )
@@ -79,16 +89,17 @@ _CONTENT_AI_AEO_EXTRACTABILITY_AVG = (
     'MATCH("AEO Extractability Score",\'Content & AI Readiness\'!$1:$1,0))),0)'
 )
 
-# Dashboard KPI: optional external HEAD sniff ratio (values live on RunMetadata).
+# Dashboard KPI: optional external HEAD sniff ratio (values live on Audit Run Details).
+_AUDIT_DETAILS_SHEET_ESC = excel_sheet_link_target(AUDIT_RUN_DETAILS_SHEET)
 _EXCEL_EXTERNAL_LINK_HEALTH_PCT = (
-    '=IF(IFERROR(INDEX(\'RunMetadata\'!$B:$B,MATCH("External Sniff Performed",'
-    '\'RunMetadata\'!$A:$A,0)),0)=0,"",'
-    'IF(IFERROR(INDEX(\'RunMetadata\'!$B:$B,MATCH("External Link Unique Denominator",'
-    '\'RunMetadata\'!$A:$A,0)),0)=0,"",'
-    'IFERROR(IFERROR(INDEX(\'RunMetadata\'!$B:$B,MATCH("External Link Unique 200 OK",'
-    '\'RunMetadata\'!$A:$A,0)),0)/'
-    'IFERROR(INDEX(\'RunMetadata\'!$B:$B,MATCH("External Link Unique Denominator",'
-    '\'RunMetadata\'!$A:$A,0)),1),0)))'
+    f'=IF(IFERROR(INDEX(\'{_AUDIT_DETAILS_SHEET_ESC}\'!$B:$B,MATCH("External Sniff Performed",'
+    f"\'{_AUDIT_DETAILS_SHEET_ESC}\'!$A:$A,0)),0)=0,\"\","
+    f'IF(IFERROR(INDEX(\'{_AUDIT_DETAILS_SHEET_ESC}\'!$B:$B,MATCH("External Link Unique Denominator",'
+    f"\'{_AUDIT_DETAILS_SHEET_ESC}\'!$A:$A,0)),0)=0,\"\","
+    f'IFERROR(IFERROR(INDEX(\'{_AUDIT_DETAILS_SHEET_ESC}\'!$B:$B,MATCH("External Link Unique 200 OK",'
+    f"\'{_AUDIT_DETAILS_SHEET_ESC}\'!$A:$A,0)),0)/"
+    f'IFERROR(INDEX(\'{_AUDIT_DETAILS_SHEET_ESC}\'!$B:$B,MATCH("External Link Unique Denominator",'
+    f"\'{_AUDIT_DETAILS_SHEET_ESC}\'!$A:$A,0)),1),0)))"
 )
 
 _TD_SHEET = "Technical Diagnostics"
@@ -143,22 +154,6 @@ def _sheet_rows(worksheet: Worksheet) -> list[dict[str, Any]]:
         }
         rows.append(row_dict)
     return rows
-
-
-def _count_broken_internal_link_instances(link_inventory_rows: list[dict[str, Any]]) -> int:
-    count = 0
-    for row in link_inventory_rows:
-        link_type = str(row.get("Link Type") or "").strip().lower()
-        if link_type != "internal":
-            continue
-        status = row.get("Status Code")
-        if isinstance(status, (int, float)) and int(status) == 404:
-            count += 1
-            continue
-        status_text = str(status or "").strip()
-        if status_text == "404":
-            count += 1
-    return count
 
 
 def _format_priority_urls_ctr(writer: Any) -> None:
@@ -354,11 +349,10 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             f"1-IFERROR(B5,0)))"
         )
         worksheet["B19"].number_format = "0%"
-        worksheet["A20"] = '=HYPERLINK("#\'Link Inventory\'!A1","Broken Internal Links")'
-        worksheet["B20"] = (
-            "=SUM(COUNTIFS('Link Inventory'!$E:$E,\"Internal\",'Link Inventory'!$F:$F,404),"
-            "COUNTIFS('Link Inventory'!$E:$E,\"Internal\",'Link Inventory'!$F:$F,\"404\"))"
+        worksheet["A20"] = (
+            '=HYPERLINK("#\'Link Inventory\'!A1","Broken Internal Links (instances)")'
         )
+        worksheet["B20"] = link_inventory_broken_internal_total_formula()
         worksheet["A21"] = (
             '=HYPERLINK("#\'Link Intelligence\'!A1","Generic Anchor Links (Total)")'
         )
@@ -573,12 +567,15 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         avg_seo_score_pct=avg_seo_pct_narrative,
         critical_url_count=dashboard_metrics.critical_urls,
     )
-    broken_internal_instances = _count_broken_internal_link_instances(
+    broken_internal_instances = count_broken_internal_instances(
         link_inventory_rows_narrative
     )
-    strategic_narrative_text = (
-        f"{strategic_narrative_text}\n\nBroken internal links: {broken_internal_instances}."
-    )
+    if broken_internal_instances > 0:
+        strategic_narrative_text = (
+            f"{strategic_narrative_text}\n\n"
+            f"Broken internal link instances: {broken_internal_instances} "
+            f"(see KPI B20 and Link Inventory)."
+        )
 
     status_buckets = dashboard_metrics.status_buckets
     error_count = dashboard_metrics.error_count
@@ -616,10 +613,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         f"1-IFERROR(B5,0)))"
     )
     worksheet["B19"].number_format = "0%"
-    worksheet["B20"] = (
-        "=SUM(COUNTIFS('Link Inventory'!$E:$E,\"Internal\",'Link Inventory'!$F:$F,404),"
-        "COUNTIFS('Link Inventory'!$E:$E,\"Internal\",'Link Inventory'!$F:$F,\"404\"))"
-    )
+    worksheet["B20"] = link_inventory_broken_internal_total_formula()
     worksheet["B21"] = "=SUMIFS('Link Intelligence'!$O:$O,'Link Intelligence'!$B:$B,\"Summary\")"
     worksheet["B21"].number_format = "0"
     worksheet["B22"] = _EXCEL_EXTERNAL_LINK_HEALTH_PCT
@@ -795,19 +789,19 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
     worksheet["A26"] = "Run Date"
     worksheet["B26"] = (
-        '=IFERROR(INDEX(\'RunMetadata\'!$B:$B,'
-        'MATCH("Run Timestamp",\'RunMetadata\'!$A:$A,0)),"")'
+        f'=IFERROR(INDEX(\'{_AUDIT_DETAILS_SHEET_ESC}\'!$B:$B,'
+        f'MATCH("Run Timestamp",\'{_AUDIT_DETAILS_SHEET_ESC}\'!$A:$A,0)),"")'
     )
     worksheet["A27"] = "URL Count"
     worksheet["B27"] = (
-        '=IFERROR(INDEX(\'RunMetadata\'!$B:$B,'
-        'MATCH("Total URLs",\'RunMetadata\'!$A:$A,0)),'
+        f'=IFERROR(INDEX(\'{_AUDIT_DETAILS_SHEET_ESC}\'!$B:$B,'
+        f'MATCH("Total URLs",\'{_AUDIT_DETAILS_SHEET_ESC}\'!$A:$A,0)),'
         f"MAX(0,COUNTA({_main_sheet_data_column('URL')})))"
     )
     worksheet["A28"] = "Duration"
     worksheet["B28"] = (
-        '=IFERROR(INDEX(\'RunMetadata\'!$B:$B,'
-        'MATCH("Duration (s)",\'RunMetadata\'!$A:$A,0)),"")'
+        f'=IFERROR(INDEX(\'{_AUDIT_DETAILS_SHEET_ESC}\'!$B:$B,'
+        f'MATCH("Duration (s)",\'{_AUDIT_DETAILS_SHEET_ESC}\'!$A:$A,0)),"")'
     )
     for row in range(26, 29):
         worksheet[f"A{row}"].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
@@ -925,16 +919,29 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
 
     worksheet["I19"] = "Content Hub"
     worksheet["J19"] = f'=HYPERLINK("#\'{CONTENT_OPTIMISATION_HUB_SHEET}\'!A1","Open")'
-    worksheet["I20"] = "Tech Diagnostics"
-    worksheet["J20"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Open")'
-    worksheet["I21"] = "Issue Register"
-    worksheet["J21"] = '=HYPERLINK("#\'Issue Register\'!A1","Open")'
-    for row in (19, 20, 21):
-        worksheet[f"I{row}"].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
-        worksheet[f"J{row}"].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
-        worksheet[f"I{row}"].alignment = Alignment(horizontal="center", vertical="center")
-        worksheet[f"J{row}"].font = Font(color=STD_BLUE, underline="single", bold=True)
-        worksheet[f"J{row}"].alignment = Alignment(horizontal="center", vertical="center")
+    worksheet["I19"].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
+    worksheet["J19"].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
+    worksheet["I19"].alignment = Alignment(horizontal="center", vertical="center")
+    worksheet["J19"].font = Font(color=STD_BLUE, underline="single", bold=True)
+    worksheet["J19"].alignment = Alignment(horizontal="center", vertical="center")
+
+    worksheet["I20"] = "Advanced Sheets"
+    worksheet["I20"].font = Font(bold=True, color=STD_NAVY)
+    worksheet.merge_cells("I20:K20")
+    worksheet["I21"] = DASHBOARD_ADVANCED_SHEETS_NOTE
+    worksheet.merge_cells("I21:K22")
+    worksheet["I21"].alignment = Alignment(wrap_text=True, vertical="top")
+    adv_row = 23
+    for sheet_name, label in DASHBOARD_ADVANCED_SHEET_LINKS:
+        safe = excel_sheet_link_target(sheet_name)
+        worksheet[f"I{adv_row}"] = label
+        worksheet[f"J{adv_row}"] = f'=HYPERLINK("#\'{safe}\'!A1","Open")'
+        for col in ("I", "J"):
+            worksheet[f"{col}{adv_row}"].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
+        worksheet[f"I{adv_row}"].alignment = Alignment(horizontal="left", vertical="center")
+        worksheet[f"J{adv_row}"].font = Font(color=STD_BLUE, underline="single", bold=True)
+        worksheet[f"J{adv_row}"].alignment = Alignment(horizontal="center", vertical="center")
+        adv_row += 1
 
     worksheet["I4"] = "BUSINESS IMPACT SUMMARY"
     worksheet["I5"] = business_impact_narrative

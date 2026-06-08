@@ -36,6 +36,9 @@ from hype_frog.pipeline.link_inventory import (
     annotate_link_details_with_status,
     sniff_external_domains_head,
 )
+from hype_frog.pipeline.content_duplicates import enrich_content_duplicate_signals
+from hype_frog.pipeline.gsc_coverage import format_gsc_data_freshness
+from hype_frog.pipeline.content_hub_metrics import backfill_extra_content_hub_metrics
 from hype_frog.pipeline.enrich import (
     compute_internal_link_intelligence,
 )
@@ -198,6 +201,10 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             logger.warning("GSC metrics unavailable due to runtime error: %s", exc)
             gsc_ctx = GSCEnrichmentContext({}, False, None, None)
         gsc_metrics = gsc_ctx.page_metrics
+        gsc_data_freshness = format_gsc_data_freshness(
+            gsc_ctx.period_start,
+            gsc_ctx.period_end,
+        )
         if gsc_ctx.analytics_query_succeeded and gsc_metrics:
             logger.info(
                 "GSC bulk Search Analytics (30d, page dimension): %s lookup keys materialized.",
@@ -262,9 +269,13 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                 psi_map = await fetch_psi_metrics_batch(
                     session,
                     [
-                        str(row.values.get("URL") or "")
+                        str(
+                            row.values.get("Final URL")
+                            or row.values.get("URL")
+                            or ""
+                        ).strip()
                         for row in extra_rows
-                        if row.values.get("URL")
+                        if row.values.get("Final URL") or row.values.get("URL")
                     ],
                     max_urls=crawl_result.max_psi_urls,
                 )
@@ -285,6 +296,8 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                 normalized_key=normalized_key,
                 psi_map=psi_map,
                 gsc_metrics=gsc_metrics,
+                gsc_analytics_succeeded=gsc_ctx.analytics_query_succeeded,
+                gsc_data_freshness=gsc_data_freshness,
             )
             insp = inspection_by_url.get(url_key) or inspection_by_url.get(normalized_key)
             extra_work.append(_merge_gsc_url_inspection_row(hardened, insp))
@@ -363,6 +376,11 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
         summary_rules = get_summary_rules()
         main_by_url_pre = main_by_url_map(main_rows)
         inlinks_map = build_inlinks_map(extra_work)
+        extra_work = enrich_content_duplicate_signals(
+            main_rows,
+            extra_work,
+            inlinks_map=inlinks_map,
+        )
         extra_work = [
             row_with_seo_health_enrichment(
                 row,
@@ -404,6 +422,24 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             enriched_extra_rows,
             crawl_result.crawl_urls,
         )
+        for main_row, extra_row in zip(
+            enriched_main_rows, enriched_extra_rows, strict=False
+        ):
+            backfill_extra_content_hub_metrics(extra_row.values, main_row.values)
+
+        if gsc_ctx.analytics_query_succeeded:
+            matched = sum(
+                1
+                for row in enriched_extra_rows
+                if str(row.values.get("GSC Coverage Note") or "").startswith("Matched in GSC")
+            )
+            logger.info(
+                "GSC coverage: %s/%s crawled URLs matched Search Analytics; freshness=%s; API rows=%s.",
+                matched,
+                len(enriched_extra_rows),
+                gsc_data_freshness or "unknown",
+                gsc_ctx.analytics_row_count,
+            )
 
     return EnrichmentResult(
         typed_main_rows=enriched_main_rows,

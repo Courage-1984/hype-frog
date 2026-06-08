@@ -10,6 +10,12 @@ from openpyxl.utils import get_column_letter
 from hype_frog.checkpoint.cache import AuditCache
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.core.scoring import calculate_executive_roi
+from hype_frog.pipeline.content_hub_metrics import resolve_content_hub_metrics
+from hype_frog.pipeline.og_image_consistency import (
+    build_og_image_site_profile,
+    classify_og_image_consistency,
+    resolve_og_image_url,
+)
 from hype_frog.reporter.engine_io import (
     _normalize_url_for_match,
     _safe_sheet_name,
@@ -110,6 +116,58 @@ def _join_pipe(values: list[str]) -> str:
     return " | ".join(out)
 
 
+def _split_heading_pipe_segments(raw: object) -> list[str]:
+    """Split Main ``H{n} Content`` pipe-joined values without treating ``|`` in copy as multiples."""
+    text = _hub_display_text(raw)
+    if not text:
+        return []
+    if "|" not in text:
+        return [text]
+    return [_hub_display_text(part) for part in text.split("|") if _hub_display_text(part)]
+
+
+def _resolve_primary_h1_for_hub(
+    main: dict[str, Any],
+    extra: dict[str, Any],
+    h_by_level: dict[int, list[str]],
+) -> tuple[str, int]:
+    """Return (primary H1 text, authoritative H1 count) for Content Hub export."""
+    h1_count = _to_int(extra.get("H1 Count"), 0)
+    primary = _hub_display_text(extra.get("Primary H1 Content"))
+    if not primary:
+        structure_h1 = h_by_level.get(1, [])
+        if structure_h1:
+            primary = structure_h1[0]
+    if not primary:
+        main_segments = _split_heading_pipe_segments(
+            _first_non_empty(main, "H1 Content", "h1_content", "h1 content", "h1")
+        )
+        if main_segments:
+            primary = main_segments[0]
+            if h1_count <= 0:
+                h1_count = len(main_segments)
+    if primary and h1_count <= 0:
+        h1_count = 1
+    return primary, h1_count
+
+
+def _to_int(value: object, default: int = 0) -> int:
+    if value is None or str(value).strip() == "":
+        return default
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _h1_health_label(h1_count: int, primary_h1: str) -> str:
+    if not primary_h1:
+        return "MISSING"
+    if h1_count > 1:
+        return "FIX: MULTIPLE"
+    return "OK"
+
+
 def _hyperlink_url_formula(display_url: str) -> str:
     """Excel HYPERLINK so the URL column is clickable (sanitized for formula quotes)."""
     s = str(display_url or "").strip()
@@ -201,7 +259,12 @@ def build_fixplan_rows(
             for r in extra_rows
             if issue_name in str(r.values.get("Matched Issues") or "").split(" | ")
         ]
-        affected_count = len(affected)
+        if issue_name == "Broken Internal Links":
+            affected_count = sum(
+                int(r.values.get("Broken Internal Links Count") or 0) for r in affected
+            )
+        else:
+            affected_count = len(affected)
         if affected_count <= 0:
             continue
         root_cause, recommended_fix = root_cause_resolver(issue_name)
@@ -360,6 +423,7 @@ _CONTENT_HUB_FIELDS_PRE_REORDER: tuple[str, ...] = (
     "H6 Health",
     "Elementor Builder Link",
     "Current OG-Image URL",
+    "OG Image Health",
     "OG Image Preview",
     "Open in Main",
 )
@@ -511,6 +575,10 @@ def build_content_optimisation_hub_rows(
     w_l = content_hub_column_letter("On-Page Optimization Score")
     f_l = content_hub_column_letter("URL")
 
+    og_profile = build_og_image_site_profile(
+        [r.values for r in main_rows],
+        [r.values for r in extra_rows],
+    )
     rows: list[dict[str, Any]] = []
     metrics_rows: list[dict[str, Any]] = []
     for excel_row, url in enumerate(sorted(manual_content_urls), start=3):
@@ -518,17 +586,8 @@ def build_content_optimisation_hub_rows(
         extra_payload = extra_by_url.get(url)
         m = main_payload.values if main_payload else {}
         e = extra_payload.values if extra_payload else {}
-        # Sprint 6 — executive ROI correlation. Field LCP (ms) is the
-        # Sprint 2 PerformanceObserver capture; fall back to the
-        # PSI-derived Mobile LCP (s) so runs that never executed the
-        # rendered diagnostics path still get a usable LCP signal.
-        field_lcp_raw = e.get("Field LCP (ms)")
-        if field_lcp_raw is None:
-            mobile_lcp_s = e.get("Mobile LCP (s)") or m.get("Mobile LCP (s)")
-            try:
-                field_lcp_raw = float(mobile_lcp_s) * 1000.0 if mobile_lcp_s else None
-            except (TypeError, ValueError):
-                field_lcp_raw = None
+        hub_metrics = resolve_content_hub_metrics(m, e)
+        field_lcp_raw = hub_metrics.field_lcp_ms
         clicks_raw = e.get("GSC Clicks") or m.get("GSC Clicks")
         roi = calculate_executive_roi(
             clicks=clicks_raw,
@@ -597,7 +656,8 @@ def build_content_optimisation_hub_rows(
         def _h_joined(n: int) -> str:
             return _join_pipe(_h_values(n))
 
-        h1_values = _h_values(1)
+        primary_h1, h1_count = _resolve_primary_h1_for_hub(m, e, h_by_level)
+        h1_health_label = _h1_health_label(h1_count, primary_h1)
         h2_values = _h_values(2)
         h3_values = _h_values(3)
         h4_values = _h_values(4)
@@ -614,11 +674,9 @@ def build_content_optimisation_hub_rows(
             f'IF(AND(LEN({i_l}{excel_row})>=120,LEN({i_l}{excel_row})<=160),"OK 120-160 chars",'
             f'IF(LEN({i_l}{excel_row})<120,"SHORT: "&LEN({i_l}{excel_row}),"LONG: "&LEN({i_l}{excel_row}))))'
         )
-        # Live linter formulas: driven by visible H-tag cells so edits recalculate instantly.
-        h1_health = (
-            f'=IF(OR(ISBLANK({k_l}{excel_row}),ISNUMBER(SEARCH("|",{k_l}{excel_row}))),'
-            f'"FIX: MULTIPLE/MISSING","OK")'
-        )
+        # H1 health uses crawl-time ``H1 Count`` (static) — avoids false positives when
+        # a single H1 legitimately contains a pipe character or Main uses ``|`` joining.
+        h1_health = h1_health_label
         h2_health = f'=IF(ISBLANK({m_l}{excel_row}),"MISSING","OK")'
         h3_health = f'=IF(ISBLANK({o_l}{excel_row}),"MISSING","OK")'
         h4_health = f'=IF(ISBLANK({q_l}{excel_row}),"MISSING","OK")'
@@ -631,11 +689,14 @@ def build_content_optimisation_hub_rows(
         metrics_rows.append(
             {
                 "URL": _hyperlink_url_formula(raw_url),
-                "JS Dependent": bool(e.get("JS Dependent")),
-                "Raw Words": int(float(e.get("Raw Words") or 0)),
-                "Rendered Words": int(float(e.get("Rendered Words") or 0)),
-                "Field LCP (ms)": _round2(e.get("Field LCP (ms)"), default=0.0),
-                "Field CLS": _round4(e.get("Field CLS"), default=0.0),
+                "JS Dependent": hub_metrics.js_dependent,
+                "Raw Words": hub_metrics.raw_words,
+                "Rendered Words": hub_metrics.rendered_words,
+                "Field LCP (ms)": _round2(
+                    hub_metrics.field_lcp_ms,
+                    default=0.0,
+                ),
+                "Field CLS": _round4(hub_metrics.field_cls, default=0.0),
                 "Anchor Text Diversity": _hub_display_text(
                     str(e.get("Anchor Text Diversity") or "")
                 ),
@@ -675,7 +736,7 @@ def build_content_optimisation_hub_rows(
                 "Current Meta Desc": _hub_display_text(str(m.get("Meta Description") or ""))
                 or "MISSING DESCRIPTION",
                 "Meta Health": meta_health,
-                "H1": _h_joined(1),
+                "H1": primary_h1,
                 "H1 Health": h1_health,
                 "H2": _h_joined(2),
                 "H2 Health": h2_health,
@@ -691,7 +752,11 @@ def build_content_optimisation_hub_rows(
                 "Elementor Builder Link": elementor_cell,
                 # Extra uses ``OG Image``; Main uses ``OG-Image`` — prefer extra, fall back to Main.
                 "Current OG-Image URL": _og_image_hyperlink_formula(
-                    e.get("OG Image") or m.get("OG-Image") or m.get("OG Image")
+                    resolve_og_image_url(m, e)
+                ),
+                "OG Image Health": classify_og_image_consistency(
+                    resolve_og_image_url(m, e),
+                    og_profile,
                 ),
                 "OG Image Preview": "",
                 "Open in Main": open_main_formula,

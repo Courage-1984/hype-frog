@@ -63,7 +63,7 @@ playwright install chromium
 
 - Copy `.env.example` to `.env` for runtime variables (see the example file for **PSI** and **GSC** setup notes). Do not commit secrets.
 - **PSI:** set `PSI_API_KEY` in `.env` when you want PageSpeed Insights lab data. The key must belong to a Google Cloud project with the PageSpeed Insights API enabled.
-- **GSC:** the app uses the **OAuth desktop** flow via `client_secrets.json` and `token.json` beside the `hype_frog` package (see `.env.example`). The signed-in user needs Search Console access to a property that matches the crawl target; the code requests read-only scope `https://www.googleapis.com/auth/webmasters.readonly`.
+- **GSC:** the app uses the **OAuth desktop** flow via `secrets/client_secrets.json` and `secrets/token.json` (see `.env.example`). Run `uv run hype-frog --gsc-auth` once per machine to create or refresh `secrets/token.json`. Legacy fallbacks: the same filenames under `src/hype_frog/` or the repo root. The signed-in user needs Search Console access to a property that matches the crawl target; the code requests read-only scope `https://www.googleapis.com/auth/webmasters.readonly`.
 - Interactive runs prompt for crawl profile, suite mode, checkpoint interval, and optional previous workbook path.
 
 ## Running
@@ -98,17 +98,42 @@ Exit code `0` means all required checks passed; `1` means at least one failed.
 - Contracts are **additive-first**: introduce new fields instead of renaming/removing established keys that scoring, checkpoints, or reporting rely on.
 - Reporter modules treat incoming payload dictionaries as read-only and focus on workbook layout/format integrity.
 
-### Non-interactive quick test (10 URLs)
+### Non-interactive quick test (comprehensive smoke gate)
 
-Smoke-test the full pipeline (sitemap cap, faster profile, full workbook suite, PSI disabled, no checkpoint prompts) without typing at the console:
+Run between code changes to exercise preflight checks, a focused pytest subset, a **10-URL page-sitemap crawl** (Playwright accurate mode, BFS depth 2, full workbook suite), and a post-export workbook audit:
 
 ```bash
-uv sync --extra render   # optional: real Playwright rendering for accurate mode
+uv sync --extra render --extra dev
 playwright install chromium
-uv run python -m hype_frog.main --quick-test
+uv run hype-frog --quick-test
 ```
 
-If Playwright is not installed, accurate mode falls back to fast HTTP with a warning; the run still completes. The preset uses the African Marketing Confederation page sitemap (10 URLs), crawl mode **accurate**, safety profile **faster** (4 workers, 1.5s delay), and **full** SEO suite output under `reports/latest/` unless `HF_OUTPUT_FILENAME` overrides it.
+**What `--quick-test` runs (in order):**
+
+1. **Preflight** — GSC OAuth files, property match for the crawl target, PSI key presence (no slow PSI live probe).
+2. **Pytest regression** — focused reporter/crawler/extractor tests (~30 cases).
+3. **Pipeline** — `page-sitemap.xml` seed (max 10 URLs), external-link checks, PSI on up to 3 URLs when `PSI_API_KEY` is set.
+4. **Workbook audit** — TOC at index 0, tab order, freeze panes, Main `Extraction State` contract, Content Hub literals.
+
+Exit code `0` only when all non-skipped phases pass. A summary block is printed at the end.
+
+**Faster variant** (crawl + workbook audit only, ~3–8 minutes):
+
+```bash
+uv run hype-frog --quick-test-fast
+```
+
+**Optional flags** (combine with `--quick-test`):
+
+| Flag | Effect |
+|------|--------|
+| `--quick-test-skip-preflight` | Skip GSC/PSI preflight |
+| `--quick-test-skip-pytest` | Skip pytest subset |
+| `--quick-test-skip-audit` | Skip workbook audit |
+
+Override BFS depth for the preset: `HF_MAX_DEPTH=1 uv run hype-frog --quick-test-fast`
+
+If Playwright is not installed, accurate mode falls back to fast HTTP with a warning; the run still completes. Output lands under `reports/latest/` unless `HF_OUTPUT_FILENAME` overrides it.
 
 **`ModuleNotFoundError: No module named 'hype_frog'`** means the editable project is not installed in the active venv. Run **`uv sync`** from the repo root (not only `uv venv` without syncing the project). Then retry `uv run …`.
 

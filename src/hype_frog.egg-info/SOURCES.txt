@@ -16,10 +16,13 @@ src/hype_frog/checkpoint/store.py
 src/hype_frog/core/__init__.py
 src/hype_frog/core/api_clients.py
 src/hype_frog/core/cli.py
+src/hype_frog/core/discovery_order.py
 src/hype_frog/core/file_utils.py
+src/hype_frog/core/integration_validator.py
 src/hype_frog/core/link_constants.py
 src/hype_frog/core/logger.py
 src/hype_frog/core/models.py
+src/hype_frog/core/quick_test.py
 src/hype_frog/core/run_config.py
 src/hype_frog/core/scoring.py
 src/hype_frog/core/text_utils.py
@@ -39,6 +42,7 @@ src/hype_frog/extractors/page.py
 src/hype_frog/extractors/robots.py
 src/hype_frog/extractors/schema.py
 src/hype_frog/extractors/semantic_engine.py
+src/hype_frog/extractors/semantic_setup.py
 src/hype_frog/orchestration/__init__.py
 src/hype_frog/orchestration/crawl_runner.py
 src/hype_frog/orchestration/enrichment_flow.py
@@ -48,7 +52,9 @@ src/hype_frog/orchestration/run_setup.py
 src/hype_frog/pipeline/__init__.py
 src/hype_frog/pipeline/action_required.py
 src/hype_frog/pipeline/assemble.py
+src/hype_frog/pipeline/broken_links.py
 src/hype_frog/pipeline/content_cluster.py
+src/hype_frog/pipeline/content_hub_metrics.py
 src/hype_frog/pipeline/context.py
 src/hype_frog/pipeline/enrich.py
 src/hype_frog/pipeline/export.py
@@ -65,6 +71,7 @@ src/hype_frog/reporter/excel_engine.py
 src/hype_frog/reporter/help_layer.py
 src/hype_frog/reporter/narrative_engine.py
 src/hype_frog/reporter/summary_builder.py
+src/hype_frog/reporter/workbook_audit.py
 src/hype_frog/reporter/sheets/__init__.py
 src/hype_frog/reporter/sheets/coh.py
 src/hype_frog/reporter/sheets/conditional.py

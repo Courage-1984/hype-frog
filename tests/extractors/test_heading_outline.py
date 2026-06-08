@@ -78,6 +78,42 @@ def test_heading_outline_counts_multiple_h1_in_content() -> None:
     assert outline.headings_by_level[1] == ("First", "Second")
 
 
+def test_heading_outline_finds_h1_in_header_when_main_absent() -> None:
+    """Homepage heroes outside ``<main>`` should still yield a primary H1."""
+    html = """
+    <html><body>
+      <header class="hero"><h1>Welcome to the conference</h1></header>
+      <div class="content"><p>Intro copy.</p></div>
+    </body></html>
+    """
+    outline = extract_heading_outline(html)
+    assert outline.h1_count == 1
+    assert outline.headings_by_level[1] == ("Welcome to the conference",)
+
+
+def test_heading_outline_cms_elementor_h1_selector() -> None:
+    html = """
+    <html><body>
+      <div class="elementor-widget-heading">
+        <h1 class="elementor-heading-title">Elementor page title</h1>
+      </div>
+      <p>Body</p>
+    </body></html>
+    """
+    outline = extract_heading_outline(html)
+    assert outline.h1_count == 1
+    assert "Elementor page title" in outline.headings_by_level[1]
+
+
+def test_heading_outline_allows_pipe_character_in_single_h1() -> None:
+    html = """
+    <html><body><main><h1>Tips | Tools for marketers</h1></main></body></html>
+    """
+    outline = extract_heading_outline(html)
+    assert outline.h1_count == 1
+    assert outline.headings_by_level[1][0] == "Tips | Tools for marketers"
+
+
 def test_assemble_populates_main_heading_fields_from_outline() -> None:
     html = """
     <html><body><main>
@@ -96,6 +132,7 @@ def test_assemble_populates_main_heading_fields_from_outline() -> None:
     )
     finalize_row_state(main_payload, extra_payload)
 
+    assert extra_payload.values["Primary H1 Content"] == "Primary"
     assert main_payload.values["H1 Content"] == "Primary"
     assert main_payload.values["H2 Content"] == "Sub one | Sub two"
     assert main_payload.values["H3 Content"] == "Nested"

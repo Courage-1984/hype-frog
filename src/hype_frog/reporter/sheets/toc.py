@@ -5,47 +5,29 @@ from openpyxl.worksheet.views import Selection
 
 from hype_frog.reporter.engine_guardrails import friendly_toc_description
 from hype_frog.reporter.sheets.config import (
+    AIOSEO_RECOMMENDATIONS_SHEET,
     CONTENT_HUB_FREEZE_PANES,
-    CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    STD_NAVY,
+    STD_WHITE,
+)
+from hype_frog.reporter.sheets.workbook_layout import (
+    ADVANCED_WORKBOOK_TAB_ORDER,
+    PREFERRED_WORKBOOK_TAB_ORDER,
+    TOC_ADVANCED_SECTION_LABEL,
+    TOC_PRIMARY_SECTION_LABEL,
+    VISIBLE_WORKBOOK_TAB_ORDER,
+    apply_workbook_tab_layout,
+    excel_sheet_link_target,
 )
 
-# Canonical left-to-right workbook tab order (move_sheet targets).
-PREFERRED_WORKBOOK_TAB_ORDER: tuple[str, ...] = (
-    "Table of Contents",
-    "Dashboard",
-    CONTENT_OPTIMISATION_HUB_SHEET,
-    CONTENT_HUB_METRICS_SHEET,
-    "Quick Reference Guide",
-    "Summary",
-    "FixPlan",
-    "Content",
-    "Main",
-    "Priority URLs",
-    "AIOSEO",
-    "Technical",
-    "PSI Performance",
-    "AEO",
-    "Indexability",
-    "Redirects",
-    "Security",
-    "Schema & Metadata",
-    "Links",
-    "LinksDetail",
-    "Link Inventory",
-    "Media",
-    "Duplicates",
-    "Pattern and Template Issues",
-    "CrawlGraph",
-    "SitemapQA",
-    "IssueInventory",
-    "ResolvedIssues",
-    "DeltaFromPreviousRun",
-    "RunMetadata",
-    "Glossary & Legend",
-)
+# Re-export for workbook_audit and export_flow.
+__all__ = [
+    "PREFERRED_WORKBOOK_TAB_ORDER",
+    "apply_workbook_toc_and_links",
+]
 
-_PREFERRED_TAB_SET: frozenset[str] = frozenset(PREFERRED_WORKBOOK_TAB_ORDER)
+_PREFERRED_TAB_SET = frozenset(PREFERRED_WORKBOOK_TAB_ORDER)
 
 
 def apply_workbook_toc_and_links(
@@ -57,9 +39,6 @@ def apply_workbook_toc_and_links(
     std_white: str,
     std_blue: str,
 ) -> None:
-    def _sheet_link_target(name: str) -> str:
-        return str(name).replace("'", "''")
-
     def _clear_orphaned_selection(ws) -> None:
         try:
             ws.views.sheetView[0].selection = []
@@ -72,43 +51,72 @@ def apply_workbook_toc_and_links(
             view.selection = [Selection(activeCell="A1", sqref="A1")]
         ws.freeze_panes = value
 
+    def _append_toc_row(
+        toc_ws,
+        wb_ref,
+        row_ptr: int,
+        sheet_name: str,
+        *,
+        std_blue_color: str,
+        section_label: str | None = None,
+    ) -> int:
+        if section_label:
+            toc_ws.cell(row=row_ptr, column=1, value=section_label)
+            toc_ws.cell(row=row_ptr, column=1).font = Font(bold=True, color=std_navy)
+            toc_ws.merge_cells(start_row=row_ptr, start_column=1, end_row=row_ptr, end_column=3)
+            return row_ptr + 1
+        if sheet_name not in wb_ref.sheetnames:
+            return row_ptr
+        safe = excel_sheet_link_target(sheet_name)
+        disp = str(sheet_name).replace('"', "'")
+        a_cell = toc_ws.cell(row=row_ptr, column=1)
+        a_cell.value = f'=HYPERLINK("#\'{safe}\'!A1","{disp}")'
+        a_cell.font = Font(color=std_blue_color, underline="single", bold=True)
+        b_cell = toc_ws.cell(row=row_ptr, column=2)
+        b_cell.value = f'=HYPERLINK("#\'{safe}\'!A1","Open")'
+        b_cell.font = Font(color=std_blue_color, underline="single", bold=True)
+        toc_ws.cell(
+            row=row_ptr, column=3, value=friendly_toc_description(sheet_name)
+        )
+        return row_ptr + 1
+
     def _rebuild_toc_body(toc_ws, wb_ref) -> None:
-        """Rewrite TOC rows 3+ in ``PREFERRED_WORKBOOK_TAB_ORDER`` (+ any extra tabs)."""
+        """Primary workflow first, then advanced (hidden) diagnostics."""
         while toc_ws.max_row >= 3:
             toc_ws.delete_rows(3)
         row_ptr = 3
-        for sheet_name in PREFERRED_WORKBOOK_TAB_ORDER:
+        row_ptr = _append_toc_row(
+            toc_ws,
+            wb_ref,
+            row_ptr,
+            "",
+            std_blue_color=std_blue,
+            section_label=TOC_PRIMARY_SECTION_LABEL,
+        )
+        for sheet_name in VISIBLE_WORKBOOK_TAB_ORDER:
             if sheet_name == "Table of Contents":
                 continue
-            if sheet_name not in wb_ref.sheetnames:
-                continue
-            safe = _sheet_link_target(sheet_name)
-            disp = str(sheet_name).replace('"', "'")
-            a_cell = toc_ws.cell(row=row_ptr, column=1)
-            a_cell.value = f'=HYPERLINK("#\'{safe}\'!A1","{disp}")'
-            a_cell.font = Font(color=std_blue, underline="single", bold=True)
-            b_cell = toc_ws.cell(row=row_ptr, column=2)
-            b_cell.value = f'=HYPERLINK("#\'{safe}\'!A1","Open")'
-            b_cell.font = Font(color=std_blue, underline="single", bold=True)
-            toc_ws.cell(
-                row=row_ptr, column=3, value=friendly_toc_description(sheet_name)
+            row_ptr = _append_toc_row(
+                toc_ws, wb_ref, row_ptr, sheet_name, std_blue_color=std_blue
             )
-            row_ptr += 1
+        row_ptr = _append_toc_row(
+            toc_ws,
+            wb_ref,
+            row_ptr,
+            "",
+            std_blue_color=std_blue,
+            section_label=TOC_ADVANCED_SECTION_LABEL,
+        )
+        for sheet_name in ADVANCED_WORKBOOK_TAB_ORDER:
+            row_ptr = _append_toc_row(
+                toc_ws, wb_ref, row_ptr, sheet_name, std_blue_color=std_blue
+            )
         for sheet_name in wb_ref.sheetnames:
             if sheet_name == "Table of Contents" or sheet_name in _PREFERRED_TAB_SET:
                 continue
-            safe = _sheet_link_target(sheet_name)
-            disp = str(sheet_name).replace('"', "'")
-            a_cell = toc_ws.cell(row=row_ptr, column=1)
-            a_cell.value = f'=HYPERLINK("#\'{safe}\'!A1","{disp}")'
-            a_cell.font = Font(color=std_blue, underline="single", bold=True)
-            b_cell = toc_ws.cell(row=row_ptr, column=2)
-            b_cell.value = f'=HYPERLINK("#\'{safe}\'!A1","Open")'
-            b_cell.font = Font(color=std_blue, underline="single", bold=True)
-            toc_ws.cell(
-                row=row_ptr, column=3, value=friendly_toc_description(sheet_name)
+            row_ptr = _append_toc_row(
+                toc_ws, wb_ref, row_ptr, sheet_name, std_blue_color=std_blue
             )
-            row_ptr += 1
 
     if debug_excel_isolation_mode:
         return
@@ -118,9 +126,7 @@ def apply_workbook_toc_and_links(
     if "Table of Contents" not in wb.sheetnames:
         wb.create_sheet("Table of Contents", 0)
 
-    for idx, tab_name in enumerate(PREFERRED_WORKBOOK_TAB_ORDER):
-        if tab_name in wb.sheetnames:
-            wb.move_sheet(wb[tab_name], offset=-wb.index(wb[tab_name]) + idx)
+    apply_workbook_tab_layout(wb)
 
     toc_ws = wb["Table of Contents"]
     toc_ws["A1"] = "Table of Contents"
@@ -141,7 +147,7 @@ def apply_workbook_toc_and_links(
         "Issue Register": "Reference Area",
         "FixPlan": "Detail Reference Tab",
         "Dashboard": "Target Tab",
-        "AIOSEO": "Reference Tab",
+        AIOSEO_RECOMMENDATIONS_SHEET: "Reference Tab",
     }
     for sheet_name, col_header in link_map.items():
         if sheet_name not in wb.sheetnames:
@@ -155,15 +161,14 @@ def apply_workbook_toc_and_links(
             cell = ws.cell(row=row_idx, column=col_idx)
             target = str(cell.value or "").strip()
             if target and target in wb.sheetnames:
-                safe = _sheet_link_target(target)
+                safe = excel_sheet_link_target(target)
                 cell.hyperlink = f"#'{safe}'!A1"
                 cell.style = "Hyperlink"
-    low_signal_tabs = {"RunMetadata", "DeltaFromPreviousRun"}
-    for tab_name in low_signal_tabs:
-        if tab_name in wb.sheetnames:
-            wb[tab_name].sheet_state = "hidden"
     for tab_name in wb.sheetnames:
         ws = wb[tab_name]
+        if tab_name == "Table of Contents":
+            _set_freeze_panes_safe(ws, "A3")
+            continue
         if disable_non_core_freeze_panes and tab_name not in {"Main", "Dashboard"}:
             _set_freeze_panes_safe(ws, None)
             _clear_orphaned_selection(ws)
@@ -188,7 +193,7 @@ def apply_workbook_toc_and_links(
             "Priority URLs",
             "AEO",
             "Redirects",
-            "AIOSEO",
+            AIOSEO_RECOMMENDATIONS_SHEET,
             "Security",
             "Summary",
             "Quick Reference Guide",
@@ -204,7 +209,7 @@ def apply_workbook_toc_and_links(
             "Link Inventory",
             "Template & Duplication Risks",
             "Playbook",
-            "RunMetadata",
+            "Audit Run Details",
             "DeltaFromPreviousRun",
             "ResolvedIssues",
             "CrawlGraph",

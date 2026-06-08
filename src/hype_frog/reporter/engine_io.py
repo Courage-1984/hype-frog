@@ -12,6 +12,7 @@ from hype_frog.checkpoint.cache import AuditCache
 from hype_frog.core import get_logger
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.core.url_normalization import normalize_url
+from hype_frog.pipeline.broken_links import link_inventory_broken_per_source_formula
 
 logger = get_logger(__name__)
 
@@ -87,16 +88,11 @@ def apply_link_intelligence_summary_broken_formulas(workbook: Any) -> None:
     act_col = headers.get("Actionable Fixes")
     if not rt_col or not brk_col:
         return
-    inv = "'Link Inventory'"
     brk_letter = get_column_letter(brk_col)
     for row in range(2, ws.max_row + 1):
         if str(ws.cell(row, rt_col).value or "").strip() != "Summary":
             continue
-        formula = (
-            f"=COUNTIFS({inv}!$A:$A,$A{row},{inv}!$E:$E,\"Internal\","
-            f"{inv}!$F:$F,404)+COUNTIFS({inv}!$A:$A,$A{row},{inv}!$E:$E,\"Internal\","
-            f'{inv}!$F:$F,"404")'
-        )
+        formula = link_inventory_broken_per_source_formula(f"$A{row}")
         ws.cell(row=row, column=brk_col, value=formula)
         if act_col:
             ws.cell(

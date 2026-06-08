@@ -42,6 +42,8 @@ def get_summary_rules() -> list[tuple[str, str, RuleFn]]:
         ("Observation", "No Cache-Control Header", lambda r: not bool(r.get("Cache-Control"))),
         ("Observation", "No ETag Header", lambda r: not bool(r.get("ETag"))),
         ("Observation", "Thin Content", lambda r: to_bool(r.get("Thin Content Flag"))),
+        ("Warning", "Render Fallback (raw HTTP)", lambda r: to_bool(r.get("Extraction Source Fallback"))),
+        ("Warning", "Probable Draft or Duplicate Page", lambda r: to_bool(r.get("Probable Duplicate Flag"))),
         ("Warning", "Low AEO Readiness Score", lambda r: (r.get("AEO Readiness Score") or 0) < 70),
         ("Observation", "No Question Headings", lambda r: (r.get("Question Heading Count") or 0) == 0),
         ("Observation", "No Answer-Friendly Structure", lambda r: not to_bool(r.get("List/Table Answer Signal"))),
@@ -69,6 +71,14 @@ def root_cause_and_fix(issue_name: str) -> tuple[str, str]:
         "Missing Title": ("Template/page missing title tag.", "Add unique descriptive title on affected template/page type."),
         "Missing Meta Description": ("Meta description missing or empty.", "Add concise unique description aligned with user intent."),
         "Thin Content": ("Insufficient body content for indexing confidence.", "Expand page with helpful, unique, intent-matching content."),
+        "Render Fallback (raw HTTP)": (
+            "Accurate crawl mode attempted Playwright rendering but fell back to the raw HTTP payload for this URL.",
+            "Re-run in accurate mode with Playwright installed, or fix page timeouts/blocking so rendered_browser extraction succeeds for parity with other URLs.",
+        ),
+        "Probable Draft or Duplicate Page": (
+            "URL slug and/or heading/body structure closely matches another crawled page (common on WordPress copy/draft URLs).",
+            "Consolidate into one canonical URL: noindex or delete the draft/copy page, 301 redirect to the primary page, and deduplicate repetitive H2/H3 blocks.",
+        ),
         "Low AEO Readiness Score": (
             "Weighted AEO score is below the 70-point extraction-confidence band.",
             "Raise the weighted mix: add a 40–60 word factual paragraph under each question H2/H3, add FAQPage/HowTo/Speakable JSON-LD, tune copy to FK grade 7–10, add ul/ol/table for key facts, and ensure robots.txt explicitly allows GPTBot, PerplexityBot, and CCBot.",
@@ -109,6 +119,7 @@ def owner_for_issue(issue_name: str, severity: str | None = None) -> str:
         "Low Image Alt Coverage",
         "Generic Anchor Text Present",
         "Image Filename Quality Issues",
+        "Probable Draft or Duplicate Page",
     }
     dev_issues = {
         "Noindex Directive",
