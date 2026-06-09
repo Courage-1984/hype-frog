@@ -13,8 +13,9 @@ from hype_frog.reporter.sheets.toc import PREFERRED_WORKBOOK_TAB_ORDER
 def test_preferred_workbook_tab_order_starts_with_toc_and_dashboard() -> None:
     assert PREFERRED_WORKBOOK_TAB_ORDER[0] == "Table of Contents"
     assert PREFERRED_WORKBOOK_TAB_ORDER[1] == "Dashboard"
-    assert PREFERRED_WORKBOOK_TAB_ORDER[2] == "Summary"
-    assert PREFERRED_WORKBOOK_TAB_ORDER[3] == "Priority URLs"
+    assert PREFERRED_WORKBOOK_TAB_ORDER[2] == "Executive Dashboard"
+    assert PREFERRED_WORKBOOK_TAB_ORDER[3] == "Summary"
+    assert PREFERRED_WORKBOOK_TAB_ORDER[4] == "Priority URLs"
     assert CONTENT_OPTIMISATION_HUB_SHEET in PREFERRED_WORKBOOK_TAB_ORDER
 
 

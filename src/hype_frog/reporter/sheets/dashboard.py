@@ -850,8 +850,8 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             else WARN_COLOR if warning_rate_pct > 20 else GOOD_COLOR
         ),
     )
-    projected_health_pct = dashboard_metrics.projected_health_pct
-    projected_pass_rate_pct = dashboard_metrics.projected_pass_rate_pct
+    projected_health_pct = summary_metrics.projected_health_score_pct
+    projected_pass_rate_pct = summary_metrics.projected_pass_rate_pct
     worksheet["B15"] = round(
         max(0.0, min(1.0, projected_health_pct / 100.0)),
         6,
@@ -878,7 +878,15 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             else WARN_COLOR if projected_pass_rate_pct >= 40 else ALERT_COLOR
         ),
     )
-    worksheet["G14"] = "TOP ISSUES TO FIX FIRST"
+    top_issues_header_fill = PatternFill("solid", fgColor=SOFT_ALERT_COLOR)
+    top_issues_header_font = Font(color="000000", bold=True, size=12)
+    worksheet.merge_cells("G13:H13")
+    worksheet["G13"] = "TOP ISSUES TO FIX FIRST"
+    worksheet["G13"].fill = top_issues_header_fill
+    worksheet["G13"].font = top_issues_header_font
+    worksheet["G13"].alignment = Alignment(horizontal="center", vertical="center")
+    worksheet.row_dimensions[13].height = 28
+    worksheet["G14"] = "Issue (Fix Plan link)"
     worksheet["H14"] = "Affected URLs"
     for ref in ("G14", "H14"):
         worksheet[ref].fill = table_header_fill
@@ -889,9 +897,14 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             f'=HYPERLINK("#FixPlan!A{top_issue.source_row}","{top_issue.issue_name}")'
         )
         worksheet[f"H{idx}"] = top_issue.affected_urls
-        worksheet[f"G{idx}"].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
-        worksheet[f"H{idx}"].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
+        row_fill = PatternFill(
+            "solid",
+            fgColor=SOFT_WARN_COLOR if idx == 15 else PANEL_BG_COLOR,
+        )
+        worksheet[f"G{idx}"].fill = row_fill
+        worksheet[f"H{idx}"].fill = row_fill
         worksheet[f"G{idx}"].font = Font(color=STD_BLUE, underline="single", bold=True)
+        worksheet.row_dimensions[idx].height = 22
 
     quick_nav_fill = PatternFill("solid", fgColor=STD_NAVY)
     worksheet["I12"] = "Quick Navigation"

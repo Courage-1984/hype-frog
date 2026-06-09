@@ -8,12 +8,14 @@ from hype_frog.reporter.sheets.config import (
     AIOSEO_RECOMMENDATIONS_SHEET,
     CONTENT_HUB_FREEZE_PANES,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    EXECUTIVE_DASHBOARD_SHEET,
     STD_NAVY,
     STD_WHITE,
 )
 from hype_frog.reporter.sheets.workbook_layout import (
     ADVANCED_WORKBOOK_TAB_ORDER,
     PREFERRED_WORKBOOK_TAB_ORDER,
+    SHEETS_EXCLUDED_FROM_TOC,
     TOC_ADVANCED_SECTION_LABEL,
     TOC_PRIMARY_SECTION_LABEL,
     VISIBLE_WORKBOOK_TAB_ORDER,
@@ -112,7 +114,11 @@ def apply_workbook_toc_and_links(
                 toc_ws, wb_ref, row_ptr, sheet_name, std_blue_color=std_blue
             )
         for sheet_name in wb_ref.sheetnames:
-            if sheet_name == "Table of Contents" or sheet_name in _PREFERRED_TAB_SET:
+            if (
+                sheet_name == "Table of Contents"
+                or sheet_name in _PREFERRED_TAB_SET
+                or sheet_name in SHEETS_EXCLUDED_FROM_TOC
+            ):
                 continue
             row_ptr = _append_toc_row(
                 toc_ws, wb_ref, row_ptr, sheet_name, std_blue_color=std_blue
@@ -169,7 +175,15 @@ def apply_workbook_toc_and_links(
         if tab_name == "Table of Contents":
             _set_freeze_panes_safe(ws, "A3")
             continue
-        if disable_non_core_freeze_panes and tab_name not in {"Main", "Dashboard"}:
+        if tab_name == EXECUTIVE_DASHBOARD_SHEET:
+            _set_freeze_panes_safe(ws, "A8")
+            _clear_orphaned_selection(ws)
+            continue
+        if disable_non_core_freeze_panes and tab_name not in {
+            "Main",
+            "Dashboard",
+            EXECUTIVE_DASHBOARD_SHEET,
+        }:
             _set_freeze_panes_safe(ws, None)
             _clear_orphaned_selection(ws)
             continue

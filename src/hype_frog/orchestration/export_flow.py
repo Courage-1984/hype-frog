@@ -40,6 +40,8 @@ from hype_frog.reporter.sheets.config import (
     AIOSEO_RECOMMENDATIONS_SHEET,
     AUDIT_RUN_DETAILS_SHEET,
 )
+from hype_frog.reporter.sheets.executive_dashboard import write_executive_dashboard
+from hype_frog.reporter.chart_compat import patch_xlsx_app_xml_for_excel_compatibility
 from hype_frog.reporter.engine_rows import (
     CONTENT_HUB_EXPORT_COLUMNS,
     CONTENT_HUB_METRICS_EXPORT_COLUMNS,
@@ -475,6 +477,15 @@ def execute_export(
                 index=False,
                 startrow=immediate_actions_startrow + 2,
             )
+            write_executive_dashboard(
+                writer,
+                summary_metrics=summary_metrics,
+                typed_main_rows=typed_main_rows,
+                typed_extra_rows=typed_extra_rows,
+                priority_rows=priority_rows,
+                fixplan_rows=fixplan_rows,
+                hub_metrics_rows=hub_metrics_rows,
+            )
             quick_reference_rows = [
                 {"Section": "[Meta Data Standards]", "Item": "", "Guideline": "", "Why It Matters": ""},
                 {
@@ -761,6 +772,8 @@ def execute_export(
     finally:
         if writer is not None:
             writer.close()
+
+    patch_xlsx_app_xml_for_excel_compatibility(output_filename)
 
     return ExportSummary(
         output_filename=output_filename,

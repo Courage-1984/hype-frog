@@ -123,6 +123,7 @@ STANDARD_SHEET_COLUMNS: dict[str, list[str]] = {
 
 _FULL_SUITE_FORMAT_SHEETS: list[str] = [
     "Dashboard",
+    "Executive Dashboard",
     "Summary",
     "Priority URLs",
     "FixPlan",

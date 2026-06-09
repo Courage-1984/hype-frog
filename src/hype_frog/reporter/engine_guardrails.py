@@ -8,7 +8,9 @@ from openpyxl.worksheet.worksheet import Worksheet
 from hype_frog.reporter.sheets.config import (
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    EXECUTIVE_DASHBOARD_SHEET,
 )
+from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
 from hype_frog.reporter.sheets.layout import (
     CONTENT_HUB_HEADER_COMMENT_OG_IMAGE_PREVIEW,
     CONTENT_HUB_HEADER_COMMENT_SEO_SCORE,
@@ -21,6 +23,9 @@ _BANNED_TOC_FALLBACK = "Detailed URL diagnostic data"
 _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "Dashboard": (
         "Executive overview of site-wide SEO performance and critical alerts."
+    ),
+    "Executive Dashboard": (
+        "Visual KPI cards and charts (health, issues, priority URLs, content readiness)."
     ),
     CONTENT_OPTIMISATION_HUB_SHEET: (
         "Diagnostic command center: live title, meta, and H1–H6 health plus on-page score."
@@ -320,12 +325,16 @@ def apply_freeze_c2_data_sheets(
 ) -> None:
     """``freeze_panes = 'C2'`` on every sheet except skips (default: TOC and Content Hub)."""
     skip = skip_names or frozenset(
-        {"Table of Contents", CONTENT_OPTIMISATION_HUB_SHEET}
+        {
+            "Table of Contents",
+            CONTENT_OPTIMISATION_HUB_SHEET,
+            EXECUTIVE_DASHBOARD_SHEET,
+        }
     )
     for name in wb.sheetnames:
         if name in skip:
             continue
-        wb[name].freeze_panes = "C2"
+        set_freeze_panes_safe(wb[name], "C2")
 
 
 def apply_workbook_export_guardrails(wb: Workbook) -> None:

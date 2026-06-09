@@ -9,6 +9,7 @@ from hype_frog.reporter.sheets.config import (
     AUDIT_RUN_DETAILS_SHEET,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    EXECUTIVE_DASHBOARD_SHEET,
     STD_NAVY,
 )
 
@@ -27,6 +28,7 @@ TAB_COLOR_ADVANCED = "BFBFBF"
 VISIBLE_WORKBOOK_TAB_ORDER: tuple[str, ...] = (
     "Table of Contents",
     "Dashboard",
+    EXECUTIVE_DASHBOARD_SHEET,
     "Summary",
     "Priority URLs",
     "FixPlan",
@@ -61,6 +63,8 @@ _PREFERRED_TAB_SET: frozenset[str] = frozenset(PREFERRED_WORKBOOK_TAB_ORDER)
 
 HIDDEN_SHEETS_BY_DEFAULT: frozenset[str] = frozenset(ADVANCED_WORKBOOK_TAB_ORDER)
 
+SHEETS_EXCLUDED_FROM_TOC: frozenset[str] = frozenset()
+
 TOC_PRIMARY_SECTION_LABEL = "Primary workflow"
 TOC_ADVANCED_SECTION_LABEL = (
     "Technical & Historical (Advanced) — tabs hidden; use Open links or "
@@ -87,6 +91,7 @@ DASHBOARD_ADVANCED_SHEET_LINKS: tuple[tuple[str, str], ...] = (
 
 _SHEET_TAB_COLORS: dict[str, str] = {
     "Dashboard": TAB_COLOR_EXECUTIVE,
+    EXECUTIVE_DASHBOARD_SHEET: TAB_COLOR_EXECUTIVE,
     "Summary": TAB_COLOR_EXECUTIVE,
     "Priority URLs": TAB_COLOR_ACTIONABLE,
     "FixPlan": TAB_COLOR_ACTIONABLE,
@@ -159,6 +164,7 @@ __all__ = [
     "PREFERRED_WORKBOOK_TAB_ORDER",
     "TOC_ADVANCED_SECTION_LABEL",
     "TOC_PRIMARY_SECTION_LABEL",
+    "SHEETS_EXCLUDED_FROM_TOC",
     "VISIBLE_WORKBOOK_TAB_ORDER",
     "apply_workbook_tab_colors",
     "apply_workbook_tab_layout",

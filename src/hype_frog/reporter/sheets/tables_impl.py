@@ -28,6 +28,7 @@ from hype_frog.reporter.sheets.conditional import (
 )
 from hype_frog.reporter.sheets.config import (
     AIOSEO_RECOMMENDATIONS_SHEET,
+    EXECUTIVE_DASHBOARD_SHEET,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     DATA_HEAVY_TABS,
@@ -295,6 +296,9 @@ def _link_main_technical_health_to_diagnostics(worksheet) -> None:
 
 def adjust_sheet_format(writer, sheet_name):
     worksheet = writer.sheets[sheet_name]
+    if sheet_name == EXECUTIVE_DASHBOARD_SHEET:
+        set_freeze_panes_safe(worksheet, "A8")
+        return
     reorder_columns(worksheet, sheet_name)
     if sheet_name == "Main":
         apply_column_grouping(worksheet, MAIN_COLUMN_GROUP_DEFINITIONS)

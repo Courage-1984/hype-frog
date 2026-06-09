@@ -13,6 +13,8 @@ CONTENT_OPTIMISATION_HUB_SHEET: str = "Content Optimisation Hub"
 CONTENT_HUB_METRICS_SHEET: str = "Content Hub Metrics"
 AIOSEO_RECOMMENDATIONS_SHEET: str = "AIOSEO Recommendations"
 AUDIT_RUN_DETAILS_SHEET: str = "Audit Run Details"
+EXECUTIVE_DASHBOARD_SHEET: str = "Executive Dashboard"
+CHART_DATA_SHEET: str = "Chart Data"
 # Freeze through Assigned Owner + URL Slug Normalization; URL scrolls from column I.
 CONTENT_HUB_FREEZE_PANES: str = "I3"
 
@@ -54,6 +56,8 @@ __all__ = [
     "CONTENT_HUB_METRICS_SHEET",
     "AIOSEO_RECOMMENDATIONS_SHEET",
     "AUDIT_RUN_DETAILS_SHEET",
+    "EXECUTIVE_DASHBOARD_SHEET",
+    "CHART_DATA_SHEET",
     "CONTENT_HUB_FREEZE_PANES",
     "DATA_HEAVY_TABS",
     "env_bool",

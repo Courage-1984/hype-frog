@@ -22,16 +22,17 @@ from hype_frog.reporter.sheets.workbook_layout import (
 
 def test_visible_tab_order_matches_workflow_spec() -> None:
     visible = [n for n in VISIBLE_WORKBOOK_TAB_ORDER if n != "Table of Contents"]
-    assert visible[:5] == [
+    assert visible[:6] == [
         "Dashboard",
+        "Executive Dashboard",
         "Summary",
         "Priority URLs",
         "FixPlan",
         CONTENT_OPTIMISATION_HUB_SHEET,
     ]
-    assert visible[6] == "Main"
-    assert visible[8] == "Link Inventory"
-    assert visible[9] == "SitemapQA"
+    assert visible[7] == "Main"
+    assert visible[9] == "Link Inventory"
+    assert visible[10] == "SitemapQA"
     assert AIOSEO_RECOMMENDATIONS_SHEET in visible
     assert visible[-1] == "Playbook"
 
