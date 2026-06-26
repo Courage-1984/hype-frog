@@ -325,8 +325,8 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet["A14"] = '=HYPERLINK("#\'Technical Diagnostics\'!A1","Warning URL Rate %")'
         worksheet["B14"] = f"=IFERROR(B10/{_technical_url_row_denominator()},0)"
         worksheet["B14"].number_format = "0%"
-        worksheet["A15"] = "Projected Health Score % (if all To Do done)"
-        worksheet["A16"] = "Projected Pass Rate % (if all To Do done)"
+        worksheet["A15"] = "Illustrative projected Health % (export model)"
+        worksheet["A16"] = "Illustrative projected Pass Rate % (export model)"
         worksheet["A17"] = (
             f'=HYPERLINK("#\'{CONTENT_OPTIMISATION_HUB_SHEET}\'!A1",'
             f'"Content Hub Readiness (%)")'

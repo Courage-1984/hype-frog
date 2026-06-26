@@ -172,9 +172,11 @@ def test_executive_dashboard_writes_charts_with_visible_source_rows(
     assert len(exec_ws._charts) >= 4
     titles = {_chart_title_text(chart) for chart in exec_ws._charts}
     assert "Health components — current vs illustrative projected" in titles
-    assert "Unique URLs by severity badge" in titles
+    assert any("Issue severity" in title for title in titles)
+    assert any("Content & AEO readiness" in title for title in titles)
+    assert any("Top issues by URL impact" in title for title in titles)
     assert "High-intent pages by business risk" in titles
-    assert "Key insights:" in str(exec_ws.cell(row=6, column=1).value or "")
+    assert "Key insights:" in str(exec_ws.cell(row=5, column=1).value or "")
     assert exec_ws.cell(row=CHART_SOURCE_FIRST_ROW + 2, column=2).value is not None
     wb.close()
 

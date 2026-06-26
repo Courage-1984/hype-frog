@@ -29,16 +29,33 @@ _SECTION_FILL = PatternFill("solid", fgColor="E5E7EB")
 _SOURCE_FILL = PatternFill("solid", fgColor="F3F4F6")
 _INSIGHT_FILL = PatternFill("solid", fgColor="F5F7FA")
 
-_KEY_INSIGHTS_ROW = 6
-_SECTION_CHARTS_ROW = 7
-_CHART_ROW_HEALTH = 8
-_CHART_ROW_BREAKDOWN = 26
-_CHART_ROW_PRIORITY = 44
+_KEY_INSIGHTS_ROW = 5
 
-_READINESS_BAR_GOOD = "70AD47"
-_READINESS_BAR_MID = "FFC000"
-_READINESS_BAR_LOW = "C00000"
-_READINESS_BAR_EMPTY = "E5E7EB"
+# Visual grid: rows 1–58 are charts/KPIs; row 59 hint; source tables from row 60.
+_CHART_BAND_ROW_HEIGHT_PT = 15.0
+_LEFT_CHART_COL = "A"
+_RIGHT_CHART_COL = "G"
+_CHART_BAND_ROWS = 12
+
+_ROW_SEC_HEALTH = 6
+_ROW_CH_HEALTH = 7
+
+_ROW_SEC_ISSUES = 19
+_ROW_CH_ISSUES = 20
+
+_ROW_SEC_ACTIONS = 32
+_ROW_CH_ACTIONS = 33
+
+_ROW_SEC_TOP_ISSUES = 45
+_ROW_CH_TOP_ISSUES = 46
+
+_SOURCE_DATA_HINT_ROW = 59
+
+# Chart size presets (cm): full-width and half-sheet (A–F / G–L).
+_SIZE_HEALTH_FULL = (18.0, 7.8)
+_SIZE_HALF_CHART = (9.2, 7.0)
+_SIZE_DOUGHNUT = (9.0, 7.2)
+_SIZE_TOP_ISSUES = (18.0, 6.8)
 
 _LOW_VALUE_URL_PATH_TOKENS: tuple[str, ...] = (
     "cart",
@@ -95,6 +112,8 @@ class ChartDataLayout:
     content_rows: int = 5
     projected_start: int = CHART_SOURCE_FIRST_ROW + 45
     projected_rows: int = 2
+    top_issues_start: int = CHART_SOURCE_FIRST_ROW + 50
+    top_issues_rows: int = 0
 
 
 def _label_col() -> int:
@@ -174,11 +193,12 @@ def _content_readiness_percentages(
     total = len(extra_rows)
     if total <= 0:
         return [
-            ("Good H1 (%)", 0.0),
-            ("Meta description (%)", 0.0),
-            ("Answer paragraphs (%)", 0.0),
-            ("Schema present (%)", 0.0),
-            ("Image alt ≥80% (%)", 0.0),
+            ("Good H1", 0.0),
+            ("Meta description", 0.0),
+            ("Answer paragraphs", 0.0),
+            ("Schema present", 0.0),
+            ("Image alt ≥80%", 0.0),
+            ("Question headings", 0.0),
         ]
 
     def pct(count: int) -> float:
@@ -197,12 +217,16 @@ def _content_readiness_percentages(
     alt_ok = sum(
         1 for row in extra_rows if _to_float(row.get("Image Alt Coverage (%)")) >= 80.0
     )
+    question_headings = sum(
+        1 for row in extra_rows if int(row.get("Question Heading Count") or 0) > 0
+    )
     return [
-        ("Good H1 (%)", pct(good_h1)),
-        ("Meta description (%)", pct(good_meta)),
-        ("Answer paragraphs (%)", pct(answer_blocks)),
-        ("Schema present (%)", pct(schema)),
-        ("Image alt ≥80% (%)", pct(alt_ok)),
+        ("Good H1", pct(good_h1)),
+        ("Meta description", pct(good_meta)),
+        ("Answer paragraphs", pct(answer_blocks)),
+        ("Schema present", pct(schema)),
+        ("Image alt ≥80%", pct(alt_ok)),
+        ("Question headings", pct(question_headings)),
     ]
 
 
@@ -382,12 +406,40 @@ def _build_key_insights(
     return insights[:4]
 
 
-def _readiness_bar_fill(pct: float) -> str:
-    if pct >= 80.0:
-        return _READINESS_BAR_GOOD
-    if pct >= 50.0:
-        return _READINESS_BAR_MID
-    return _READINESS_BAR_LOW
+def _reserve_chart_band(
+    exec_ws: Worksheet,
+    start_row: int,
+    row_count: int,
+    *,
+    row_height_pt: float = _CHART_BAND_ROW_HEIGHT_PT,
+) -> None:
+    """Reserve vertical space so openpyxl charts (sized in cm) do not overlap."""
+    for offset in range(row_count):
+        exec_ws.row_dimensions[start_row + offset].height = row_height_pt
+
+
+def _apply_executive_column_grid(exec_ws: Worksheet) -> None:
+    """Even column widths so left (A–F) and right (G–L) halves use full sheet width."""
+    for col_idx in range(1, 13):
+        exec_ws.column_dimensions[get_column_letter(col_idx)].width = 12.0
+
+
+def _write_source_data_hint(exec_ws: Worksheet) -> None:
+    exec_ws.merge_cells(f"A{_SOURCE_DATA_HINT_ROW}:L{_SOURCE_DATA_HINT_ROW}")
+    hint = exec_ws.cell(
+        row=_SOURCE_DATA_HINT_ROW,
+        column=1,
+        value=f"▼ Chart source data begins row {CHART_SOURCE_FIRST_ROW} (columns A–C)",
+    )
+    hint.font = Font(italic=True, size=9, color="666666")
+    hint.fill = _SOURCE_FILL
+    hint.alignment = Alignment(horizontal="center", vertical="center")
+    exec_ws.row_dimensions[_SOURCE_DATA_HINT_ROW].height = 18
+
+
+def _apply_chart_size(chart: BarChart | DoughnutChart, width_cm: float, height_cm: float) -> None:
+    chart.width = width_cm
+    chart.height = height_cm
 
 
 def _write_section_header(
@@ -422,54 +474,28 @@ def _write_key_insights(
     exec_ws.row_dimensions[_KEY_INSIGHTS_ROW].height = 32
 
 
-def _write_content_readiness_panel(
-    exec_ws: Worksheet,
-    layout: ChartDataLayout,
+def _top_issues_by_impact(
+    fixplan_rows: list[dict[str, Any]],
     *,
-    start_row: int,
-    start_col: int = 7,
-) -> None:
-    """Render content-readiness as labeled progress bars (clearer than a cramped chart)."""
-    header_row = layout.content_start + 1
-    first_data = header_row + 1
-    last_data = header_row + layout.content_rows
-    title_col = start_col
-    pct_col = start_col + 1
-    bar_start_col = start_col + 2
-    bar_segments = 10
-
-    exec_ws.merge_cells(
-        start_row=start_row,
-        start_column=title_col,
-        end_row=start_row,
-        end_column=bar_start_col + bar_segments - 1,
+    limit: int = 8,
+) -> list[tuple[str, int]]:
+    ranked = sorted(
+        fixplan_rows,
+        key=lambda row: int(row.get("Affected Count") or 0),
+        reverse=True,
     )
-    title_cell = exec_ws.cell(row=start_row, column=title_col, value="Content readiness (% of URLs)")
-    title_cell.font = Font(bold=True, size=10, color=STD_NAVY)
-    title_cell.fill = _SECTION_FILL
-    title_cell.alignment = Alignment(horizontal="left", vertical="center")
-
-    row_offset = 1
-    for src_row in range(first_data, last_data + 1):
-        label = str(exec_ws.cell(row=src_row, column=_label_col()).value or "").strip()
-        pct = _to_float(exec_ws.cell(row=src_row, column=_value_col()).value, 0.0)
-        short_label = label.replace(" (%)", "").replace("≥80%", "≥80%")
-        out_row = start_row + row_offset
-        exec_ws.cell(row=out_row, column=title_col, value=short_label).font = Font(size=9)
-        exec_ws.cell(row=out_row, column=title_col).alignment = Alignment(horizontal="left")
-        pct_cell = exec_ws.cell(row=out_row, column=pct_col, value=f"{pct:.0f}%")
-        pct_cell.font = Font(bold=True, size=9)
-        pct_cell.alignment = Alignment(horizontal="right")
-        filled = max(0, min(bar_segments, round(pct / 10.0)))
-        bar_color = _readiness_bar_fill(pct)
-        for seg in range(bar_segments):
-            cell = exec_ws.cell(row=out_row, column=bar_start_col + seg)
-            cell.value = None
-            cell.fill = PatternFill(
-                "solid",
-                fgColor=bar_color if seg < filled else _READINESS_BAR_EMPTY,
-            )
-        row_offset += 1
+    issues: list[tuple[str, int]] = []
+    for row in ranked:
+        count = int(row.get("Affected Count") or 0)
+        if count <= 0:
+            continue
+        name = _sanitize_excel_value(str(row.get("Issue Type") or "Unknown")) or "Unknown"
+        if len(name) > 42:
+            name = name[:39] + "…"
+        issues.append((name, count))
+        if len(issues) >= limit:
+            break
+    return issues
 
 
 def _build_projection_narrative(summary_metrics: SummaryMetricsPayload) -> str:
@@ -632,6 +658,16 @@ def populate_chart_data_sheet(
         "Model: current + (100-current) × open-issue share × 0.9 (matches export_flow)",
     )
 
+    top_issues_start = CHART_SOURCE_FIRST_ROW + 50
+    _write_label_cell(ws, top_issues_start, "Top issues by URL impact")
+    tir = top_issues_start + 1
+    _write_label_cell(ws, tir, "Issue")
+    ws.cell(row=tir, column=value_col, value="Affected URLs")
+    top_issues = _top_issues_by_impact(fixplan_rows, limit=8)
+    for idx, (issue_name, affected) in enumerate(top_issues, start=tir + 1):
+        _write_label_cell(ws, idx, issue_name)
+        ws.cell(row=idx, column=value_col, value=affected)
+
     return ChartDataLayout(
         health_start=layout.health_start,
         health_rows=layout.health_rows,
@@ -645,6 +681,8 @@ def populate_chart_data_sheet(
         content_rows=len(content),
         projected_start=layout.projected_start,
         projected_rows=2,
+        top_issues_start=top_issues_start,
+        top_issues_rows=len(top_issues),
     )
 
 
@@ -684,8 +722,7 @@ def _add_health_comparison_chart(
     chart.y_axis.title = "Score"
     chart.x_axis.title = "Metric"
     chart.legend.position = "b"
-    chart.height = 7.5
-    chart.width = 8.5
+    _apply_chart_size(chart, *_SIZE_HEALTH_FULL)
     data = Reference(
         exec_ws,
         min_col=_value_col(),
@@ -728,16 +765,51 @@ def _add_doughnut_chart(
     chart = DoughnutChart()
     chart.title = title
     chart.legend.position = "r"
-    chart.height = 7
-    chart.width = 5.5
+    _apply_chart_size(chart, *_SIZE_DOUGHNUT)
     data = Reference(exec_ws, min_col=series_col, min_row=header_row, max_row=last_data)
     cats = Reference(exec_ws, min_col=_label_col(), min_row=first_data, max_row=last_data)
     chart.add_data(data, titles_from_data=True)
     chart.set_categories(cats)
     chart.dataLabels = DataLabelList()
     chart.dataLabels.showPercent = True
-    chart.dataLabels.showCatName = False
+    chart.dataLabels.showCatName = True
     _apply_doughnut_colors(chart, colors, point_count=data_rows)
+    _attach_chart(exec_ws, chart, anchor)
+
+
+def _add_severity_comparison_chart(
+    exec_ws: Worksheet,
+    layout: ChartDataLayout,
+    anchor: str,
+) -> None:
+    if layout.severity_rows <= 0:
+        return
+    header_row = layout.severity_start + 1
+    first_data = header_row + 1
+    last_data = header_row + layout.severity_rows
+    chart = BarChart()
+    chart.type = "col"
+    chart.grouping = "clustered"
+    chart.title = "Issue severity — unique URLs vs instances"
+    chart.y_axis.title = "Count"
+    chart.x_axis.title = "Severity"
+    chart.legend.position = "b"
+    _apply_chart_size(chart, *_SIZE_HALF_CHART)
+    data = Reference(
+        exec_ws,
+        min_col=_value_col(),
+        min_row=header_row,
+        max_col=_value_col_2(),
+        max_row=last_data,
+    )
+    cats = Reference(
+        exec_ws,
+        min_col=_label_col(),
+        min_row=first_data,
+        max_row=last_data,
+    )
+    chart.add_data(data, titles_from_data=True)
+    chart.set_categories(cats)
     _attach_chart(exec_ws, chart, anchor)
 
 
@@ -757,8 +829,7 @@ def _add_priority_bar_chart(
     chart.x_axis.title = "Business risk score"
     chart.y_axis.title = "Page"
     chart.legend = None
-    chart.height = 8
-    chart.width = 7.5
+    _apply_chart_size(chart, *_SIZE_HALF_CHART)
     data = Reference(exec_ws, min_col=_value_col(), min_row=header_row, max_row=last_data)
     cats = Reference(exec_ws, min_col=_label_col(), min_row=first_data, max_row=last_data)
     chart.add_data(data, titles_from_data=True)
@@ -766,28 +837,49 @@ def _add_priority_bar_chart(
     _attach_chart(exec_ws, chart, anchor)
 
 
-def _add_projected_impact_chart(
+def _add_content_readiness_bar_chart(
     exec_ws: Worksheet,
     layout: ChartDataLayout,
     anchor: str,
 ) -> None:
-    header_row = layout.projected_start + 1
-    last_data = header_row + layout.projected_rows
+    if layout.content_rows <= 0:
+        return
+    header_row = layout.content_start + 1
+    first_data = header_row + 1
+    last_data = header_row + layout.content_rows
     chart = BarChart()
-    chart.type = "col"
-    chart.title = "SEO health — export projection model"
-    chart.y_axis.title = "Health %"
-    chart.x_axis.title = "Scenario"
+    chart.type = "bar"
+    chart.title = "Content & AEO readiness (% URLs)"
+    chart.x_axis.title = "Percent of URLs"
+    chart.y_axis.title = "Signal"
     chart.legend = None
-    chart.height = 7.5
-    chart.width = 5
+    _apply_chart_size(chart, *_SIZE_HALF_CHART)
     data = Reference(exec_ws, min_col=_value_col(), min_row=header_row, max_row=last_data)
-    cats = Reference(
-        exec_ws,
-        min_col=_label_col(),
-        min_row=header_row + 1,
-        max_row=last_data,
-    )
+    cats = Reference(exec_ws, min_col=_label_col(), min_row=first_data, max_row=last_data)
+    chart.add_data(data, titles_from_data=True)
+    chart.set_categories(cats)
+    _attach_chart(exec_ws, chart, anchor)
+
+
+def _add_top_issues_chart(
+    exec_ws: Worksheet,
+    layout: ChartDataLayout,
+    anchor: str,
+) -> None:
+    if layout.top_issues_rows <= 0:
+        return
+    header_row = layout.top_issues_start + 1
+    first_data = header_row + 1
+    last_data = header_row + layout.top_issues_rows
+    chart = BarChart()
+    chart.type = "bar"
+    chart.title = "Top issues by URL impact (Fix Plan)"
+    chart.x_axis.title = "Affected URLs"
+    chart.y_axis.title = "Issue"
+    chart.legend = None
+    _apply_chart_size(chart, *_SIZE_TOP_ISSUES)
+    data = Reference(exec_ws, min_col=_value_col(), min_row=header_row, max_row=last_data)
+    cats = Reference(exec_ws, min_col=_label_col(), min_row=first_data, max_row=last_data)
     chart.add_data(data, titles_from_data=True)
     chart.set_categories(cats)
     _attach_chart(exec_ws, chart, anchor)
@@ -807,17 +899,19 @@ def _write_kpi_cards(
     title.font = Font(bold=True, size=16, color=STD_NAVY)
     title.alignment = Alignment(horizontal="left", vertical="center")
 
-    exec_ws.merge_cells("A2:L3")
+    exec_ws.merge_cells("A2:L2")
     subtitle = exec_ws["A2"]
     subtitle.value = _build_projection_narrative(summary_metrics)
     subtitle.alignment = Alignment(wrap_text=True, vertical="top")
-    subtitle.font = Font(size=10, color="374151")
-    exec_ws.row_dimensions[2].height = 48
-    exec_ws.row_dimensions[3].height = 18
+    subtitle.font = Font(size=9, color="374151")
+    exec_ws.row_dimensions[2].height = 40
 
     cards: list[tuple[str, str]] = [
         ("SEO Health (now)", f"{summary_metrics.health_score_pct:.0f}%"),
-        ("SEO Health (illustrative)", f"{summary_metrics.projected_health_score_pct:.0f}%"),
+        (
+            "SEO Health (illustrative projected)",
+            f"{summary_metrics.projected_health_score_pct:.0f}%",
+        ),
         ("AEO Readiness", f"{dashboard_metrics.aeo_readiness:.0f}%"),
         ("Critical URLs", str(summary_metrics.critical_url_count)),
         ("Traffic Lift (est.)", str(traffic_lift)),
@@ -826,7 +920,9 @@ def _write_kpi_cards(
             f"{psi:.0f}" if psi is not None else "N/A",
         ),
     ]
-    positions = [(1, 4), (3, 4), (5, 4), (7, 4), (9, 4), (11, 4)]
+    positions = [(1, 3), (3, 3), (5, 3), (7, 3), (9, 3), (11, 3)]
+    exec_ws.row_dimensions[3].height = 20
+    exec_ws.row_dimensions[4].height = 30
     for (col, row), (label, value) in zip(positions, cards, strict=False):
         end_col = col + 1
         label_merge = f"{get_column_letter(col)}{row}:{get_column_letter(end_col)}{row}"
@@ -892,63 +988,73 @@ def write_executive_dashboard(
         traffic_lift=traffic_lift,
         psi=psi,
     )
+    _apply_executive_column_grid(exec_ws)
     _write_key_insights(
         exec_ws,
         _build_key_insights(summary_metrics, dashboard_metrics),
     )
-    _write_section_header(exec_ws, _SECTION_CHARTS_ROW, "Health & projection")
+
+    _write_section_header(exec_ws, _ROW_SEC_HEALTH, "Health & illustrative projection")
+    _reserve_chart_band(exec_ws, _ROW_CH_HEALTH, _CHART_BAND_ROWS)
     _add_health_comparison_chart(
         exec_ws,
         layout,
-        f"A{_CHART_ROW_HEALTH}",
-    )
-    _add_projected_impact_chart(
-        exec_ws,
-        layout,
-        f"G{_CHART_ROW_HEALTH}",
+        f"{_LEFT_CHART_COL}{_ROW_CH_HEALTH}",
     )
 
-    _write_section_header(exec_ws, _CHART_ROW_BREAKDOWN - 1, "Issue breakdown (unique URLs)")
+    _write_section_header(
+        exec_ws,
+        _ROW_SEC_ISSUES,
+        "Issue distribution — unique URLs vs issue instances (see source row 60+)",
+    )
     severity_header = layout.severity_start + 1
     owner_header = layout.owner_start + 1
-    _add_doughnut_chart(
+    _reserve_chart_band(exec_ws, _ROW_CH_ISSUES, _CHART_BAND_ROWS)
+    _add_severity_comparison_chart(
         exec_ws,
-        title="Unique URLs by severity badge",
-        header_row=severity_header,
-        data_rows=layout.severity_rows,
-        anchor=f"A{_CHART_ROW_BREAKDOWN}",
-        colors=_SEVERITY_SLICE_COLORS,
-        value_col=_value_col(),
+        layout,
+        f"{_LEFT_CHART_COL}{_ROW_CH_ISSUES}",
     )
     _add_doughnut_chart(
         exec_ws,
-        title="Unique URLs by owner (workload)",
+        title="Owner workload — unique URLs",
         header_row=owner_header,
         data_rows=layout.owner_rows,
-        anchor=f"G{_CHART_ROW_BREAKDOWN}",
+        anchor=f"{_RIGHT_CHART_COL}{_ROW_CH_ISSUES}",
         colors=_OWNER_SLICE_COLORS,
         value_col=_value_col(),
     )
 
     _write_section_header(
         exec_ws,
-        _CHART_ROW_PRIORITY - 1,
+        _ROW_SEC_ACTIONS,
         "Priority pages & content readiness",
     )
-    _add_priority_bar_chart(exec_ws, layout, f"A{_CHART_ROW_PRIORITY}")
-    _write_content_readiness_panel(
+    _reserve_chart_band(exec_ws, _ROW_CH_ACTIONS, _CHART_BAND_ROWS)
+    _add_priority_bar_chart(
         exec_ws,
         layout,
-        start_row=_CHART_ROW_PRIORITY,
-        start_col=7,
+        f"{_LEFT_CHART_COL}{_ROW_CH_ACTIONS}",
+    )
+    _add_content_readiness_bar_chart(
+        exec_ws,
+        layout,
+        f"{_RIGHT_CHART_COL}{_ROW_CH_ACTIONS}",
     )
 
-    for col, width in zip(
-        range(1, 13),
-        [16, 10, 2, 12, 2, 12, 2, 12, 2, 12, 2, 12],
-        strict=False,
-    ):
-        exec_ws.column_dimensions[get_column_letter(col)].width = width
+    _write_section_header(
+        exec_ws,
+        _ROW_SEC_TOP_ISSUES,
+        "Top issues to fix first (by affected URLs)",
+    )
+    _reserve_chart_band(exec_ws, _ROW_CH_TOP_ISSUES, _CHART_BAND_ROWS)
+    _add_top_issues_chart(
+        exec_ws,
+        layout,
+        f"{_LEFT_CHART_COL}{_ROW_CH_TOP_ISSUES}",
+    )
+
+    _write_source_data_hint(exec_ws)
     exec_ws.sheet_view.showGridLines = False
 
 
