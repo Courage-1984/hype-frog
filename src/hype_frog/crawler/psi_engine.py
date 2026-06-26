@@ -202,7 +202,11 @@ def _crux_cls_from_percentile(raw: float) -> float:
 
 
 def _field_experience_metrics(payload: dict[str, Any]) -> dict[str, Any] | None:
-    exp = payload.get("loadingExperience") or payload.get("originLoadingExperience")
+    used_origin = False
+    exp = payload.get("loadingExperience")
+    if not exp:
+        exp = payload.get("originLoadingExperience")
+        used_origin = bool(exp)
     if not isinstance(exp, dict):
         return None
     metrics = exp.get("metrics")
@@ -229,7 +233,10 @@ def _field_experience_metrics(payload: dict[str, Any]) -> dict[str, Any] | None:
         if isinstance(fid, dict) and fid.get("percentile") is not None:
             out["inp_ms"] = round(float(fid["percentile"]), 2)
 
-    return out if out else None
+    if not out:
+        return None
+    out["crux_data_level"] = "origin" if used_origin else "url"
+    return out
 
 
 def _parse_pagespeed_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -285,6 +292,47 @@ def _resolve_psi_data_status(
     if parts:
         return "Unavailable (" + "; ".join(parts) + ")"
     return "Unavailable"
+
+
+def _resolve_cwv_labelling(
+    *,
+    has_lab: bool,
+    has_field: bool,
+    crux_data_level: str | None,
+) -> tuple[str, str, str]:
+    """Return ``(PSI Data Status, Field vs Lab, CWV Data Source)`` per audit Phase 2."""
+    is_origin = crux_data_level == "origin"
+
+    if has_field and is_origin:
+        if has_lab:
+            return (
+                "PSI + CrUX Field (Origin)",
+                "Field (Origin)",
+                "CrUX API (Origin-level)",
+            )
+        return (
+            "CrUX Field (Origin)",
+            "Field (Origin)",
+            "CrUX API (Origin-level)",
+        )
+
+    if has_field:
+        if has_lab:
+            return (
+                "PSI + CrUX Field (URL)",
+                "Field",
+                "PSI API (CrUX)",
+            )
+        return (
+            "CrUX Field (URL)",
+            "Field",
+            "CrUX API (URL-level)",
+        )
+
+    if has_lab:
+        return ("PSI Lab", "Lab", "PSI API (Lighthouse)")
+
+    return ("Not available", "N/A", "None")
 
 
 async def _fetch_strategy_raw(
@@ -430,10 +478,33 @@ def _merge_url_results(
     m_lab = mobile["lab"] or {}
     d_lab = desktop["lab"] or {}
     field_mobile = mobile.get("field")
+    if not field_mobile and mobile_raw:
+        field_mobile = _field_experience_metrics(mobile_raw)
 
+    has_lab = mobile_ok or desktop_ok
     has_field = bool(field_mobile)
-    field_vs_lab = "Field" if has_field else "Lab"
-    cwv_source = "PSI API (CrUX)" if has_field else "PSI API (Lighthouse Lab)"
+    crux_data_level = (
+        str(field_mobile.get("crux_data_level"))
+        if isinstance(field_mobile, dict) and field_mobile.get("crux_data_level")
+        else None
+    )
+
+    if has_lab or has_field:
+        psi_data_status, field_vs_lab, cwv_source = _resolve_cwv_labelling(
+            has_lab=has_lab,
+            has_field=has_field,
+            crux_data_level=crux_data_level,
+        )
+    else:
+        psi_data_status = _resolve_psi_data_status(
+            mobile_ok=mobile_ok,
+            desktop_ok=desktop_ok,
+            has_field=False,
+            mobile_error=mobile_error,
+            desktop_error=desktop_error,
+        )
+        field_vs_lab = "N/A"
+        cwv_source = "None"
 
     lab_mobile_inp = m_lab.get("inp_ms")
     lab_desktop_inp = d_lab.get("inp_ms")
@@ -452,14 +523,6 @@ def _merge_url_results(
         field_mobile.get("inp_ms")
         if has_field and field_mobile and field_mobile.get("inp_ms") is not None
         else lab_mobile_inp if mobile_ok else None
-    )
-
-    psi_data_status = _resolve_psi_data_status(
-        mobile_ok=mobile_ok,
-        desktop_ok=desktop_ok,
-        has_field=has_field,
-        mobile_error=mobile_error,
-        desktop_error=desktop_error,
     )
 
     merged_flat: dict[str, Any] = {
@@ -520,11 +583,16 @@ class PsiBatchSummary:
 
 
 def _classify_psi_status(status: str) -> str:
-    if status.startswith("Complete"):
+    normalized = str(status or "").strip()
+    if normalized.startswith("PSI + CrUX") or normalized.startswith("CrUX Field"):
         return "complete"
-    if status.startswith("Partial"):
+    if normalized == "PSI Lab":
+        return "lab_only"
+    if normalized.startswith("Complete"):
+        return "complete"
+    if normalized.startswith("Partial"):
         return "partial"
-    if status == "Lab only":
+    if normalized in {"Lab only"}:
         return "lab_only"
     return "unavailable"
 

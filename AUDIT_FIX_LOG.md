@@ -10,7 +10,7 @@
 |-------|-------|--------|-------------|-------|
 | 0 | Tracking document created | ✅ Done | N/A | |
 | 1 | Isolated function fixes (3 bugs) | ✅ Done | ✅ Pass | quick-test-fast 2026-06-26; export blocker fixed separately |
-| 2 | CrUX origin data labelling | ⬜ Pending | ⬜ | |
+| 2 | CrUX origin data labelling | ✅ Done | ✅ Pass | quick-test-fast 2026-06-26 |
 | 3 | Site-level vs URL-level issue scope | ⬜ Pending | ⬜ | |
 | 4 | CWV severity cascade fix | ⬜ Pending | ⬜ | |
 | 5 | WooCommerce / parameter URL filtering | ⬜ Pending | ⬜ | |
@@ -47,17 +47,20 @@
 ### 2A: _field_experience_metrics origin detection
 - **File:** `src/hype_frog/crawler/psi_engine.py`
 - **Function:** `_field_experience_metrics` (~line 204)
-- **Status:** ⬜ Pending
+- **Status:** ✅ Done
+- **Change summary:** Tracks `loadingExperience` vs `originLoadingExperience` fallback; adds `crux_data_level` (`url` | `origin`) to returned metrics dict.
 
 ### 2B: CWV Data Source / PSI Data Status / Field vs Lab consistency
 - **File:** `src/hype_frog/crawler/psi_engine.py`
-- **Function:** values written at ~line 434-496
-- **Status:** ⬜ Pending
+- **Function:** `_resolve_cwv_labelling`, `_merge_url_results`
+- **Status:** ✅ Done
+- **Change summary:** New audit vocabulary (e.g. `PSI + CrUX Field (URL)`, `CrUX Field (Origin)`, `PSI Lab`). Origin appears in `CWV Data Source` when origin CrUX used. Field metrics parsed even when Lighthouse lab absent.
 
 ### 2C: Propagation in assemble.py
-- **File:** `src/hype_frog/pipeline/assemble.py`
-- **Function:** `row_with_psi_gsc_harden` (~line 275)
-- **Status:** ⬜ Pending
+- **File:** `src/hype_frog/pipeline/assemble.py`, `layout.py`
+- **Function:** `row_with_psi_gsc_harden`, `assemble_enriched_row`
+- **Status:** ✅ Done
+- **Change summary:** Fallback defaults aligned to `N/A` / `None` / `Not available`. `CWV Data Source` added to Main Performance group and enriched main merge.
 
 ---
 
@@ -143,7 +146,7 @@
 |-------|----------|--------------|-------------|-----------|--------------|
 | (baseline) | | | | | |
 | 1 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_204302.xlsx | PASS | Export blocker fixed (partial extraction + empty FixPlan guard) |
-| 2 | | | | | |
+| 2 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_210356.xlsx | PASS | PSI URLs show new labels; 7 non-PSI URLs = Not available |
 | 3 | | | | | |
 | 4 | | | | | |
 | 5 | | | | | |

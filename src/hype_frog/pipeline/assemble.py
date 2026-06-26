@@ -209,6 +209,8 @@ def assemble_enriched_row(
         "CWV LCP (s)": extra_values.get("CWV LCP (s)"),
         "CWV CLS": extra_values.get("CWV CLS"),
         "Field vs Lab": extra_values.get("Field vs Lab"),
+        "CWV Data Source": extra_values.get("CWV Data Source"),
+        "PSI Data Status": extra_values.get("PSI Data Status"),
         "Regional Authority Score": extra_values.get("Regional Authority Score"),
         "Desktop PSI Score": extra_values.get("Desktop PSI Score"),
         "Mobile PSI Score": extra_values.get("Mobile PSI Score"),
@@ -300,7 +302,7 @@ def row_with_psi_gsc_harden(
         cwv_inp = _psi_numeric(psi.get("CWV INP (ms)"))
         merged: dict[str, object] = {
             **row_values,
-            "PSI Data Status": psi.get("PSI Data Status", "Unavailable"),
+            "PSI Data Status": psi.get("PSI Data Status", "Not available"),
             "Desktop PSI Score": psi.get("Desktop Score"),
             "Mobile PSI Score": psi.get("Mobile Score"),
             "Mobile LCP (s)": mobile_lcp,
@@ -309,13 +311,15 @@ def row_with_psi_gsc_harden(
             "CWV LCP (s)": cwv_lcp if cwv_lcp is not None else mobile_lcp,
             "CWV CLS": cwv_cls if cwv_cls is not None else mobile_cls,
             "CWV INP (ms)": cwv_inp,
-            "CWV Data Source": psi.get("CWV Data Source", "PSI API"),
-            "Field vs Lab": psi.get("Field vs Lab", "Lab"),
+            "CWV Data Source": psi.get("CWV Data Source", "None"),
+            "Field vs Lab": psi.get("Field vs Lab", "N/A"),
         }
     elif psi_map:
         merged = {
             **row_values,
-            "PSI Data Status": "Not measured",
+            "PSI Data Status": "Not available",
+            "Field vs Lab": "N/A",
+            "CWV Data Source": "None",
         }
     else:
         merged = {

@@ -329,6 +329,7 @@ MAIN_COLUMN_GROUP_DEFINITIONS: dict[str, list[str]] = {
         "CWV LCP (s)",
         "CWV CLS",
         "Field vs Lab",
+        "CWV Data Source",
         "Regional Authority Score",
         "Desktop PSI Score",
         "Mobile PSI Score",

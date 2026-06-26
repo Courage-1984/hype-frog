@@ -37,11 +37,63 @@ def test_merge_url_results_lab_only_when_no_crux() -> None:
         payload,
         payload,
     )
-    assert merged["PSI Data Status"] == "Lab only"
+    assert merged["PSI Data Status"] == "PSI Lab"
     assert merged["Mobile Score"] == 90
     assert merged["Desktop Score"] == 90
     assert merged["CWV LCP (s)"] == 2.5
     assert merged["Field vs Lab"] == "Lab"
+    assert merged["CWV Data Source"] == "PSI API (Lighthouse)"
+
+
+def test_merge_url_results_psi_plus_url_crux() -> None:
+    merged = psi._merge_url_results(
+        "https://example.com/page",
+        _sample_payload(),
+        _sample_payload(perf=88),
+    )
+    assert merged["PSI Data Status"] == "PSI + CrUX Field (URL)"
+    assert merged["Field vs Lab"] == "Field"
+    assert merged["CWV Data Source"] == "PSI API (CrUX)"
+    assert merged["CWV LCP (s)"] == 2.2
+
+
+def test_merge_url_results_origin_crux_only() -> None:
+    payload = {
+        "originLoadingExperience": {
+            "metrics": {
+                "LARGEST_CONTENTFUL_PAINT_MS": {"percentile": 5100},
+                "CUMULATIVE_LAYOUT_SHIFT_SCORE": {"percentile": 15},
+            }
+        }
+    }
+    merged = psi._merge_url_results(
+        "https://example.com/rare",
+        payload,
+        payload,
+    )
+    assert merged["PSI Data Status"] == "CrUX Field (Origin)"
+    assert merged["Field vs Lab"] == "Field (Origin)"
+    assert "Origin" in str(merged["CWV Data Source"])
+    assert merged["CWV LCP (s)"] == 5.1
+
+
+def test_field_experience_metrics_tracks_crux_data_level() -> None:
+    url_payload = {
+        "loadingExperience": {
+            "metrics": {"LARGEST_CONTENTFUL_PAINT_MS": {"percentile": 2000}}
+        }
+    }
+    origin_payload = {
+        "originLoadingExperience": {
+            "metrics": {"LARGEST_CONTENTFUL_PAINT_MS": {"percentile": 3000}}
+        }
+    }
+    url_metrics = psi._field_experience_metrics(url_payload)
+    origin_metrics = psi._field_experience_metrics(origin_payload)
+    assert url_metrics is not None
+    assert url_metrics["crux_data_level"] == "url"
+    assert origin_metrics is not None
+    assert origin_metrics["crux_data_level"] == "origin"
 
 
 def test_merge_url_results_partial_mobile_failure() -> None:
@@ -55,7 +107,7 @@ def test_merge_url_results_partial_mobile_failure() -> None:
     )
     assert merged["Mobile Score"] is None
     assert merged["Desktop Score"] == 88
-    assert "Partial (mobile unavailable" in str(merged["PSI Data Status"])
+    assert merged["PSI Data Status"] == "PSI Lab"
     assert merged["CWV LCP (s)"] is None
 
 
@@ -80,7 +132,7 @@ def test_psi_index_key_matches_normalized_url() -> None:
 
 def test_store_psi_result_indexes_normalized_key() -> None:
     results: dict[str, dict] = {}
-    merged = {"URL": "https://example.com/x", "PSI Data Status": "Lab only"}
+    merged = {"URL": "https://example.com/x", "PSI Data Status": "PSI Lab"}
     psi._store_psi_result(results, "https://example.com/x/", merged)
     assert "https://example.com/x/" in results
     norm = psi.psi_index_key("https://example.com/x")

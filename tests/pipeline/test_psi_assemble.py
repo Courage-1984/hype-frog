@@ -15,7 +15,7 @@ def test_row_with_psi_gsc_harden_uses_normalized_final_url_lookup() -> None:
     )
     psi_map = {
         "https://example.com/final": {
-            "PSI Data Status": "Lab only",
+            "PSI Data Status": "PSI Lab",
             "Desktop Score": 77,
             "Mobile Score": 65,
             "Mobile LCP": 2.1,
@@ -23,7 +23,7 @@ def test_row_with_psi_gsc_harden_uses_normalized_final_url_lookup() -> None:
             "Mobile TTFB": 0.5,
             "CWV LCP (s)": 2.1,
             "CWV CLS": 0.04,
-            "CWV Data Source": "PSI API (Lighthouse Lab)",
+            "CWV Data Source": "PSI API (Lighthouse)",
             "Field vs Lab": "Lab",
         }
     }
@@ -34,7 +34,7 @@ def test_row_with_psi_gsc_harden_uses_normalized_final_url_lookup() -> None:
         psi_map=psi_map,
         gsc_metrics={},
     )
-    assert hardened.values["PSI Data Status"] == "Lab only"
+    assert hardened.values["PSI Data Status"] == "PSI Lab"
     assert hardened.values["Desktop PSI Score"] == 77
     assert hardened.values["Mobile PSI Score"] == 65
     assert hardened.values["Mobile LCP (s)"] == 2.1
