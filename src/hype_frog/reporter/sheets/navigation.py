@@ -16,7 +16,10 @@ from hype_frog.reporter.sheets.links import (
     add_url_navigation_links as add_url_navigation_links_impl,
     apply_cross_sheet_links as apply_cross_sheet_links_impl,
 )
-from hype_frog.reporter.sheets.style_helpers import header_index
+from hype_frog.reporter.sheets.style_helpers import (
+    header_exists_in_worksheet,
+    header_index,
+)
 
 
 def add_back_to_dashboard_link(worksheet: Worksheet, sheet_name: str) -> None:
@@ -31,6 +34,8 @@ def add_back_to_dashboard_link(worksheet: Worksheet, sheet_name: str) -> None:
     if sheet_name == "Dashboard":
         return
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
+        return
+    if header_exists_in_worksheet(worksheet, "BACK TO DASHBOARD"):
         return
     target_col = worksheet.max_column + 1
     target_ref = f"{get_column_letter(target_col)}1"

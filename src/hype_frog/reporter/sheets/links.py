@@ -190,8 +190,12 @@ def apply_cross_sheet_links(
     if sheet_name == "Main":
         url_col = headers.get("URL")
         if url_col:
-            target_col = worksheet.max_column + 1
-            worksheet.cell(row=1, column=target_col, value="Technical View")
+            existing_col = headers.get("Technical View")
+            if existing_col:
+                target_col = existing_col
+            else:
+                target_col = worksheet.max_column + 1
+                worksheet.cell(row=1, column=target_col, value="Technical View")
             col_letter = get_column_letter(url_col)
             for r in range(2, worksheet.max_row + 1):
                 worksheet.cell(

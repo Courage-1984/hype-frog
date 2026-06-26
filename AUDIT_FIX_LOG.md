@@ -196,8 +196,16 @@
 ## Phase 8 — Duplicate Main Sheet Column Fix
 
 ### 8A: Prevent double-append of Technical View / BACK TO DASHBOARD
-- **Files:** `src/hype_frog/reporter/sheets/links.py`, `src/hype_frog/reporter/sheets/navigation.py`
-- **Status:** ⬜ Pending
+- **Files:** `src/hype_frog/reporter/sheets/style_helpers.py`, `links.py`, `navigation.py`
+- **Status:** ✅ Done
+- **Root cause:** `export_flow.py` calls `adjust_sheet_format(writer, "Main")` immediately after Main write **and** again in the final `format_sheets` loop — navigation helpers appended duplicate headers; `normalize_table_headers` renamed them to `_1`.
+- **Change summary:** Added `header_exists_in_worksheet()`. `apply_cross_sheet_links` reuses existing `Technical View` column when present (still refreshes row formulas). `add_back_to_dashboard_link` skips when `BACK TO DASHBOARD` already in row 1.
+
+**Phase 8 verification (2026-06-27 output):**
+- Main sheet: **0** `_1` suffix columns; **1** `Technical View`, **1** `BACK TO DASHBOARD`
+- Main column count: **61** (was 63 on Phase 7 run — 2 duplicate columns removed)
+- Unit tests: 2/2 pass (`test_main_sheet_navigation`)
+- `--quick-test-fast`: PASS
 
 ---
 
@@ -213,4 +221,4 @@
 | 5 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_214233.xlsx | PASS | CMS Action URLs tab present; 0 WooCommerce links on AMC |
 | 6 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_215138.xlsx | PASS | FixPlan/Summary counts aligned |
 | 7 | 2026-06-27 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_220041.xlsx | PASS | Click Depth nulls=0 |
-| 8 | | | | | |
+| 8 | 2026-06-27 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_221411.xlsx | PASS | No Technical View_1 / BACK TO DASHBOARD_1; Main cols=61 |

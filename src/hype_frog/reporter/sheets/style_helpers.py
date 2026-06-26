@@ -13,6 +13,14 @@ def header_index(worksheet: Worksheet) -> dict[str, int]:
     }
 
 
+def header_exists_in_worksheet(worksheet: Worksheet, header_name: str) -> bool:
+    """Return True when ``header_name`` already exists in row 1."""
+    for cell in worksheet[1]:
+        if cell.value == header_name:
+            return True
+    return False
+
+
 def to_int(value: Any, default: int = 0) -> int:
     try:
         return int(float(value))
@@ -20,4 +28,4 @@ def to_int(value: Any, default: int = 0) -> int:
         return default
 
 
-__all__ = ["header_index", "to_int"]
+__all__ = ["header_exists_in_worksheet", "header_index", "to_int"]
