@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from hype_frog.config import DEFAULT_EFFORT_BY_SEVERITY, DEFAULT_OWNER_BY_SEVERITY
@@ -15,44 +16,190 @@ SEVERITY_PRIORITY_BASE = {"Critical": 100, "Warning": 65, "Observation": 35}
 AGING_BY_SEVERITY = {"Critical": "Immediate (Current Sprint)", "Warning": "Next Sprint", "Observation": "Backlog"}
 
 
-def get_summary_rules() -> list[tuple[str, str, RuleFn]]:
+@dataclass(frozen=True)
+class IssueRule:
+    severity: str
+    name: str
+    fn: RuleFn
+    scope: str = "url"
+
+
+def get_summary_rules() -> list[IssueRule]:
     return [
-        ("Critical", "Non-200 Status", lambda r: isinstance(r.get("Status Code"), int) and r.get("Status Code") >= 400),
-        ("Critical", "Missing Title", lambda r: to_bool(r.get("Title Missing"))),
-        ("Critical", "Noindex Directive", lambda r: "noindex" in str(r.get("Indexability Reason", "")).lower()),
-        ("Critical", "Canonical Points Elsewhere", lambda r: r.get("Canonical Type") == "cross-canonical"),
-        ("Critical", "Robots.txt Disallow Root", lambda r: to_bool(r.get("Robots.txt Disallow /"))),
-        ("Critical", "CWV LCP Above 4.0s", lambda r: (r.get("CWV LCP (s)") or 0) > 4.0),
-        ("Critical", "Broken Internal Links", lambda r: (r.get("Broken Internal Links Count") or 0) > 0),
-        ("Warning", "Redirect Chains", lambda r: (r.get("Redirect Chain Length") or 0) > 1),
-        ("Warning", "Missing Meta Description", lambda r: to_bool(r.get("Meta Description Missing"))),
-        ("Warning", "Missing H1", lambda r: to_bool(r.get("Missing H1 Flag"))),
-        ("Warning", "Multiple H1", lambda r: to_bool(r.get("Multiple H1 Flag"))),
-        ("Warning", "CWV LCP Needs Improvement (2.5-4.0s)", lambda r: 2.5 <= float(r.get("CWV LCP (s)") or 0) <= 4.0),
-        ("Warning", "Missing FAQ/QA Schema", lambda r: not to_bool(r.get("QAPage/FAQ Schema Present")) and (r.get("Question Heading Count") or 0) > 0),
-        ("Warning", "Deep URL (>3 clicks)", lambda r: (r.get("URL Depth") or 0) > 3),
-        ("Warning", "Low Image Alt Coverage", lambda r: (r.get("Image Alt Coverage (%)") or 100) < 80),
-        ("Warning", "Mixed Content", lambda r: to_bool(r.get("Mixed Content Detected"))),
-        ("Warning", "Canonical Missing", lambda r: r.get("Canonical Type") == "missing"),
-        ("Warning", "Hreflang Without Reciprocity", lambda r: r.get("Hreflang Present") and not to_bool(r.get("Hreflang Reciprocal Check"))),
-        ("Observation", "Uses URL Parameters", lambda r: to_bool(r.get("Param URL Flag"))),
-        ("Observation", "Generic Anchor Text Present", lambda r: (r.get("Generic Anchor Text Count") or 0) > 0),
-        ("Observation", "Image Filename Quality Issues", lambda r: (r.get("Image Filename Quality Issues") or 0) > 0),
-        ("Observation", "No Compression Header", lambda r: not to_bool(r.get("Compression Enabled"))),
-        ("Observation", "No Cache-Control Header", lambda r: not bool(r.get("Cache-Control"))),
-        ("Observation", "No ETag Header", lambda r: not bool(r.get("ETag"))),
-        ("Observation", "Thin Content", lambda r: to_bool(r.get("Thin Content Flag"))),
-        ("Warning", "Render Fallback (raw HTTP)", lambda r: to_bool(r.get("Extraction Source Fallback"))),
-        ("Warning", "Probable Draft or Duplicate Page", lambda r: to_bool(r.get("Probable Duplicate Flag"))),
-        ("Warning", "Low AEO Readiness Score", lambda r: (r.get("AEO Readiness Score") or 0) < 70),
-        ("Observation", "No Question Headings", lambda r: (r.get("Question Heading Count") or 0) == 0),
-        ("Observation", "No Answer-Friendly Structure", lambda r: not to_bool(r.get("List/Table Answer Signal"))),
-        ("Observation", "No 40-60 Word Answer Paragraphs", lambda r: (r.get("Paragraphs 40-60 Words Count") or 0) == 0),
-        ("Observation", "INP Above 100ms", lambda r: (r.get("CWV INP (ms)") or 0) > 100),
-        ("Observation", "CLS Above 0.1", lambda r: (r.get("CWV CLS") or 0) > 0.1),
-        ("Observation", "Low Regional Authority", lambda r: (r.get("Regional Authority Score") or 0) < 30),
-        ("Observation", "llms.txt Missing", lambda r: r.get("llms.txt Present") is False),
-        ("Observation", "AI Crawlers Not Explicitly Allowed", lambda r: not to_bool(r.get("AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)"))),
+        IssueRule(
+            "Critical",
+            "Non-200 Status",
+            lambda r: isinstance(r.get("Status Code"), int) and r.get("Status Code") >= 400,
+        ),
+        IssueRule("Critical", "Missing Title", lambda r: to_bool(r.get("Title Missing"))),
+        IssueRule(
+            "Critical",
+            "Noindex Directive",
+            lambda r: "noindex" in str(r.get("Indexability Reason", "")).lower(),
+        ),
+        IssueRule(
+            "Critical",
+            "Canonical Points Elsewhere",
+            lambda r: r.get("Canonical Type") == "cross-canonical",
+        ),
+        IssueRule(
+            "Critical",
+            "Robots.txt Disallow Root",
+            lambda r: to_bool(r.get("Robots.txt Disallow /")),
+        ),
+        IssueRule(
+            "Critical",
+            "CWV LCP Above 4.0s",
+            lambda r: (r.get("CWV LCP (s)") or 0) > 4.0,
+        ),
+        IssueRule(
+            "Critical",
+            "Broken Internal Links",
+            lambda r: (r.get("Broken Internal Links Count") or 0) > 0,
+        ),
+        IssueRule(
+            "Warning",
+            "Redirect Chains",
+            lambda r: (r.get("Redirect Chain Length") or 0) > 1,
+        ),
+        IssueRule(
+            "Warning",
+            "Missing Meta Description",
+            lambda r: to_bool(r.get("Meta Description Missing")),
+        ),
+        IssueRule("Warning", "Missing H1", lambda r: to_bool(r.get("Missing H1 Flag"))),
+        IssueRule("Warning", "Multiple H1", lambda r: to_bool(r.get("Multiple H1 Flag"))),
+        IssueRule(
+            "Warning",
+            "CWV LCP Needs Improvement (2.5-4.0s)",
+            lambda r: 2.5 <= float(r.get("CWV LCP (s)") or 0) <= 4.0,
+        ),
+        IssueRule(
+            "Warning",
+            "Missing FAQ/QA Schema",
+            lambda r: not to_bool(r.get("QAPage/FAQ Schema Present"))
+            and (r.get("Question Heading Count") or 0) > 0,
+        ),
+        IssueRule(
+            "Warning",
+            "Deep URL (>3 clicks)",
+            lambda r: (r.get("URL Depth") or 0) > 3,
+        ),
+        IssueRule(
+            "Warning",
+            "Low Image Alt Coverage",
+            lambda r: (r.get("Image Alt Coverage (%)") or 100) < 80,
+        ),
+        IssueRule(
+            "Warning",
+            "Mixed Content",
+            lambda r: to_bool(r.get("Mixed Content Detected")),
+        ),
+        IssueRule(
+            "Warning",
+            "Canonical Missing",
+            lambda r: r.get("Canonical Type") == "missing",
+        ),
+        IssueRule(
+            "Warning",
+            "Hreflang Without Reciprocity",
+            lambda r: r.get("Hreflang Present")
+            and not to_bool(r.get("Hreflang Reciprocal Check")),
+        ),
+        IssueRule(
+            "Observation",
+            "Uses URL Parameters",
+            lambda r: to_bool(r.get("Param URL Flag")),
+        ),
+        IssueRule(
+            "Observation",
+            "Generic Anchor Text Present",
+            lambda r: (r.get("Generic Anchor Text Count") or 0) > 0,
+        ),
+        IssueRule(
+            "Observation",
+            "Image Filename Quality Issues",
+            lambda r: (r.get("Image Filename Quality Issues") or 0) > 0,
+        ),
+        IssueRule(
+            "Observation",
+            "No Compression Header",
+            lambda r: not to_bool(r.get("Compression Enabled")),
+        ),
+        IssueRule(
+            "Observation",
+            "No Cache-Control Header",
+            lambda r: not bool(r.get("Cache-Control")),
+        ),
+        IssueRule(
+            "Observation",
+            "No ETag Header",
+            lambda r: not bool(r.get("ETag")),
+            scope="server",
+        ),
+        IssueRule(
+            "Observation",
+            "Thin Content",
+            lambda r: to_bool(r.get("Thin Content Flag")),
+        ),
+        IssueRule(
+            "Warning",
+            "Render Fallback (raw HTTP)",
+            lambda r: to_bool(r.get("Extraction Source Fallback")),
+        ),
+        IssueRule(
+            "Warning",
+            "Probable Draft or Duplicate Page",
+            lambda r: to_bool(r.get("Probable Duplicate Flag")),
+        ),
+        IssueRule(
+            "Warning",
+            "Low AEO Readiness Score",
+            lambda r: (r.get("AEO Readiness Score") or 0) < 70,
+        ),
+        IssueRule(
+            "Observation",
+            "No Question Headings",
+            lambda r: (r.get("Question Heading Count") or 0) == 0,
+        ),
+        IssueRule(
+            "Observation",
+            "No Answer-Friendly Structure",
+            lambda r: not to_bool(r.get("List/Table Answer Signal")),
+        ),
+        IssueRule(
+            "Observation",
+            "No 40-60 Word Answer Paragraphs",
+            lambda r: (r.get("Paragraphs 40-60 Words Count") or 0) == 0,
+        ),
+        IssueRule(
+            "Observation",
+            "INP Above 100ms",
+            lambda r: (r.get("CWV INP (ms)") or 0) > 100,
+        ),
+        IssueRule(
+            "Observation",
+            "CLS Above 0.1",
+            lambda r: (r.get("CWV CLS") or 0) > 0.1,
+        ),
+        IssueRule(
+            "Observation",
+            "Low Regional Authority",
+            lambda r: (r.get("Regional Authority Score") or 0) < 30,
+        ),
+        IssueRule(
+            "Observation",
+            "llms.txt Missing",
+            lambda r: r.get("llms.txt Present") is False,
+        ),
+        IssueRule(
+            "Observation",
+            "AI Crawlers Not Explicitly Allowed",
+            lambda r: not to_bool(
+                r.get("AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)")
+            ),
+            scope="site",
+        ),
     ]
 
 

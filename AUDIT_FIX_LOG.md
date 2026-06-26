@@ -11,7 +11,7 @@
 | 0 | Tracking document created | ✅ Done | N/A | |
 | 1 | Isolated function fixes (3 bugs) | ✅ Done | ✅ Pass | quick-test-fast 2026-06-26; export blocker fixed separately |
 | 2 | CrUX origin data labelling | ✅ Done | ✅ Pass | quick-test-fast 2026-06-26 |
-| 3 | Site-level vs URL-level issue scope | ⬜ Pending | ⬜ | |
+| 3 | Site-level vs URL-level issue scope | ✅ Done | ✅ Pass | quick-test-fast 2026-06-26; IssueInventory 69 rows |
 | 4 | CWV severity cascade fix | ⬜ Pending | ⬜ | |
 | 5 | WooCommerce / parameter URL filtering | ⬜ Pending | ⬜ | |
 | 6 | FixPlan vs Summary count reconciliation | ⬜ Pending | ⬜ | |
@@ -66,20 +66,40 @@
 
 ## Phase 3 — Site-level vs URL-level Issue Scope
 
+**`get_summary_rules()` callers updated to `IssueRule` attribute access:**
+- `src/hype_frog/rules/scoring.py` — `score_url_health`
+- `src/hype_frog/reporter/summary_builder.py` — `build_summary_rows`, `build_issue_inventory_rows`
+- `src/hype_frog/reporter/engine_rows.py` — `build_fixplan_rows`
+- `src/hype_frog/orchestration/export_flow.py` — export pipeline
+- `src/hype_frog/orchestration/enrichment_flow.py` — scoring pass
+- `src/hype_frog/orchestration/export_registry.py` — `build_delta_and_trend_rows`
+- `src/hype_frog/pipeline/assemble.py` — type hint on `apply_issue_scoring`
+
 ### 3A: Add scope metadata to registry rules
 - **File:** `src/hype_frog/rules/registry.py`
 - **Function:** `get_summary_rules`
-- **Status:** ⬜ Pending
+- **Status:** ✅ Done
+- **Change summary:** Frozen `@dataclass IssueRule(severity, name, fn, scope="url")`. Returns `list[IssueRule]`. `"No ETag Header"` → `scope="server"`; `"AI Crawlers Not Explicitly Allowed"` → `scope="site"`; all others remain `"url"`. Exported from `rules/__init__.py`.
 
 ### 3B: Branch on scope in IssueInventory builder
 - **File:** `src/hype_frog/reporter/summary_builder.py`
 - **Function:** `build_issue_inventory_rows`
-- **Status:** ⬜ Pending
+- **Status:** ✅ Done
+- **Change summary:** Non-`url` rules emit one aggregate row (`(site-wide)` / `(server config)`), `Affected URL Count`, stable ID via `stable_issue_id("site"|"server", rule.name)`. Per-URL loop skips aggregate issue names. `Affected URL Count` added to IssueInventory columns in `layout.py`.
 
-### 3C: Branch on scope in FixPlan builder
+### 3C: FixPlan builder scope resolution types
 - **File:** `src/hype_frog/reporter/engine_rows.py`
 - **Function:** `build_fixplan_rows`
-- **Status:** ⬜ Pending
+- **Status:** ✅ Done
+- **Change summary:** `rule.scope == "server"` → `Resolution Type = "Server Config"`; `rule.scope == "site"` → `"Site Config"` (precedence over Global Template token matching).
+
+**Phase 3 verification (2026-06-26 output):**
+- IssueInventory: `No ETag Header` → 1 row, URL `(server config)`, Affected URL Count = 10
+- IssueInventory: `AI Crawlers Not Explicitly Allowed` → 1 row, URL `(site-wide)`, Affected URL Count = 10
+- FixPlan: same issues → `Server Config` / `Site Config` respectively
+- Summary issue counts unchanged (10 each)
+- Total IssueInventory rows: 69 (aggregate collapse vs per-URL duplication)
+- Unit tests: 6/6 pass (`test_scoring`, `test_issue_inventory_scope`, `test_fixplan_scope`)
 
 ---
 
@@ -147,7 +167,7 @@
 | (baseline) | | | | | |
 | 1 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_204302.xlsx | PASS | Export blocker fixed (partial extraction + empty FixPlan guard) |
 | 2 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_210356.xlsx | PASS | PSI URLs show new labels; 7 non-PSI URLs = Not available |
-| 3 | | | | | |
+| 3 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_211740.xlsx | PASS | IssueInventory aggregates server/site rules; 69 rows |
 | 4 | | | | | |
 | 5 | | | | | |
 | 6 | | | | | |

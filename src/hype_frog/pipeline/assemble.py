@@ -393,7 +393,7 @@ def row_with_canonical_and_internal_links(
 def row_with_seo_health_enrichment(
     row: ExtraRowPayload,
     *,
-    summary_rules: list[tuple[str, str, Any]],
+    summary_rules: list[IssueRule],
     sitemap_url_keys: set[str],
     graph_metrics: Mapping[str, Mapping[str, Any]],
     inlinks_map: Mapping[str, set[str]],

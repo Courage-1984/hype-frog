@@ -21,8 +21,8 @@ def test_score_url_health_scores_partial_extraction_like_summary_rules() -> None
     assert badge != "Unmeasured"
     assert score is not None
     assert "Missing Title" in matched["Critical"]
-    missing_title_rule = next(r for r in rules if r[1] == "Missing Title")
-    assert safe_rule(missing_title_rule[2], row) is True
+    missing_title_rule = next(r for r in rules if r.name == "Missing Title")
+    assert safe_rule(missing_title_rule.fn, row) is True
 
 
 def test_score_url_health_skipped_stays_unmeasured() -> None:

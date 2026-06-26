@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
-from hype_frog.rules import owner_for_issue, stable_issue_id
+from hype_frog.rules import IssueRule, owner_for_issue, stable_issue_id
 
 _LEGACY_TO_MERGED_REFERENCE_TAB: dict[str, str] = {
     "Technical": "Technical Diagnostics",
@@ -33,7 +33,7 @@ def safe_rule(rule_fn: Callable[..., Any], row: Mapping[str, Any]) -> bool:
 
 
 def build_summary_rows(
-    summary_rules: list[tuple[str, str, Any]],
+    summary_rules: list[IssueRule],
     extra_rows: list[ExtraRowPayload],
     template_issue_counts: defaultdict[str, defaultdict[str, int]],
     value_or_default: Callable[[object, float], float],
@@ -58,27 +58,27 @@ def build_summary_rows(
         }
     )
     del main_rows
-    for severity, issue_name, rule_fn in summary_rules:
+    for rule in summary_rules:
         affected_urls = [
             row.values.get("URL")
             for row in extra_rows
-            if safe_rule(rule_fn, row.values)
+            if safe_rule(rule.fn, row.values)
         ]
         summary_rows.append(
             {
                 "Section": "Issue Counts",
-                "Severity": severity,
-                "Issue": issue_name,
+                "Severity": rule.severity,
+                "Issue": rule.name,
                 "Affected URL Count": len(affected_urls),
                 "Reference Tab": reference_tab_for_merged_workbook(
                     "Indexability"
-                    if "Canonical" in issue_name or "Noindex" in issue_name
+                    if "Canonical" in rule.name or "Noindex" in rule.name
                     else "Links"
-                    if "Links" in issue_name
+                    if "Links" in rule.name
                     else "AEO"
-                    if "AEO" in issue_name
-                    or "Question" in issue_name
-                    or "FAQ" in issue_name
+                    if "AEO" in rule.name
+                    or "Question" in rule.name
+                    or "FAQ" in rule.name
                     else "Technical"
                 ),
                 "Affected URLs (sample)": " | ".join([u for u in affected_urls[:25] if u])
@@ -94,19 +94,19 @@ def build_summary_rows(
             "Affected URLs (sample)": "Detailed rows: see Content & AI Readiness tab",
         }
     )
-    for severity, issue_name, rule_fn in summary_rules:
-        if issue_name not in aeo_issue_names:
+    for rule in summary_rules:
+        if rule.name not in aeo_issue_names:
             continue
         affected_urls = [
             row.values.get("URL")
             for row in extra_rows
-            if safe_rule(rule_fn, row.values)
+            if safe_rule(rule.fn, row.values)
         ]
         summary_rows.append(
             {
                 "Section": "AEO Opportunities",
-                "Severity": severity,
-                "Issue": issue_name,
+                "Severity": rule.severity,
+                "Issue": rule.name,
                 "Affected URL Count": len(affected_urls),
                 "Reference Tab": reference_tab_for_merged_workbook("AEO"),
                 "Affected URLs (sample)": " | ".join([u for u in affected_urls[:25] if u])
@@ -189,21 +189,75 @@ def build_summary_rows(
     return summary_rows
 
 
+def _inventory_reference_tab(issue_name: str) -> str:
+    legacy_ref = (
+        "Indexability"
+        if ("Canonical" in issue_name or "Noindex" in issue_name)
+        else "Links"
+        if ("Links" in issue_name or "Anchor" in issue_name)
+        else "AEO"
+        if ("AEO" in issue_name or "Question" in issue_name or "FAQ" in issue_name)
+        else "Technical"
+    )
+    return reference_tab_for_merged_workbook(legacy_ref)
+
+
+def _aggregate_inventory_url_label(scope: str) -> str:
+    if scope == "site":
+        return "(site-wide)"
+    if scope == "server":
+        return "(server config)"
+    return f"({scope})"
+
+
+def _aggregate_stable_issue_key(scope: str) -> str:
+    if scope == "site":
+        return "site"
+    if scope == "server":
+        return "server"
+    return scope
+
+
 def build_issue_inventory_rows(
-    summary_rules: list[tuple[str, str, Any]],
+    summary_rules: list[IssueRule],
     extra_rows: list[ExtraRowPayload],
     main_rows: list[MainRowPayload] | None = None,
 ) -> list[dict[str, object]]:
     """Flatten matched issues per URL for the IssueInventory sheet."""
     del main_rows
-    critical_names = {i[1] for i in summary_rules if i[0] == "Critical"}
-    warning_names = {i[1] for i in summary_rules if i[0] == "Warning"}
+    critical_names = {rule.name for rule in summary_rules if rule.severity == "Critical"}
+    warning_names = {rule.name for rule in summary_rules if rule.severity == "Warning"}
+    aggregate_issue_names = {rule.name for rule in summary_rules if rule.scope != "url"}
     rows: list[dict[str, object]] = []
+
+    for rule in summary_rules:
+        if rule.scope == "url":
+            continue
+        affected = [row for row in extra_rows if safe_rule(rule.fn, row.values)]
+        if not affected:
+            continue
+        rows.append(
+            {
+                "URL": _aggregate_inventory_url_label(rule.scope),
+                "Issue": rule.name,
+                "Stable Issue ID": stable_issue_id(
+                    _aggregate_stable_issue_key(rule.scope),
+                    rule.name,
+                ),
+                "Severity": rule.severity,
+                "Affected URL Count": len(affected),
+                "Reference Tab": _inventory_reference_tab(rule.name),
+                "Owner": owner_for_issue(rule.name, rule.severity),
+                "Sprint": "",
+                "Status": "Open",
+            }
+        )
+
     for row in extra_rows:
         row_values = row.values
         url = row_values.get("URL")
         for issue in str(row_values.get("Matched Issues") or "").split(" | "):
-            if not issue:
+            if not issue or issue in aggregate_issue_names:
                 continue
             issue_severity = (
                 "Critical"
@@ -212,22 +266,14 @@ def build_issue_inventory_rows(
                 if issue in warning_names
                 else "Observation"
             )
-            legacy_ref = (
-                "Indexability"
-                if ("Canonical" in issue or "Noindex" in issue)
-                else "Links"
-                if ("Links" in issue or "Anchor" in issue)
-                else "AEO"
-                if ("AEO" in issue or "Question" in issue or "FAQ" in issue)
-                else "Technical"
-            )
             rows.append(
                 {
                     "URL": url,
                     "Issue": issue,
                     "Stable Issue ID": stable_issue_id(url, issue),
                     "Severity": issue_severity,
-                    "Reference Tab": reference_tab_for_merged_workbook(legacy_ref),
+                    "Affected URL Count": None,
+                    "Reference Tab": _inventory_reference_tab(issue),
                     "Owner": owner_for_issue(issue, issue_severity),
                     "Sprint": "",
                     "Status": "Open",

@@ -7,6 +7,7 @@ from typing import Any, Callable
 import pandas as pd
 
 from hype_frog.core.models import ExtraRowPayload
+from hype_frog.rules import IssueRule
 from hype_frog.core.text_utils import normalize_text_hash
 from hype_frog.core.url_normalization import normalize_url
 from hype_frog.reporter.sheets.config import (
@@ -373,7 +374,7 @@ def build_delta_and_trend_rows(
     *,
     issue_inventory_df: pd.DataFrame,
     typed_extra_rows: list[ExtraRowPayload],
-    summary_rules: list[tuple[str, str, str]],
+    summary_rules: list[IssueRule],
     prev_issue_ids: set[str],
     prev_fixed_issue_ids: set[str],
     prev_counts: dict[str, int],
@@ -416,7 +417,8 @@ def build_delta_and_trend_rows(
             "Count": len(current_issue_ids & prev_fixed_issue_ids),
         },
     ]
-    for _, issue_name, _ in summary_rules:
+    for rule in summary_rules:
+        issue_name = rule.name
         current_count = len(
             [
                 row

@@ -204,6 +204,7 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "URL",
         "Issue",
         "Severity",
+        "Affected URL Count",
         "Reference Tab",
         "Stable Issue ID",
         "Owner",

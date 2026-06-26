@@ -21,7 +21,7 @@ from hype_frog.reporter.engine_io import (
     _safe_sheet_name,
     _sanitize_excel_url,
 )
-from hype_frog.rules import owner_for_issue, workflow_metrics_for_issue
+from hype_frog.rules import IssueRule, owner_for_issue, workflow_metrics_for_issue
 from hype_frog.reporter.sheets.layout import (
     content_optimisation_hub_ordered_headers,
     main_sheet_url_column_letter,
@@ -240,7 +240,7 @@ def _fallback_keyword(url: str, h1_text: str) -> str:
 
 
 def build_fixplan_rows(
-    summary_rules: list[tuple[str, str, Any]],
+    summary_rules: list[IssueRule],
     extra_rows: list[ExtraRowPayload],
     aeo_issue_names: set[str],
     root_cause_resolver: Any,
@@ -253,7 +253,9 @@ def build_fixplan_rows(
         "Warning": "To Do",
         "Observation": "In Review",
     }
-    for severity, issue_name, _ in summary_rules:
+    for rule in summary_rules:
+        issue_name = rule.name
+        severity = rule.severity
         affected = [
             r
             for r in extra_rows
@@ -303,7 +305,11 @@ def build_fixplan_rows(
             "Redirect",
         )
         resolution_type = (
-            "Global Template"
+            "Server Config"
+            if rule.scope == "server"
+            else "Site Config"
+            if rule.scope == "site"
+            else "Global Template"
             if any(
                 token.lower() in issue_name.lower() for token in systemic_issue_tokens
             )

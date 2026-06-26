@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
+
+from hype_frog.rules.registry import IssueRule
 
 # Rows with HTML-derived signals use these states (see crawler fetcher). "partial" still
 # carries the same rule inputs as Summary tab issue counts; only skip scoring when we never
@@ -10,7 +11,7 @@ _SCORABLE_EXTRACTION_STATES = frozenset({"complete", "partial"})
 
 
 def score_url_health(
-    row: dict[str, Any], summary_rules: list[tuple[str, str, Callable[[dict[str, Any]], bool]]]
+    row: dict[str, Any], summary_rules: list[IssueRule]
 ) -> tuple[Any, str, str, dict[str, list[str]]]:
     raw_status = row.get("Status Code")
     status_code: int | None = None
@@ -32,10 +33,10 @@ def score_url_health(
         return None, "Unmeasured", "UNMEASURED", {"Critical": [], "Warning": [], "Observation": []}
 
     matched = {"Critical": [], "Warning": [], "Observation": []}
-    for severity, issue_name, rule_fn in summary_rules:
+    for rule in summary_rules:
         try:
-            if rule_fn(row):
-                matched[severity].append(issue_name)
+            if rule.fn(row):
+                matched[rule.severity].append(rule.name)
         except Exception:
             continue
     observation_penalty = min(10, 3 * len(matched["Observation"]))
