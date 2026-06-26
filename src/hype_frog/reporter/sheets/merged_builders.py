@@ -684,7 +684,18 @@ def build_link_inventory_rows(extra_rows: list[dict[str, Any]]) -> list[dict[str
                 ),
             }
             rows.append({col: row_dict[col] for col in LINK_INVENTORY_COLUMNS})
-    return rows
+    seen_keys: set[tuple[object, ...]] = set()
+    deduped: list[dict[str, Any]] = []
+    for row in rows:
+        key = (
+            row.get("Source URL"),
+            row.get("Target URL"),
+            row.get("Anchor Text"),
+        )
+        if key not in seen_keys:
+            seen_keys.add(key)
+            deduped.append(row)
+    return deduped
 
 
 def build_template_duplication_risks_rows(

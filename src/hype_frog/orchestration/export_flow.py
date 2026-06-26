@@ -336,7 +336,16 @@ def execute_export(
                 summary_rules, typed_extra_rows, aeo_issue_names, root_cause_and_fix,
                 DEFAULT_EFFORT_BY_SEVERITY, DEFAULT_OWNER_BY_SEVERITY,
             )
-            fixplan_df = pd.DataFrame(sorted(fixplan_rows, key=lambda item: (-item["Affected Count"], item["Severity"])))
+            _fixplan_top_blocker_cols = ("Issue Type", "Severity", "Affected Count")
+            if fixplan_rows:
+                fixplan_df = pd.DataFrame(
+                    sorted(
+                        fixplan_rows,
+                        key=lambda item: (-item["Affected Count"], item["Severity"]),
+                    )
+                )
+            else:
+                fixplan_df = pd.DataFrame(columns=list(_fixplan_top_blocker_cols))
             to_excel_safe(fixplan_df, writer, "FixPlan", index=False)
             hub_base_rows, hub_metrics_rows = build_content_optimisation_hub_rows(
                 typed_main_rows, typed_extra_rows, fixplan_rows
@@ -376,7 +385,7 @@ def execute_export(
                 for row in typed_extra_rows
                 if str(row.values.get("Severity Badge") or "") == "Warning"
             )
-            top_blockers = fixplan_df.head(10)[["Issue Type", "Severity", "Affected Count"]]
+            top_blockers = fixplan_df.head(10).reindex(columns=list(_fixplan_top_blocker_cols))
             seo_health_values: list[float] = []
             for row in typed_extra_rows:
                 raw_hs = row.values.get("SEO Health Score")

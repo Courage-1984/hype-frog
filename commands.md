@@ -15,7 +15,11 @@ $env:Path += ";$HOME\.local\bin"
 
 .\.venv\Scripts\activate
 
+# One-time / after fresh clone: full toolchain (render + semantic + browser binaries)
+uv sync --extra semantic --extra render --extra dev
 uv run playwright install chromium
+uv run hype-frog --install-semantic
+uv run hype-frog --validate
 
 # Semantic / AEO entity columns (spaCy NER — optional; keyword fallback works without this)
 uv sync --extra semantic
@@ -65,3 +69,4 @@ uv run hype-frog --validate
 uv sync --extra semantic --extra render --extra dev
 uv run playwright install chromium
 uv run hype-frog --install-semantic
+

@@ -63,4 +63,4 @@ def test_apply_gsc_coverage_fields_unmatched_sets_note() -> None:
         gsc_data_freshness="2026-05-01 to 2026-05-30",
     )
     assert "No Search Analytics row matched" in str(row["GSC Coverage Note"])
-    assert row["GSC Impressions"] == 0.0
+    assert row["GSC Impressions"] is None

@@ -122,10 +122,10 @@ def apply_gsc_coverage_fields(
             clicks=clicks,
         )
     else:
-        row_values["GSC Clicks"] = 0.0
-        row_values["GSC Impressions"] = 0.0
-        row_values["GSC CTR"] = 0.0
-        row_values["GSC Avg Position"] = 0.0
+        row_values["GSC Clicks"] = None
+        row_values["GSC Impressions"] = None
+        row_values["GSC CTR"] = None
+        row_values["GSC Avg Position"] = None
         row_values["GSC Coverage Note"] = resolve_gsc_coverage_note(
             analytics_succeeded=analytics_succeeded,
             matched=False,

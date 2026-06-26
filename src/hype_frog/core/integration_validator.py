@@ -259,6 +259,44 @@ async def check_psi_api_live(test_url: str) -> IntegrationCheck:
     )
 
 
+async def check_playwright_chromium() -> IntegrationCheck:
+    """Verify Playwright can launch Chromium (Python package + browser binaries)."""
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        return IntegrationCheck(
+            name="Playwright (Chromium)",
+            status=CheckStatus.FAIL,
+            message=(
+                "Playwright is not installed. Run: uv sync  "
+                "(playwright is a core dependency in pyproject.toml)."
+            ),
+            details={"install_hint": "uv run playwright install chromium"},
+        )
+
+    try:
+        async with async_playwright() as playwright:
+            browser = await playwright.chromium.launch(headless=True)
+            await browser.close()
+    except Exception as exc:
+        return IntegrationCheck(
+            name="Playwright (Chromium)",
+            status=CheckStatus.FAIL,
+            message=(
+                "Chromium browser binaries are missing or cannot launch. "
+                "Run: uv run playwright install chromium"
+            ),
+            details={"error": str(exc), "install_hint": "uv run playwright install chromium"},
+        )
+
+    return IntegrationCheck(
+        name="Playwright (Chromium)",
+        status=CheckStatus.PASS,
+        message="Chromium launches successfully (accurate / rendered_browser crawl mode ready).",
+        details={"mode": "headless"},
+    )
+
+
 def check_semantic_engine() -> IntegrationCheck:
     probe = probe_semantic_engine()
     if probe.status == SemanticEngineStatus.READY:
@@ -318,6 +356,7 @@ async def run_integration_validation(
     ]
     checks.extend(check_optional_llm_keys())
     checks.append(check_semantic_engine())
+    checks.append(await check_playwright_chromium())
 
     token_check = checks[2]
     if token_check.status == CheckStatus.PASS:

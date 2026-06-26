@@ -6,6 +6,7 @@ from hype_frog.reporter.sheets.merged_builders import (
     build_content_ai_readiness_rows,
     build_issue_register_rows,
     build_link_intelligence_rows,
+    build_link_inventory_rows,
     build_technical_diagnostics_rows,
 )
 
@@ -141,3 +142,31 @@ def test_issue_register_includes_summary_and_inventory() -> None:
     )
     assert any(r["Section"] == "Issue Counts" for r in rows)
     assert any(r["Section"] == "Issue Inventory" for r in rows)
+
+
+def test_link_inventory_deduplicates_source_target_anchor() -> None:
+    url = "https://example.com/page"
+    target = "https://example.com/about"
+    anchor = "About us"
+    extra_rows = [
+        {
+            "URL": url,
+            "Link Details": [
+                {
+                    "Target URL": target,
+                    "Anchor Text": anchor,
+                    "Status Code": 200,
+                },
+                {
+                    "Target URL": target,
+                    "Anchor Text": anchor,
+                    "Status Code": 200,
+                },
+            ],
+        }
+    ]
+    rows = build_link_inventory_rows(extra_rows)
+    assert len(rows) == 1
+    assert rows[0]["Source URL"] == url
+    assert rows[0]["Target URL"] == target
+    assert rows[0]["Anchor Text"] == anchor

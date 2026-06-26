@@ -293,6 +293,8 @@ async def fetch_and_parse(
                     }
                 else:
                     extraction_state_hint = diagnostics["extraction_state"]
+                    if extraction_state_hint == "skipped":
+                        extraction_state_hint = "partial"
                     extra_values["Extraction Source Fallback"] = True
                     logger.info(
                         "Render unavailable for %s; using raw_http HTML for extraction.",

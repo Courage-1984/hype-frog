@@ -98,8 +98,8 @@ class PageRowMetricsModel(BaseModel):
     mobile_psi_score: int | None = Field(default=None, alias="Mobile PSI Score")
     mobile_lcp_s: float | None = Field(default=None, alias="Mobile LCP (s)")
     cwv_lcp_s: float | None = Field(default=None, alias="CWV LCP (s)")
-    gsc_clicks: float = Field(default=0.0, alias="GSC Clicks")
-    gsc_impressions: float = Field(default=0.0, alias="GSC Impressions")
+    gsc_clicks: float | None = Field(default=None, alias="GSC Clicks")
+    gsc_impressions: float | None = Field(default=None, alias="GSC Impressions")
 
     @field_validator(
         "desktop_psi_score",
@@ -126,15 +126,15 @@ class PageRowMetricsModel(BaseModel):
     @classmethod
     def _coerce_gsc_numeric_defaults(cls, value: Any) -> Any:
         if value is None:
-            return 0
+            return None
         if isinstance(value, str) and not value.strip():
-            return 0
+            return None
         try:
             numeric = float(value)
         except (TypeError, ValueError):
-            return 0
+            return None
         if math.isnan(numeric) or math.isinf(numeric):
-            return 0
+            return None
         return value
 
 
@@ -164,8 +164,12 @@ def harden_page_row_metrics(row: dict[str, Any]) -> dict[str, Any]:
                 fallback[lcp_key] = None
             else:
                 fallback[lcp_key] = _safe_float(raw)
-        fallback["GSC Clicks"] = _safe_float(fallback.get("GSC Clicks") or 0.0)
-        fallback["GSC Impressions"] = _safe_float(fallback.get("GSC Impressions") or 0.0)
+        for gsc_key in ("GSC Clicks", "GSC Impressions"):
+            raw = fallback.get(gsc_key)
+            if raw is None or (isinstance(raw, str) and not raw.strip()):
+                fallback[gsc_key] = None
+            else:
+                fallback[gsc_key] = _safe_float(raw)
         return fallback
     return validated.model_dump(by_alias=True, exclude_none=False)
 

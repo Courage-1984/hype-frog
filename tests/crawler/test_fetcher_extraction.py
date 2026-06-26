@@ -84,3 +84,55 @@ async def test_fetch_render_with_retries_falls_back_to_seed_url() -> None:
     assert result["html"] == "<html>seed</html>"
     assert "https://example.com/final" in calls
     assert "https://example.com/start" in calls
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_parse_promotes_skipped_render_to_partial_when_http_html_exists() -> None:
+    """Raw HTTP HTML must remain scorable when Playwright render is unavailable."""
+    import asyncio
+
+    import aiohttp
+
+    from hype_frog.crawler.fetcher import fetch_and_parse
+    from hype_frog.crawler.network_engine import _empty_diagnostics
+
+    html = """
+    <html><head><title>Partial page</title></head>
+    <body><main><h1>Heading</h1><p>Enough body copy for extraction.</p></main></body></html>
+    """
+
+    async def fake_http(**kwargs: object) -> dict[str, object]:
+        del kwargs
+        return {
+            "status_code": 200,
+            "final_url": "https://example.com/page",
+            "response_headers": {"Content-Type": "text/html"},
+            "redirect_hops": [],
+            "html": html,
+            "ttfb_ms": 12.0,
+            "total_request_ms": 40.0,
+        }
+
+    async def fake_render(**kwargs: object) -> RenderedFetchDiagnostics:
+        del kwargs
+        return _empty_diagnostics("skipped")
+
+    semaphore = asyncio.Semaphore(1)
+    async with aiohttp.ClientSession() as session:
+        with (
+            patch("hype_frog.crawler.fetcher.fetch_http", side_effect=fake_http),
+            patch(
+                "hype_frog.crawler.fetcher._fetch_render_with_retries",
+                side_effect=fake_render,
+            ),
+        ):
+            payload = await fetch_and_parse(
+                "https://example.com/page",
+                session,
+                semaphore,
+                crawl_mode="accurate",
+            )
+
+    assert payload.main.values["Extraction State"] == "partial"
+    assert payload.extra.values["Extraction Source Fallback"] is True
+    assert payload.main.values["Title"] == "Partial page"

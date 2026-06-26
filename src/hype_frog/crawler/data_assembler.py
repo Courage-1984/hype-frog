@@ -727,6 +727,7 @@ def finalize_row_state(
     indexability_reasons: list[str] = []
     if status_int is not None and status_int >= 400:
         indexability_reasons.append(f"HTTP {status_int}")
+        main_values["Indexability"] = "Not Indexable"
     if isinstance(status_val, str) and status_val in {"Timeout", "Connection Error"}:
         indexability_reasons.append(status_val)
     if not indexability_reasons:

@@ -249,3 +249,13 @@ def test_assemble_character_encoding_remains_excel_safe_after_sanitize() -> None
     assert "\x0b" not in str(sanitized_main["Title"])
     assert "Заголовок 😀" in str(sanitized_extra["Current H-Tag Structure"] or "")
     assert main_payload.values["Extraction State"] == "skipped"
+
+
+def test_finalize_row_state_http_404_sets_not_indexable() -> None:
+    main_dict, extra_dict = init_rows("https://example.com/missing", None)
+    main_payload = MainRowPayload.model_validate(main_dict)
+    extra_payload = ExtraRowPayload.model_validate(extra_dict)
+    extra_payload.values["Status Code"] = 404
+    finalize_row_state(main_payload, extra_payload)
+    assert main_payload.values["Indexability"] == "Not Indexable"
+    assert extra_payload.values["Indexability Reason"] == "HTTP 404"
