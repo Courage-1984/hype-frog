@@ -15,7 +15,7 @@
 | 4 | CWV severity cascade fix | ✅ Done | ✅ Pass | quick-test-fast 2026-06-26; badges 3 Critical / 7 Warning |
 | 5 | WooCommerce / parameter URL filtering | ✅ Done | ✅ Pass | CMS Action URLs tab added; AMC run 0 withheld URLs |
 | 6 | FixPlan vs Summary count reconciliation | ✅ Done | ✅ Pass | FixPlan/Summary counts aligned on AMC run |
-| 7 | Click Depth null handling | ⬜ Pending | ⬜ | |
+| 7 | Click Depth null handling | ✅ Done | ✅ Pass | 0 null Click Depth cells on AMC run |
 | 8 | Duplicate Main sheet column fix | ⬜ Pending | ⬜ | |
 
 ---
@@ -179,10 +179,17 @@
 
 ## Phase 7 — Click Depth Null Handling
 
-### 7A: Improve homepage detection in graph engine
+### 7A: Homepage detection and unreachable nodes
 - **File:** `src/hype_frog/pipeline/graph_engine.py`
-- **Function:** `compute_internal_link_intelligence` (~line 76)
-- **Status:** ⬜ Pending
+- **Function:** `compute_internal_link_intelligence`
+- **Status:** ✅ Done
+- **Change summary:** Added `_find_homepage()` (path `/` tolerance + shortest-path fallback). Removed synthetic `https://{source_label}/` homepage that could miss the crawl graph. Unreachable nodes use `CLICK_DEPTH_UNREACHABLE` (`-1`) instead of `None`. `Orphan Pages` remains in-degree based (documented in code). Updated `Deep URL (>3 clicks)` rule to use `Click Depth` (was incorrectly using path-segment `URL Depth`).
+
+**Phase 7 verification (2026-06-27 output):**
+- Main sheet Click Depth: **0 null cells** (10/10 populated)
+- Homepage: Click Depth **0**
+- Unit tests: 5/5 pass (`test_graph_engine`)
+- `--quick-test-fast`: PASS
 
 ---
 
@@ -205,5 +212,5 @@
 | 4 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_213146.xlsx | PASS | Badge spread 3 Critical / 7 Warning |
 | 5 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_214233.xlsx | PASS | CMS Action URLs tab present; 0 WooCommerce links on AMC |
 | 6 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_215138.xlsx | PASS | FixPlan/Summary counts aligned |
-| 7 | | | | | |
+| 7 | 2026-06-27 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_220041.xlsx | PASS | Click Depth nulls=0 |
 | 8 | | | | | |

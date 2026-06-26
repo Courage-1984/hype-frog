@@ -14,6 +14,22 @@ def normalize_url_key(url: object, keep_query: bool = True) -> str:
     return normalize_url(url, keep_query=keep_query)
 
 
+# Click Depth uses -1 for nodes with no path from the detected homepage (export-safe int;
+# distinct from ``Orphan Pages``, which is derived from in-degree in this module).
+CLICK_DEPTH_UNREACHABLE = -1
+
+
+def _find_homepage(crawled_urls: list[str]) -> str | None:
+    """Find the homepage URL using path matching with trailing-slash tolerance."""
+    for url in crawled_urls:
+        path = urlparse(url).path
+        if path in {"", "/", "//"}:
+            return url
+    if crawled_urls:
+        return min(crawled_urls, key=lambda u: (len(urlparse(u).path), len(u)))
+    return None
+
+
 def _row_values(
     row: ExtraRowPayload | MainRowPayload | Mapping[str, object],
 ) -> Mapping[str, object]:
@@ -47,6 +63,7 @@ def compute_internal_link_intelligence(
     *,
     main_rows: list[MainRowPayload] | None = None,
 ) -> dict[str, dict[str, object]]:
+    del source_label
     graph = nx.DiGraph()
     crawled_urls = set()
     if main_rows:
@@ -73,24 +90,17 @@ def compute_internal_link_intelligence(
             if target_norm in crawled_urls:
                 graph.add_edge(source, target_norm)
 
-    homepage_candidates = sorted(
-        [u for u in crawled_urls if urlparse(u).path in {"", "/"}],
-        key=len,
-    )
-    source_candidate = f"https://{source_label.strip('/')}/"
-    homepage = normalize_url_key(
-        homepage_candidates[0] if homepage_candidates else source_candidate
-    )
-
-    click_depth: dict[str, int | None] = {}
-    if homepage in graph:
+    homepage = _find_homepage(sorted(crawled_urls))
+    click_depth: dict[str, int] = {}
+    if homepage and homepage in graph:
         lengths = nx.single_source_shortest_path_length(graph, homepage)
         for node in graph.nodes:
-            click_depth[node] = lengths.get(node)
+            click_depth[node] = lengths.get(node, CLICK_DEPTH_UNREACHABLE)
     else:
         for node in graph.nodes:
-            click_depth[node] = None
+            click_depth[node] = CLICK_DEPTH_UNREACHABLE
 
+    # Orphan Pages uses in-degree (no internal inlinks within the crawl graph), not Click Depth.
     orphan_map = {node: graph.in_degree(node) == 0 for node in graph.nodes}
     pagerank_map = (
         nx.pagerank(graph, alpha=0.85, max_iter=100) if graph.number_of_nodes() else {}
@@ -98,7 +108,7 @@ def compute_internal_link_intelligence(
 
     return {
         node: {
-            "Click Depth": click_depth.get(node),
+            "Click Depth": click_depth.get(node, CLICK_DEPTH_UNREACHABLE),
             "Orphan Pages": orphan_map.get(node, False),
             "Internal PageRank": round(float(pagerank_map.get(node, 0.0)), 6),
             "Internal Inlinks": int(graph.in_degree(node)),

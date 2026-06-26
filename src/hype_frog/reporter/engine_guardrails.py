@@ -120,7 +120,8 @@ _HEADER_TOOLTIP_MESSAGES: dict[str, str] = {
     "TTFB (ms)": "Time to First Byte: Measures server responsiveness.",
     "LCP (s)": "Largest Contentful Paint: Measures perceived load speed.",
     "Internal PageRank": ("Authority score based on internal linking structure."),
-    "Click Depth": ("Number of clicks required to reach this URL from the homepage."),
+    "Click Depth": ("Number of clicks required to reach this URL from the homepage. "
+                    "-1 means unreachable from the detected homepage within the crawl graph."),
     "AEO Readiness Score": (
         "Weighted 0–100 score: answer paragraphs under question H2/H3, FAQ/HowTo/Speakable "
         "schema, Flesch–Kincaid grade band 7–10, list/table structure, and robots.txt "

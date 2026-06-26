@@ -86,7 +86,7 @@ def get_summary_rules() -> list[IssueRule]:
         IssueRule(
             "Warning",
             "Deep URL (>3 clicks)",
-            lambda r: (r.get("URL Depth") or 0) > 3,
+            lambda r: (r.get("Click Depth") or 0) > 3,
         ),
         IssueRule(
             "Warning",
