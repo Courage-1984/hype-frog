@@ -23,6 +23,7 @@ from hype_frog.orchestration.enrichment_flow import EnrichmentResult
 from hype_frog.orchestration.export_registry import (
     ExportRegistryConfig,
     build_crawlgraph_rows,
+    build_cms_action_url_rows,
     build_delta_and_trend_rows,
     build_duplicates_rows,
     build_pattern_rows,
@@ -32,6 +33,8 @@ from hype_frog.orchestration.export_registry import (
     get_merged_sheet_columns,
     get_sheet_sequence,
     get_standard_sheet_columns,
+    CMS_ACTION_URLS_COLUMNS,
+    CMS_ACTION_URLS_SHEET,
 )
 from hype_frog.orchestration.run_setup import RunSetup
 from hype_frog.pipeline.export import sanitize_rows, to_excel_safe
@@ -312,6 +315,16 @@ def execute_export(
                 "Link Intelligence",
                 merged_columns["Link Intelligence"],
                 link_intelligence_rows,
+            )
+            cms_action_rows = build_cms_action_url_rows(
+                crawl_result.excluded_cms_action_urls,
+                extra_rows,
+            )
+            write_dict_rows_sheet(
+                writer,
+                CMS_ACTION_URLS_SHEET,
+                CMS_ACTION_URLS_COLUMNS,
+                cms_action_rows,
             )
             link_inventory_rows = build_link_inventory_rows(extra_rows)
             write_dict_rows_sheet(

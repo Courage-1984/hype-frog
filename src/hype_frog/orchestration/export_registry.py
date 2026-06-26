@@ -10,6 +10,10 @@ from hype_frog.core.models import ExtraRowPayload
 from hype_frog.rules import IssueRule
 from hype_frog.core.text_utils import normalize_text_hash
 from hype_frog.core.url_normalization import normalize_url
+from hype_frog.orchestration.crawl_runner import (
+    ExcludedCmsActionUrl,
+    cms_action_exclusion_keys,
+)
 from hype_frog.reporter.sheets.config import (
     AIOSEO_RECOMMENDATIONS_SHEET,
     AUDIT_RUN_DETAILS_SHEET,
@@ -122,6 +126,15 @@ STANDARD_SHEET_COLUMNS: dict[str, list[str]] = {
     ],
 }
 
+CMS_ACTION_URLS_SHEET = "CMS Action URLs"
+CMS_ACTION_URLS_COLUMNS: list[str] = [
+    "URL",
+    "Excluded Query Parameters",
+    "Exclusion Reason",
+    "Discovered On URL",
+    "Review Note",
+]
+
 _FULL_SUITE_FORMAT_SHEETS: list[str] = [
     "Dashboard",
     "Executive Dashboard",
@@ -141,6 +154,7 @@ _FULL_SUITE_FORMAT_SHEETS: list[str] = [
     "Technical Diagnostics",
     "Content & AI Readiness",
     "Link Intelligence",
+    CMS_ACTION_URLS_SHEET,
     "Redirects",
     "ResolvedIssues",
     "DeltaFromPreviousRun",
@@ -173,6 +187,48 @@ def get_merged_sheet_columns() -> dict[str, list[str]]:
 
 def get_finalization_steps() -> tuple[str, ...]:
     return ("apply_tab_hyperlinks", "format_sheets", "apply_workbook_export_guardrails")
+
+
+def build_cms_action_url_rows(
+    crawl_exclusions: tuple[ExcludedCmsActionUrl, ...],
+    extra_rows: list[dict[str, Any]],
+) -> list[dict[str, object]]:
+    """Merge crawl-time CMS exclusions with internal links seen on crawled pages."""
+    registry: dict[str, ExcludedCmsActionUrl] = {
+        item.url: item for item in crawl_exclusions
+    }
+    for row in extra_rows:
+        parent_url = str(row.get("URL") or "").strip()
+        links = row.get("Internal Links List Full") or []
+        if not isinstance(links, list):
+            continue
+        for link in links:
+            normalized = normalize_url_key(link)
+            if not normalized or normalized in registry:
+                continue
+            keys = cms_action_exclusion_keys(normalized)
+            if not keys:
+                continue
+            registry[normalized] = ExcludedCmsActionUrl(
+                url=normalized,
+                excluded_query_params=tuple(sorted(keys)),
+                discovered_on_url=parent_url or "Internal link",
+            )
+    rows: list[dict[str, object]] = []
+    for item in sorted(registry.values(), key=lambda entry: entry.url):
+        rows.append(
+            {
+                "URL": item.url,
+                "Excluded Query Parameters": ", ".join(item.excluded_query_params),
+                "Exclusion Reason": item.exclusion_reason,
+                "Discovered On URL": item.discovered_on_url,
+                "Review Note": (
+                    "Listed for audit visibility only; not crawled as a standalone page. "
+                    "Confirm cart/checkout handlers and canonical targets in WooCommerce or CMS settings."
+                ),
+            }
+        )
+    return rows
 
 
 def build_duplicates_rows(

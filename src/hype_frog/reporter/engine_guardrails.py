@@ -98,6 +98,10 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "Link Intelligence": (
         "Per-URL internal link summary rows plus anchor-level detail for broken-link triage."
     ),
+    "CMS Action URLs": (
+        "WooCommerce and other CMS action-parameter URLs discovered during the crawl "
+        "(for example add-to-cart) that were withheld from the crawl queue."
+    ),
     "Template & Duplication Risks": (
         "Duplicate titles/meta, draft/copy pages, and folder-level template pattern risks."
     ),

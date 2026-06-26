@@ -39,6 +39,22 @@ RETRY_BACKOFF_FACTOR: float = 2.0
 RETRY_MAX_DELAY_SECONDS: float = 20.0
 RETRYABLE_STATUS_CODES: set[int] = {408, 425, 429, 500, 502, 503, 504}
 OUTPUT_FILENAME: str = "seo_audit_report.xlsx"
+
+# CMS / WooCommerce action query parameters — blocked from crawl queue (see crawl_runner).
+# Safe params such as page, lang, paged, orderby are intentionally omitted.
+EXCLUDED_CMS_ACTION_QUERY_PARAMS: frozenset[str] = frozenset(
+    {
+        "add-to-cart",
+        "removed_item",
+        "undo_item",
+        "wc-ajax",
+        "add_to_wishlist",
+        "share_token",
+        "preview_id",
+        "preview_nonce",
+        "preview",
+    }
+)
 DEFAULT_OWNER_BY_SEVERITY: dict[str, str] = {
     "Critical": "Dev",
     "Warning": "Copy Writer",

@@ -43,6 +43,7 @@ from hype_frog.orchestration.crawl_runner import (
     _is_crawlable_html_candidate,
     _candidate_internal_links,
     _max_depth_from_env,
+    cms_action_exclusion_keys,
     execute_crawl,
 )
 from hype_frog.orchestration.run_setup import RunSetup
@@ -265,6 +266,70 @@ def test_is_crawlable_html_candidate_rejects_common_non_html_assets() -> None:
     assert not _is_crawlable_html_candidate("https://example.com/docs/file.pdf")
     assert not _is_crawlable_html_candidate("https://example.com/sitemap.xml")
     assert not _is_crawlable_html_candidate("https://example.com/app.js")
+
+
+def test_is_crawlable_html_candidate_rejects_woocommerce_action_params() -> None:
+    assert not _is_crawlable_html_candidate(
+        "https://example.com/product/widget?add-to-cart=123"
+    )
+    assert not _is_crawlable_html_candidate(
+        "https://example.com/?wc-ajax=get_refreshed_fragments"
+    )
+
+
+def test_is_crawlable_html_candidate_allows_pagination_and_filter_params() -> None:
+    assert _is_crawlable_html_candidate("https://example.com/blog?page=2")
+    assert _is_crawlable_html_candidate("https://example.com/shop?product_cat=books")
+    assert _is_crawlable_html_candidate("https://example.com/?s=marketing")
+
+
+def test_cms_action_exclusion_keys_is_case_insensitive() -> None:
+    keys = cms_action_exclusion_keys(
+        "https://example.com/item?Add-To-Cart=99&page=2"
+    )
+    assert keys == frozenset({"add-to-cart"})
+
+
+def test_candidate_internal_links_records_cms_action_urls() -> None:
+    payload = _make_payload(
+        "https://example.com/seed",
+        links=[
+            "https://example.com/product/widget?add-to-cart=42",
+            "https://example.com/blog?page=2",
+        ],
+    )
+    registry: dict[str, object] = {}
+    out = _candidate_internal_links(payload, registry)  # type: ignore[arg-type]
+    assert out == ["https://example.com/blog?page=2"]
+    assert len(registry) == 1
+    entry = next(iter(registry.values()))
+    assert entry.url.endswith("add-to-cart=42")
+    assert entry.discovered_on_url == "https://example.com/seed"
+    assert "add-to-cart" in entry.excluded_query_params
+
+
+async def test_execute_crawl_withholds_cms_action_urls_from_bfs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    seed = "https://example.com/seed"
+    cart = "https://example.com/product/widget?add-to-cart=7"
+    child = "https://example.com/about"
+    link_graph = {
+        seed: [cart, child],
+        child: [],
+    }
+
+    call_order = _install_runner_mocks(monkeypatch, tmp_path, link_graph=link_graph)
+    monkeypatch.setenv("HF_MAX_DEPTH", "5")
+
+    setup = _build_run_setup(target=seed)
+    result = await execute_crawl(setup)
+
+    visited = [url for url, _depth in call_order]
+    assert cart not in visited
+    assert child in visited
+    assert any(item.url == cart for item in result.excluded_cms_action_urls)
 
 
 # ---------------------------------------------------------------------------

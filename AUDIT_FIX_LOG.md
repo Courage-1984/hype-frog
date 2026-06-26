@@ -13,7 +13,7 @@
 | 2 | CrUX origin data labelling | ✅ Done | ✅ Pass | quick-test-fast 2026-06-26 |
 | 3 | Site-level vs URL-level issue scope | ✅ Done | ✅ Pass | quick-test-fast 2026-06-26; IssueInventory 69 rows |
 | 4 | CWV severity cascade fix | ✅ Done | ✅ Pass | quick-test-fast 2026-06-26; badges 3 Critical / 7 Warning |
-| 5 | WooCommerce / parameter URL filtering | ⬜ Pending | ⬜ | |
+| 5 | WooCommerce / parameter URL filtering | ✅ Done | ✅ Pass | CMS Action URLs tab added; AMC run 0 withheld URLs |
 | 6 | FixPlan vs Summary count reconciliation | ⬜ Pending | ⬜ | |
 | 7 | Click Depth null handling | ⬜ Pending | ⬜ | |
 | 8 | Duplicate Main sheet column fix | ⬜ Pending | ⬜ | |
@@ -129,10 +129,24 @@
 
 ## Phase 5 — WooCommerce / Parameter URL Filtering
 
-### 5A: Add parameter exclusion to crawl candidate filter
-- **File:** `src/hype_frog/orchestration/crawl_runner.py`
-- **Function:** `_is_crawlable_html_candidate` (~line 85)
-- **Status:** ⬜ Pending
+**Config finding:** No separate `crawl_config.yaml`; central constants live in `src/hype_frog/config.py`. Added `EXCLUDED_CMS_ACTION_QUERY_PARAMS` there (not hardcoded only in crawl_runner).
+
+### 5A: Parameter exclusion in crawl candidate filter
+- **Files:** `src/hype_frog/config.py`, `src/hype_frog/orchestration/crawl_runner.py`
+- **Functions:** `_is_crawlable_html_candidate`, `_candidate_internal_links`, `execute_crawl`
+- **Status:** ✅ Done
+- **Change summary:** Blocks CMS action query params (`add-to-cart`, `wc-ajax`, `preview`, etc.) from the crawl queue. Safe params (`page`, `lang`, `paged`, `product_cat`, `s`, …) remain allowed. Excluded URLs tracked in `ExcludedCmsActionUrl` on `CrawlExecutionResult`.
+
+### 5B: CMS Action URLs workbook tab (user request)
+- **Files:** `export_registry.py`, `export_flow.py`, `workbook_layout.py`, `engine_guardrails.py`
+- **Status:** ✅ Done
+- **Change summary:** New advanced tab **CMS Action URLs** lists withheld URLs with excluded parameters, discovery source, and review note. Builder merges crawl-time exclusions with internal links found on crawled pages. Tab registered in TOC, dashboard advanced links, and tab colours.
+
+**Phase 5 verification (2026-06-26 output):**
+- Main sheet: **10 rows**, no `add-to-cart` URLs
+- CMS Action URLs tab: present (0 rows for AMC — site does not expose WooCommerce action links in this crawl)
+- Unit tests: 25/25 pass (`test_crawl_runner`, `test_cms_action_urls`)
+- `--quick-test-fast`: PASS
 
 ---
 
@@ -179,7 +193,7 @@
 | 2 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_210356.xlsx | PASS | PSI URLs show new labels; 7 non-PSI URLs = Not available |
 | 3 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_211740.xlsx | PASS | IssueInventory aggregates server/site rules; 69 rows |
 | 4 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_213146.xlsx | PASS | Badge spread 3 Critical / 7 Warning |
-| 5 | | | | | |
+| 5 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_214233.xlsx | PASS | CMS Action URLs tab present; 0 WooCommerce links on AMC |
 | 6 | | | | | |
 | 7 | | | | | |
 | 8 | | | | | |

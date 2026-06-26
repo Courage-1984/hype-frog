@@ -7,11 +7,12 @@ import os
 import time
 from collections import deque
 from dataclasses import dataclass
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from hype_frog.checkpoint import AuditCache, load_checkpoint, save_checkpoint
 from hype_frog.config import (
     DELAY_BETWEEN_REQUESTS,
+    EXCLUDED_CMS_ACTION_QUERY_PARAMS,
     MAX_RETRIES,
     MAX_WORKERS,
     TIMEOUT_SECONDS,
@@ -78,6 +79,52 @@ _NON_HTML_PATH_EXTENSIONS: frozenset[str] = frozenset(
 )
 
 
+_EXCLUDED_CMS_QUERY_KEYS_LOWER: frozenset[str] = frozenset(
+    key.lower() for key in EXCLUDED_CMS_ACTION_QUERY_PARAMS
+)
+
+
+@dataclass(frozen=True)
+class ExcludedCmsActionUrl:
+    """A URL withheld from the crawl queue because of CMS action query parameters."""
+
+    url: str
+    excluded_query_params: tuple[str, ...]
+    discovered_on_url: str
+    exclusion_reason: str = (
+        "CMS / WooCommerce action parameter — not crawled as a distinct page"
+    )
+
+
+def cms_action_exclusion_keys(url: str) -> frozenset[str]:
+    """Return matched CMS action query-parameter names, or an empty set."""
+    parsed = urlparse(str(url or "").strip())
+    if not parsed.query:
+        return frozenset()
+    query_keys = {str(key).lower() for key in parse_qs(parsed.query).keys()}
+    return frozenset(
+        key for key in query_keys if key in _EXCLUDED_CMS_QUERY_KEYS_LOWER
+    )
+
+
+def _register_cms_exclusion(
+    registry: dict[str, ExcludedCmsActionUrl],
+    url: str,
+    discovered_on_url: str,
+) -> None:
+    keys = cms_action_exclusion_keys(url)
+    if not keys:
+        return
+    normalized = _normalize_url_key(url)
+    if not normalized or normalized in registry:
+        return
+    registry[normalized] = ExcludedCmsActionUrl(
+        url=normalized,
+        excluded_query_params=tuple(sorted(keys)),
+        discovered_on_url=discovered_on_url,
+    )
+
+
 def _normalize_url_key(url: object) -> str:
     return normalize_url(url)
 
@@ -87,10 +134,38 @@ def _is_crawlable_html_candidate(url: str) -> bool:
     parsed = urlparse(str(url or "").strip())
     if not parsed.scheme or not parsed.netloc:
         return False
+    if cms_action_exclusion_keys(url):
+        return False
     path = (parsed.path or "").strip().lower()
     if not path:
         return True
     return not any(path.endswith(ext) for ext in _NON_HTML_PATH_EXTENSIONS)
+
+
+def _candidate_internal_links(
+    row: CrawlRowPayload,
+    cms_exclusions: dict[str, ExcludedCmsActionUrl] | None = None,
+) -> list[str]:
+    links = row.extra.values.get("Internal Links List Full") or []
+    if not isinstance(links, list):
+        return []
+    parent_url = str(row.main.values.get("URL") or row.extra.values.get("URL") or "")
+    out: list[str] = []
+    for link in links:
+        normalized = _normalize_url_key(link)
+        if not normalized:
+            continue
+        if cms_action_exclusion_keys(normalized):
+            if cms_exclusions is not None:
+                _register_cms_exclusion(
+                    cms_exclusions,
+                    normalized,
+                    parent_url or "Internal link",
+                )
+            continue
+        if _is_crawlable_html_candidate(normalized):
+            out.append(normalized)
+    return out
 
 
 def _log_phase_banner(title: str) -> None:
@@ -111,18 +186,6 @@ def _max_depth_from_env(default: int = 3) -> int:
     except ValueError:
         logger.warning("Invalid HF_MAX_DEPTH=%r; using default %s.", raw, default)
         return default
-
-
-def _candidate_internal_links(row: CrawlRowPayload) -> list[str]:
-    links = row.extra.values.get("Internal Links List Full") or []
-    if not isinstance(links, list):
-        return []
-    out: list[str] = []
-    for link in links:
-        normalized = _normalize_url_key(link)
-        if normalized and _is_crawlable_html_candidate(normalized):
-            out.append(normalized)
-    return out
 
 
 async def _apply_search_intent(
@@ -163,6 +226,7 @@ class CrawlExecutionResult:
     crawl_completed: bool
     check_external_link_status: bool
     crawl_duration_seconds: float = 0.0
+    excluded_cms_action_urls: tuple[ExcludedCmsActionUrl, ...] = ()
 
 
 async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
@@ -192,7 +256,10 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
         if not urls:
             raise ValueError("No URLs to crawl. Exiting.")
 
+        cms_exclusions: dict[str, ExcludedCmsActionUrl] = {}
         original_count = len(urls)
+        for url in urls:
+            _register_cms_exclusion(cms_exclusions, str(url), "Sitemap")
         urls = list(
             dict.fromkeys(
                 _normalize_url_key(url)
@@ -200,6 +267,11 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                 if url and _is_crawlable_html_candidate(str(url))
             )
         )
+        if cms_exclusions:
+            logger.info(
+                "Withheld %s CMS action URL(s) from crawl queue (see CMS Action URLs tab).",
+                len(cms_exclusions),
+            )
         if sitemap_meta:
             sitemap_meta = {
                 _normalize_url_key(url): meta
@@ -462,7 +534,10 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                         completed_urls_runtime.add(url_done)
                         completed_normalized.add(_normalize_url_key(url_done))
                     if scheduled_depth < max_depth:
-                        for discovered_url in _candidate_internal_links(result_payload):
+                        for discovered_url in _candidate_internal_links(
+                            result_payload,
+                            cms_exclusions,
+                        ):
                             if discovered_url in queued_urls:
                                 continue
                             if not _can_enqueue():
@@ -563,4 +638,5 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             crawl_completed=True,
             check_external_link_status=setup.check_external_link_status,
             crawl_duration_seconds=crawl_duration_seconds,
+            excluded_cms_action_urls=tuple(cms_exclusions.values()),
         )
