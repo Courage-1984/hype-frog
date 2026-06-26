@@ -50,7 +50,10 @@ def get_summary_rules() -> list[IssueRule]:
         IssueRule(
             "Critical",
             "CWV LCP Above 4.0s",
-            lambda r: (r.get("CWV LCP (s)") or 0) > 4.0,
+            lambda r: (
+                (r.get("CWV LCP (s)") or 0) > 4.0
+                and "Origin" not in (r.get("CWV Data Source") or "")
+            ),
         ),
         IssueRule(
             "Critical",
@@ -175,12 +178,45 @@ def get_summary_rules() -> list[IssueRule]:
         IssueRule(
             "Observation",
             "INP Above 100ms",
-            lambda r: (r.get("CWV INP (ms)") or 0) > 100,
+            lambda r: (
+                (r.get("CWV INP (ms)") or 0) > 100
+                and "Origin" not in (r.get("CWV Data Source") or "")
+            ),
         ),
         IssueRule(
             "Observation",
             "CLS Above 0.1",
-            lambda r: (r.get("CWV CLS") or 0) > 0.1,
+            lambda r: (
+                (r.get("CWV CLS") or 0) > 0.1
+                and "Origin" not in (r.get("CWV Data Source") or "")
+            ),
+        ),
+        IssueRule(
+            "Observation",
+            "CWV LCP Above 4.0s (Origin CrUX — Run PSI Pass for Per-URL Data)",
+            lambda r: (
+                (r.get("CWV LCP (s)") or 0) > 4.0
+                and "Origin" in (r.get("CWV Data Source") or "")
+            ),
+            scope="site",
+        ),
+        IssueRule(
+            "Observation",
+            "CLS Above 0.1 (Origin CrUX — Run PSI Pass for Per-URL Data)",
+            lambda r: (
+                (r.get("CWV CLS") or 0) > 0.1
+                and "Origin" in (r.get("CWV Data Source") or "")
+            ),
+            scope="site",
+        ),
+        IssueRule(
+            "Observation",
+            "INP Above 100ms (Origin CrUX — Run PSI Pass for Per-URL Data)",
+            lambda r: (
+                (r.get("CWV INP (ms)") or 0) > 100
+                and "Origin" in (r.get("CWV Data Source") or "")
+            ),
+            scope="site",
         ),
         IssueRule(
             "Observation",

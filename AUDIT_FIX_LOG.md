@@ -12,7 +12,7 @@
 | 1 | Isolated function fixes (3 bugs) | ✅ Done | ✅ Pass | quick-test-fast 2026-06-26; export blocker fixed separately |
 | 2 | CrUX origin data labelling | ✅ Done | ✅ Pass | quick-test-fast 2026-06-26 |
 | 3 | Site-level vs URL-level issue scope | ✅ Done | ✅ Pass | quick-test-fast 2026-06-26; IssueInventory 69 rows |
-| 4 | CWV severity cascade fix | ⬜ Pending | ⬜ | |
+| 4 | CWV severity cascade fix | ✅ Done | ✅ Pass | quick-test-fast 2026-06-26; badges 3 Critical / 7 Warning |
 | 5 | WooCommerce / parameter URL filtering | ⬜ Pending | ⬜ | |
 | 6 | FixPlan vs Summary count reconciliation | ⬜ Pending | ⬜ | |
 | 7 | Click Depth null handling | ⬜ Pending | ⬜ | |
@@ -105,15 +105,25 @@
 
 ## Phase 4 — CWV Severity Cascade Fix
 
+**Pre-check:** Phase 3 output confirms `CWV Data Source` labelling from Phase 2 (`PSI API (CrUX)` for URL-level; `CrUX API (Origin-level)` when origin fallback applies).
+
 ### 4A: Guard CWV rules against origin-level data
 - **File:** `src/hype_frog/rules/registry.py`
 - **Function:** CWV rules in `get_summary_rules`
-- **Status:** ⬜ Pending
+- **Status:** ✅ Done
+- **Change summary:** `CWV LCP Above 4.0s`, `CLS Above 0.1`, and `INP Above 100ms` now require `"Origin" not in CWV Data Source`. Added three site-scoped Observation rules for origin CrUX breaches (`… (Origin CrUX — Run PSI Pass for Per-URL Data)`), collapsed by Phase 3 IssueInventory branching.
 
 ### 4B: Verify scoring.py needs no change
 - **File:** `src/hype_frog/rules/scoring.py`
 - **Function:** `score_url_health`
-- **Status:** ⬜ Pending (confirm only)
+- **Status:** ✅ Confirmed — no change required
+- **Notes:** Uses `rule.fn(row)` via `IssueRule` attributes; badge cascade from `matched["Critical"]` is correct once origin guard prevents false per-URL Critical matches.
+
+**Phase 4 verification (2026-06-26 output):**
+- Severity badges: **3 Critical / 7 Warning** (was 10/10 Critical in Phase 3 run)
+- 3 PSI URLs with URL-level CrUX (`PSI API (CrUX)`, LCP > 4s) remain **Critical**
+- Origin CrUX site rules: 0 matches this run (AMC PSI cache returned URL-level CrUX, not origin fallback)
+- Unit tests: 5/5 pass (`test_cwv_origin_guard`, `test_scoring`)
 
 ---
 
@@ -168,7 +178,7 @@
 | 1 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_204302.xlsx | PASS | Export blocker fixed (partial extraction + empty FixPlan guard) |
 | 2 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_210356.xlsx | PASS | PSI URLs show new labels; 7 non-PSI URLs = Not available |
 | 3 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_211740.xlsx | PASS | IssueInventory aggregates server/site rules; 69 rows |
-| 4 | | | | | |
+| 4 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_213146.xlsx | PASS | Badge spread 3 Critical / 7 Warning |
 | 5 | | | | | |
 | 6 | | | | | |
 | 7 | | | | | |
