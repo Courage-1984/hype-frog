@@ -261,12 +261,7 @@ def build_fixplan_rows(
             for r in extra_rows
             if issue_name in str(r.values.get("Matched Issues") or "").split(" | ")
         ]
-        if issue_name == "Broken Internal Links":
-            affected_count = sum(
-                int(r.values.get("Broken Internal Links Count") or 0) for r in affected
-            )
-        else:
-            affected_count = len(affected)
+        affected_count = len(affected)
         if affected_count <= 0:
             continue
         root_cause, recommended_fix = root_cause_resolver(issue_name)
@@ -316,42 +311,45 @@ def build_fixplan_rows(
             or len(affected_urls) > 10
             else "Manual Content"
         )
-        rows.append(
-            {
-                "Category": "AEO" if issue_name in aeo_issue_names else "SEO",
-                "Issue Type": issue_name,
-                "Severity": severity,
-                "Affected Count": affected_count,
-                "Likely Root Cause": root_cause,
-                "Recommended Fix": recommended_fix,
-                "Owner": owner_for_issue(issue_name, severity),
-                "URL": affected[0].values.get("URL") if affected else "",
-                "Affected URLs": (
-                    f"SEE DETAILS IN {reference_tab}"
-                    if len(affected_urls) > 10
-                    else "\n".join(affected_urls[:50])
-                ),
-                "Detail Reference Tab": reference_tab,
-                "Resolution Type": resolution_type,
-                "Effort": effort,
-                "Action Needed": "Yes" if severity in {"Critical", "Warning"} else "No",
-                "Sprint": "",
-                "Status": status_by_severity.get(severity, "To Do"),
-                "Verified By": "",
-                "Date Resolved": "",
-                "Revenue Risk": (
-                    "High Risk"
-                    if severity == "Critical" and workflow["Priority Score"] >= 100
-                    else "Medium Risk" if severity == "Warning" else "Monitor"
-                ),
-                "Agency Owner": owner_for_issue(issue_name, severity),
-                "Jump to Details": "Open in Main Tab",
-                "Est. Sprint Points": workflow["Est. Sprint Points"],
-                "Est. Hours": workflow["Est. Hours"],
-                "Priority Score": workflow["Priority Score"],
-                "Aging/Priority": workflow["Aging/Priority"],
-            }
-        )
+        fixplan_row: dict[str, Any] = {
+            "Category": "AEO" if issue_name in aeo_issue_names else "SEO",
+            "Issue Type": issue_name,
+            "Severity": severity,
+            "Affected Count": affected_count,
+            "Likely Root Cause": root_cause,
+            "Recommended Fix": recommended_fix,
+            "Owner": owner_for_issue(issue_name, severity),
+            "URL": affected[0].values.get("URL") if affected else "",
+            "Affected URLs": (
+                f"SEE DETAILS IN {reference_tab}"
+                if len(affected_urls) > 10
+                else "\n".join(affected_urls[:50])
+            ),
+            "Detail Reference Tab": reference_tab,
+            "Resolution Type": resolution_type,
+            "Effort": effort,
+            "Action Needed": "Yes" if severity in {"Critical", "Warning"} else "No",
+            "Sprint": "",
+            "Status": status_by_severity.get(severity, "To Do"),
+            "Verified By": "",
+            "Date Resolved": "",
+            "Revenue Risk": (
+                "High Risk"
+                if severity == "Critical" and workflow["Priority Score"] >= 100
+                else "Medium Risk" if severity == "Warning" else "Monitor"
+            ),
+            "Agency Owner": owner_for_issue(issue_name, severity),
+            "Jump to Details": "Open in Main Tab",
+            "Est. Sprint Points": workflow["Est. Sprint Points"],
+            "Est. Hours": workflow["Est. Hours"],
+            "Priority Score": workflow["Priority Score"],
+            "Aging/Priority": workflow["Aging/Priority"],
+        }
+        if issue_name == "Broken Internal Links":
+            fixplan_row["Affected Link Instances"] = sum(
+                int(r.values.get("Broken Internal Links Count") or 0) for r in affected
+            )
+        rows.append(fixplan_row)
     return rows
 
 

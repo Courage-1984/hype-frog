@@ -498,6 +498,19 @@ def row_with_seo_health_enrichment(
     return ExtraRowPayload.model_validate(validated.extra)
 
 
+def row_with_aeo_readiness_fields(row: ExtraRowPayload) -> ExtraRowPayload:
+    """Compute AEO readiness before ``Matched Issues`` so summary rules can match."""
+    row_values = row.values
+    aeo_score, aeo_badge = compute_aeo_readiness_score(row_values)
+    return ExtraRowPayload.model_validate(
+        {
+            **row_values,
+            "AEO Readiness Score": aeo_score,
+            "AEO Badge": aeo_badge,
+        }
+    )
+
+
 def enrich_extra_rows_with_composite_scores(
     rows: list[ExtraRowPayload],
     *,
@@ -581,6 +594,7 @@ __all__ = [
     "enrich_extra_rows_with_composite_scores",
     "main_by_url_map",
     "passthrough_assemble_rows",
+    "row_with_aeo_readiness_fields",
     "row_with_canonical_and_internal_links",
     "row_with_psi_gsc_harden",
     "row_with_seo_health_enrichment",

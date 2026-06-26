@@ -1,6 +1,6 @@
 """Canonical broken internal link metrics (single source of truth).
 
-All executive surfaces (Dashboard KPI, narratives, FixPlan instance totals,
+All executive surfaces (Dashboard KPI, narratives, FixPlan ``Affected Link Instances``,
 Link Intelligence summary formulas, and per-URL ``Broken Internal Links Count``)
 must align with anchor-level rows on the Link Inventory sheet: one count per
 internal ``<a>`` whose target returned HTTP 4xx/5xx when checked.

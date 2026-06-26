@@ -25,7 +25,7 @@ def score_url_health(
             0,
             "Critical",
             "FAIL 🔴",
-            {"Critical": ["HTTP 404 Not Found"], "Warning": [], "Observation": []},
+            {"Critical": ["Non-200 Status"], "Warning": [], "Observation": []},
         )
 
     extraction_state = str(row.get("Extraction State") or "").strip().lower()

@@ -50,6 +50,7 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "Severity",
         "Priority Score",
         "Affected Count",
+        "Affected Link Instances",
         "Affected URLs",
         "Detail Reference Tab",
         "Resolution Type",

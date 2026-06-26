@@ -14,7 +14,7 @@
 | 3 | Site-level vs URL-level issue scope | ✅ Done | ✅ Pass | quick-test-fast 2026-06-26; IssueInventory 69 rows |
 | 4 | CWV severity cascade fix | ✅ Done | ✅ Pass | quick-test-fast 2026-06-26; badges 3 Critical / 7 Warning |
 | 5 | WooCommerce / parameter URL filtering | ✅ Done | ✅ Pass | CMS Action URLs tab added; AMC run 0 withheld URLs |
-| 6 | FixPlan vs Summary count reconciliation | ⬜ Pending | ⬜ | |
+| 6 | FixPlan vs Summary count reconciliation | ✅ Done | ✅ Pass | FixPlan/Summary counts aligned on AMC run |
 | 7 | Click Depth null handling | ⬜ Pending | ⬜ | |
 | 8 | Duplicate Main sheet column fix | ⬜ Pending | ⬜ | |
 
@@ -152,18 +152,28 @@
 
 ## Phase 6 — FixPlan vs Summary Count Reconciliation
 
-### 6A: Align HTTP 404 / Non-200 Status label mismatch
-- **Files:** `src/hype_frog/rules/scoring.py`, `src/hype_frog/reporter/engine_rows.py`
-- **Status:** ⬜ Pending
+### 6A: Non-200 Status label alignment for 404 rows
+- **File:** `src/hype_frog/rules/scoring.py`
+- **Function:** `score_url_health`
+- **Status:** ✅ Done
+- **Change summary:** 404 early-return now writes `"Non-200 Status"` into matched issues (registry rule name) instead of `"HTTP 404 Not Found"`, so FixPlan/IssueInventory/Summary use the same identifier. Indexability Reason and badges unchanged.
 
-### 6B: Fix Broken Internal Links instance vs URL count
-- **File:** `src/hype_frog/reporter/engine_rows.py`
+### 6B: Broken Internal Links URL vs instance counts
+- **File:** `src/hype_frog/reporter/engine_rows.py`, `layout.py`
 - **Function:** `build_fixplan_rows`
-- **Status:** ⬜ Pending
+- **Status:** ✅ Done
+- **Change summary:** `Affected Count` always counts distinct source URLs. For Broken Internal Links, added `Affected Link Instances` column (sum of per-URL broken link counts).
 
-### 6C: Verify enrichment ordering
-- **Files:** `src/hype_frog/pipeline/assemble.py`, `src/hype_frog/orchestration/enrichment_flow.py`
-- **Status:** ⬜ Pending
+### 6C: Enrichment ordering before Matched Issues
+- **Files:** `enrichment_flow.py`, `assemble.py`
+- **Status:** ✅ Fixed
+- **Confirmed order:** PSI/GSC harden (phase 3) → link status + broken counts (phase 4) → canonical/links + graph + duplicate signals → **`row_with_aeo_readiness_fields`** → **`row_with_seo_health_enrichment`** (Matched Issues) → composite SEO scores.
+- **Fix applied:** `AEO Readiness Score` was previously computed after Matched Issues, so `Low AEO Readiness Score` could not match. Added `row_with_aeo_readiness_fields` before scoring.
+
+**Phase 6 verification (2026-06-26 output):**
+- FixPlan vs Summary: **0 mismatches** on shared issue names (AMC run)
+- Unit tests: 8/8 pass (`test_fixplan_reconciliation`, `test_fixplan_scope`, `test_scoring`)
+- `--quick-test-fast`: PASS
 
 ---
 
@@ -194,6 +204,6 @@
 | 3 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_211740.xlsx | PASS | IssueInventory aggregates server/site rules; 69 rows |
 | 4 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_213146.xlsx | PASS | Badge spread 3 Critical / 7 Warning |
 | 5 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_214233.xlsx | PASS | CMS Action URLs tab present; 0 WooCommerce links on AMC |
-| 6 | | | | | |
+| 6 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_215138.xlsx | PASS | FixPlan/Summary counts aligned |
 | 7 | | | | | |
 | 8 | | | | | |

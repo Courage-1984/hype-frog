@@ -28,6 +28,7 @@ from hype_frog.pipeline.assemble import (
     build_title_meta_segment_maps,
     enrich_extra_rows_with_composite_scores,
     main_by_url_map,
+    row_with_aeo_readiness_fields,
     row_with_canonical_and_internal_links,
     row_with_psi_gsc_harden,
     row_with_seo_health_enrichment,
@@ -381,6 +382,7 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             extra_work,
             inlinks_map=inlinks_map,
         )
+        extra_work = [row_with_aeo_readiness_fields(row) for row in extra_work]
         extra_work = [
             row_with_seo_health_enrichment(
                 row,
