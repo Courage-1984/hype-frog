@@ -23,9 +23,18 @@ def test_baseline_report_shows_first_run_note() -> None:
         previous_issue_inventory_df=pd.DataFrame(),
         baseline_report=True,
     )
-    assert delta_rows[0]["Count"] == BASELINE_DELTA_NOTE
-    assert delta_rows[1]["Metric"] == "Current Issues (baseline inventory)"
-    assert delta_rows[1]["Count"] == 1
+    status_rows = [
+        row for row in delta_rows if row.get("Issue") == "Report Status"
+    ]
+    assert status_rows
+    assert status_rows[0].get("Current Value") == BASELINE_DELTA_NOTE
+    baseline_count_rows = [
+        row
+        for row in delta_rows
+        if row.get("Issue") == "Current Issues (baseline inventory)"
+    ]
+    assert baseline_count_rows
+    assert baseline_count_rows[0].get("Current Value") == 1
     assert resolved_df.iloc[0]["Issue"] == BASELINE_DELTA_NOTE
 
 
@@ -42,5 +51,5 @@ def test_compare_run_keeps_resolved_placeholder_when_none_fixed() -> None:
         ),
         baseline_report=False,
     )
-    assert any(row["Metric"] == "Resolved Issues" for row in delta_rows)
+    assert any(row.get("Issue") == "Resolved Issues" for row in delta_rows if row.get("Section") == "Summary")
     assert "No resolved issues identified" in str(resolved_df.iloc[0]["Issue"])

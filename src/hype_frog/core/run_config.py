@@ -35,7 +35,13 @@ class RunConfig:
     checkpoint_every: int
     resume_checkpoint: ResumeCheckpointMode
     check_external_link_status: bool
+    check_og_images: bool = False
+    check_content_images: bool = False
     bfs_max_depth: int | None = None
+    gsc_url_inspection: str | None = None
+    max_memory_mb: int | None = None
+    streaming: bool = False
+    competitor_domains: tuple[str, ...] = ()
 
 
 def _quick_test_max_psi_urls() -> int:
@@ -61,5 +67,6 @@ def quick_test_run_config() -> RunConfig:
         checkpoint_every=0,
         resume_checkpoint="no",
         check_external_link_status=True,
+        check_og_images=False,
         bfs_max_depth=QUICK_TEST_BFS_MAX_DEPTH,
     )

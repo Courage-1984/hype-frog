@@ -70,3 +70,10 @@ uv sync --extra semantic --extra render --extra dev
 uv run playwright install chromium
 uv run hype-frog --install-semantic
 
+
+
+| 13 | D2 — LLM as post-crawl pass | Cost and reliability improvement |
+
+
+uv sync --extra dev
+

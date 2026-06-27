@@ -10,22 +10,26 @@ import aiohttp
 
 from hype_frog.config import (
     CONNECT_TIMEOUT_SECONDS,
-    DELAY_BETWEEN_REQUESTS,
     MAX_RETRIES,
     READ_TIMEOUT_SECONDS,
-    REQUEST_JITTER_SECONDS,
     RETRY_BACKOFF_FACTOR,
     RETRY_BASE_DELAY_SECONDS,
     RETRY_MAX_DELAY_SECONDS,
     RETRYABLE_STATUS_CODES,
     TIMEOUT_SECONDS,
+    get_delay_between_requests,
+    get_request_jitter_seconds,
 )
 from hype_frog.core import get_logger
+from hype_frog.core.status_codes import is_error_status, normalise_status_code
+from hype_frog.core.crawl_log import CrawlLogCollector
+from hype_frog.crawler.robots_mapping import prepare_robots_domain_entry
 from hype_frog.crawler.data_assembler import (
     assemble_from_html,
     finalize_row_state,
     init_rows,
 )
+from hype_frog.crawler.redirect_chain import RedirectHopRecord, build_redirect_chain_fields
 from hype_frog.crawler.network_engine import (
     PlaywrightSessionManager,
     RenderedFetchDiagnostics,
@@ -120,6 +124,8 @@ async def _populate_robots_cache(
     llms_present = False
     ai_allowed = None
     aeo_engine_bot_coverage: float | None = None
+    robots_text: str | None = None
+    robots_status: int | None = None
     try:
         async with session.get(f"{domain_key}/llms.txt", timeout=timeout) as llms_resp:
             llms_present = llms_resp.status == 200
@@ -127,19 +133,23 @@ async def _populate_robots_cache(
         llms_present = False
     try:
         async with session.get(f"{domain_key}/robots.txt", timeout=timeout) as robots_resp:
+            robots_status = robots_resp.status
             if robots_resp.status == 200:
-                robots_text = (await robots_resp.text()).lower()
-                ai_allowed = all(bot in robots_text for bot in _LEGACY_AI_BOTS)
-                hits = sum(1 for bot in _AEO_ENGINE_BOTS if bot in robots_text)
+                robots_text = await robots_resp.text()
+                robots_lower = robots_text.lower()
+                ai_allowed = all(bot in robots_lower for bot in _LEGACY_AI_BOTS)
+                hits = sum(1 for bot in _AEO_ENGINE_BOTS if bot in robots_lower)
                 aeo_engine_bot_coverage = hits / float(len(_AEO_ENGINE_BOTS))
     except Exception:
         ai_allowed = None
         aeo_engine_bot_coverage = None
-    robots_cache[domain_key] = {
-        "llms_present": llms_present,
-        "ai_allowed": ai_allowed,
-        "aeo_engine_bot_coverage": aeo_engine_bot_coverage,
-    }
+    robots_cache[domain_key] = prepare_robots_domain_entry(
+        robots_text=robots_text,
+        robots_status=robots_status,
+        llms_present=llms_present,
+        ai_allowed=ai_allowed,
+        aeo_engine_bot_coverage=aeo_engine_bot_coverage,
+    )
 
 
 async def fetch_and_parse(
@@ -156,6 +166,7 @@ async def fetch_and_parse(
     depth: int = 0,
     render_pages: bool = False,
     playwright_session_manager: PlaywrightSessionManager | None = None,
+    crawl_log: CrawlLogCollector | None = None,
 ) -> CrawlRowPayload:
     """Crawl a single URL and return a populated row payload.
 
@@ -186,32 +197,58 @@ async def fetch_and_parse(
             retry_base_delay_seconds=RETRY_BASE_DELAY_SECONDS,
             retry_backoff_factor=RETRY_BACKOFF_FACTOR,
             retry_max_delay_seconds=RETRY_MAX_DELAY_SECONDS,
-            request_jitter_seconds=REQUEST_JITTER_SECONDS,
+            request_jitter_seconds=get_request_jitter_seconds(),
         )
-        status_code = result["status_code"]
+        status_code = normalise_status_code(result["status_code"])
         final_url = result["final_url"]
         resolved_url = final_url or url
         response_headers = result["response_headers"]
-        redirect_targets = result["redirect_hops"]
+        error_kind = str(result.get("error_kind") or "")
+        hop_details = result.get("redirect_hop_details") or []
+        hop_records = [
+            RedirectHopRecord(url=str(item["url"]), status=int(item["status"]))
+            for item in hop_details
+            if isinstance(item, dict) and item.get("url") is not None
+        ]
         html = result["html"]
 
         main_values["Load Time (s)"] = round(time.time() - start_time, 3)
         main_values["Status Code"] = status_code
         extra_values["Status Code"] = status_code
+        domain_key = ""
         if final_url:
             extra_values["Final URL"] = normalize_url_key(final_url)
             extra_values["Protocol"] = urlparse(final_url).scheme
             parsed_final = urlparse(final_url)
             domain_key = f"{parsed_final.scheme}://{parsed_final.netloc}"
+        if hop_records:
+            redirect_fields = build_redirect_chain_fields(
+                source_url=url,
+                hop_records=hop_records,
+                final_url=final_url or resolved_url,
+            )
+            extra_values.update(redirect_fields)
+            if final_url:
+                extra_values["Protocol"] = urlparse(final_url).scheme
+                parsed_final = urlparse(final_url)
+                domain_key = f"{parsed_final.scheme}://{parsed_final.netloc}"
+            final_target = final_url or url
+            first_scheme = urlparse(hop_records[0].url).scheme.lower()
+            final_scheme = urlparse(final_target).scheme.lower()
+            extra_values["HTTP->HTTPS Redirect"] = (
+                first_scheme == "http" and final_scheme == "https"
+            )
         else:
-            domain_key = ""
-        extra_values["Redirect Chain Length"] = len(redirect_targets)
+            extra_values["Redirect Chain Length"] = 0
         extra_values["Status Class"] = status_class(status_code)
         extra_values["TTFB (ms)"] = result["ttfb_ms"]
         extra_values["Total Request Time (ms)"] = result["total_request_ms"]
         extra_values["Content-Type"] = response_headers.get("Content-Type")
         extra_values["Cache-Control"] = response_headers.get("Cache-Control")
         extra_values["ETag"] = response_headers.get("ETag")
+        extra_values["Last-Modified"] = response_headers.get("Last-Modified") or response_headers.get(
+            "last-modified"
+        )
         extra_values["X-Robots-Tag"] = response_headers.get("X-Robots-Tag")
         extra_values["Strict-Transport-Security"] = response_headers.get(
             "Strict-Transport-Security"
@@ -225,15 +262,6 @@ async def fetch_and_parse(
         extra_values["Compression Enabled"] = any(
             token in content_encoding for token in ("gzip", "br", "deflate")
         )
-        if redirect_targets:
-            final_target = final_url or url
-            extra_values["Redirect Hops"] = " -> ".join(redirect_targets + [final_target])
-            extra_values["Redirect Target"] = final_target
-            first_scheme = urlparse(redirect_targets[0]).scheme.lower()
-            final_scheme = urlparse(final_target).scheme.lower()
-            extra_values["HTTP->HTTPS Redirect"] = (
-                first_scheme == "http" and final_scheme == "https"
-            )
 
         if robots_cache is not None and domain_key:
             if domain_key not in robots_cache:
@@ -252,7 +280,27 @@ async def fetch_and_parse(
             extra_values["AEO Robots AI Bot Coverage"] = robots_cache.get(
                 domain_key, {}
             ).get("aeo_engine_bot_coverage")
+            domain_entry = robots_cache.get(domain_key, {})
+            extra_values["Robots.txt Accessible"] = domain_entry.get("robots_accessible")
+            extra_values["Robots.txt Crawl-Delay"] = None
 
+        if crawl_log is not None:
+            if error_kind:
+                crawl_log.record(
+                    url=url,
+                    phase="fetch",
+                    error_type=error_kind.replace("_", " ").title(),
+                    error_detail=str(result.get("status_code") or error_kind),
+                    recovery_action="Row retained with transport-error status code.",
+                )
+            elif is_error_status(status_code):
+                crawl_log.record(
+                    url=url,
+                    phase="fetch",
+                    error_type="HTTP Error",
+                    error_detail=f"Status {status_code}",
+                    recovery_action="Partial or skipped extraction depending on body.",
+                )
         ct_lower = (response_headers.get("Content-Type") or "").lower()
         unsupported_mime = (
             isinstance(status_code, int)
@@ -266,6 +314,14 @@ async def fetch_and_parse(
             main_values["Extraction State"] = "skipped"
             extra_values["Extraction State"] = "skipped"
             extra_values["skip_reason"] = "unsupported_mime"
+            if crawl_log is not None:
+                crawl_log.record(
+                    url=url,
+                    phase="extract",
+                    error_type="Unsupported MIME",
+                    error_detail=str(response_headers.get("Content-Type") or "unknown"),
+                    recovery_action="Skipped HTML extraction for non-text body.",
+                )
         elif isinstance(status_code, int) and status_code == 200 and html is not None:
             extraction_source = "raw_http"
             extraction_state_hint = "complete"
@@ -300,6 +356,14 @@ async def fetch_and_parse(
                         "Render unavailable for %s; using raw_http HTML for extraction.",
                         render_target,
                     )
+                    if crawl_log is not None:
+                        crawl_log.record(
+                            url=url,
+                            phase="render",
+                            error_type="Render Unavailable",
+                            error_detail=str(diagnostics.get("failure_reason") or "empty render"),
+                            recovery_action="Fell back to raw_http HTML extraction.",
+                        )
                 # Always surface the Sprint 2 ghost data — even when
                 # ``rendered_html`` was empty the raw_word_count /
                 # is_js_dependent values are still meaningful (and the
@@ -355,6 +419,7 @@ async def fetch_and_parse(
                 html=html,
                 resolved_url=resolved_url,
                 depth=depth,
+                response_headers=response_headers,
             )
             main_values["Extraction State"] = extraction_state_hint
         else:
@@ -366,7 +431,9 @@ async def fetch_and_parse(
         backfill_extra_content_hub_metrics(extra_values, main_values)
         logger.info("[%s] Crawled: %s", main_values["Status Code"], url)
         delay_seconds = (
-            request_delay if request_delay is not None else DELAY_BETWEEN_REQUESTS
+            request_delay if request_delay is not None else get_delay_between_requests()
         )
-        await asyncio.sleep(delay_seconds + random.uniform(0, REQUEST_JITTER_SECONDS))
+        await asyncio.sleep(
+            delay_seconds + random.uniform(0, get_request_jitter_seconds())
+        )
         return CrawlRowPayload(main=main_data, extra=extra)

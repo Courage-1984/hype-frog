@@ -68,3 +68,57 @@ Columns with numeric conditional formatting must not receive arbitrary string pl
 ## Testing touchpoints
 
 Excel behavior is covered in part by `test_excel_engine.py` and tests under `tests/`. Run pytest after changing view state, TOC, or conditional formatting.
+
+## Workbook tab layout
+
+Canonical tab order and default visibility: `reporter/sheets/workbook_layout.py` (`VISIBLE_WORKBOOK_TAB_ORDER`, `ADVANCED_WORKBOOK_TAB_ORDER`). TOC descriptions: `engine_guardrails.friendly_toc_description`.
+
+### Merged diagnostic sheets
+
+| Sheet | Builder | Purpose |
+|-------|---------|---------|
+| Technical Diagnostics | `merged_builders.build_technical_diagnostics_rows` | Technical, indexability, redirect, security, PSI/CrUX, GSC columns |
+| Content & AI Readiness | `merged_builders.build_content_ai_readiness_rows` | Content, schema, AEO, media signals |
+| Issue Register | `merged_builders.build_issue_register_rows` | Unified issue list with history fields |
+| Link Inventory | `merged_builders.build_link_inventory_rows` | Internal links with status |
+| Broken Link Impact | `merged_builders.build_broken_link_impact_rows` | Broken internal link instances |
+| Quick Wins | `merged_builders.build_quick_wins_rows` | Actionable low-effort fixes |
+
+### Inventory and opportunity sheets
+
+**Script Inventory**, **Image Inventory**, **Snippet Opportunities**, **Link Equity Map**, **Anchor Text Audit**, **Redirect Map**, **Robots.txt Analysis**, **Crawl Log**, **Competitor Benchmarks** (optional), **CMS Action URLs**, **Template & Duplication Risks**, **Playbook**.
+
+## Link Inventory deduplication
+
+`build_link_inventory_rows` deduplicates rows on **`(Source URL, Target URL, Anchor Text)`** before write so repeated anchor edges from multi-page discovery do not inflate the sheet.
+
+## Duplicate column prevention
+
+`reporter/sheets/style_helpers.header_exists_in_worksheet` prevents inserting a second **BACK TO DASHBOARD** navigation column (`navigation.py`).
+
+## IssueInventory and Issue Register scope branching
+
+`summary_builder.py` treats `IssueRule.scope` values:
+
+- **`url`** — per-URL rows in IssueInventory.
+- **`site`** / **`server`** — one aggregate row with URL label `(site-wide)` or `(server config)` and **`Affected URL Count`**.
+
+Issue Register mirrors reference areas with dynamic `INDIRECT` hyperlinks to the target diagnostic sheet.
+
+## FixPlan columns
+
+`engine_rows.build_fixplan_rows` emits **`Affected Link Instances`** (sum of broken + unresolved internal links per URL) alongside existing workflow columns.
+
+## Main sheet conditional formatting
+
+`conditional.apply_main_sheet_heatmaps` (skipped when `HF_DISABLE_CONDITIONAL_FORMATTING=1`):
+
+- **Colour scale (0–100):** `SEO Health Score`, PSI scores, Lighthouse category scores, `AEO Readiness Score`.
+- **Inverted colour scale:** `Lab LCP (Mobile) (s)` (green = fast).
+- **Cell rule:** `Status Code` ≥ 400 highlighted red.
+
+Main **Technical Health** column receives a post-format `VLOOKUP` into Technical Diagnostics `SEO Health Score` (`tables_impl._link_main_technical_health_to_diagnostics`).
+
+## Content hub — Action Required (formula literals)
+
+The Hub **Action Required** column uses formula literals **`Complete`** / **`Needs Copy`** (score threshold 85) in `engine_rows.py`. Conditional formatting in `conditional.py` highlights **`Needs Copy`** in red. Dashboard completion metrics count Hub **Status** = `Completed` (separate workflow column).

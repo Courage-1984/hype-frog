@@ -18,13 +18,45 @@ from hype_frog.config import (
 )
 from hype_frog.core import get_logger
 from hype_frog.core.models import SummaryMetricsPayload
+from hype_frog.core.crawl_log import CRAWL_LOG_COLUMNS, crawl_log_sheet_rows
+from hype_frog.crawler.robots_mapping import (
+    ROBOTS_ANALYSIS_COLUMNS,
+    build_robots_analysis_rows,
+)
+from hype_frog.analysis.link_equity import (
+    ANCHOR_TEXT_AUDIT_COLUMNS,
+    LINK_EQUITY_COLUMNS,
+    build_anchor_text_audit_rows,
+    build_link_equity_rows,
+)
+from hype_frog.analysis.snippet_opportunities import (
+    SNIPPET_OPPORTUNITY_COLUMNS,
+    build_snippet_opportunity_rows,
+)
+from hype_frog.analysis.third_party_scripts import (
+    SCRIPT_INVENTORY_COLUMNS,
+    build_script_inventory_rows,
+)
+from hype_frog.rules.playbook_entries import build_issue_playbook_rows
+from hype_frog.pipeline.enrich import compute_internal_link_intelligence
+from hype_frog.pipeline.image_inventory import (
+    IMAGE_INVENTORY_COLUMNS,
+    build_image_inventory_rows,
+)
 from hype_frog.orchestration.crawl_runner import CrawlExecutionResult
 from hype_frog.orchestration.enrichment_flow import EnrichmentResult
+from hype_frog.analysis.delta_engine import (
+    build_delta_workbook_output,
+    delta_summary_path_for_workbook,
+    load_run_snapshot,
+    save_run_snapshot_json,
+    snapshot_from_current_run,
+)
+from hype_frog.reporter.pdf_exporter import export_executive_summary_pdf
 from hype_frog.orchestration.export_registry import (
     ExportRegistryConfig,
     build_crawlgraph_rows,
     build_cms_action_url_rows,
-    build_delta_and_trend_rows,
     build_duplicates_rows,
     build_pattern_rows,
     build_priority_rows,
@@ -41,7 +73,17 @@ from hype_frog.pipeline.export import sanitize_rows, to_excel_safe
 from hype_frog.reporter import adjust_sheet_format, apply_tab_hyperlinks
 from hype_frog.reporter.sheets.config import (
     AIOSEO_RECOMMENDATIONS_SHEET,
+    ANCHOR_TEXT_AUDIT_SHEET,
     AUDIT_RUN_DETAILS_SHEET,
+    CRAWL_LOG_SHEET,
+    COMPETITOR_BENCHMARKS_SHEET,
+    IMAGE_INVENTORY_SHEET,
+    LINK_EQUITY_MAP_SHEET,
+    REDIRECT_MAP_SHEET,
+    ROBOTS_ANALYSIS_SHEET,
+    SCRIPT_INVENTORY_SHEET,
+    SNIPPET_OPPORTUNITIES_SHEET,
+    COMPETITOR_BENCHMARKS_SHEET,
 )
 from hype_frog.reporter.sheets.executive_dashboard import write_executive_dashboard
 from hype_frog.reporter.chart_compat import patch_xlsx_app_xml_for_excel_compatibility
@@ -62,10 +104,14 @@ from hype_frog.reporter.sheets.config import (
 )
 from hype_frog.pipeline.link_inventory import unique_external_health_counts
 from hype_frog.reporter.sheets.merged_builders import (
+    build_broken_link_impact_rows,
     build_content_ai_readiness_rows,
     build_issue_register_rows,
     build_link_intelligence_rows,
     build_link_inventory_rows,
+    build_quick_wins_rows,
+    build_redirect_map_rows,
+    build_redirects_sheet_rows,
     build_technical_diagnostics_rows,
     build_template_duplication_risks_rows,
 )
@@ -112,6 +158,7 @@ def execute_export(
     output_filename = crawl_result.output_filename
     urls = crawl_result.crawl_urls
     sitemap_meta = crawl_result.sitemap_meta
+    sitemap_files_meta = crawl_result.sitemap_files_meta
     workers = crawl_result.workers
     request_delay = crawl_result.request_delay
     full_suite = crawl_result.full_suite
@@ -133,54 +180,24 @@ def execute_export(
     prev_issue_ids: set[str] = set()
     prev_counts: dict[str, int] = {}
     prev_fixed_issue_ids: set[str] = set()
-    previous_issue_inventory_df = pd.DataFrame()
+    previous_snapshot = None
     previous_audit_exists = bool(previous_audit_path) and os.path.exists(previous_audit_path)
     if previous_audit_exists:
-        try:
-            prev_xls = pd.ExcelFile(previous_audit_path)
-            if "IssueInventory" in prev_xls.sheet_names:
-                previous_issue_inventory_df = pd.read_excel(
-                    previous_audit_path, sheet_name="IssueInventory"
-                )
-                if "Stable Issue ID" in previous_issue_inventory_df.columns:
-                    prev_issue_ids = {
-                        str(value).strip()
-                        for value in previous_issue_inventory_df["Stable Issue ID"]
-                        .dropna()
-                        .tolist()
-                        if str(value).strip()
-                    }
-                    if "Status" in previous_issue_inventory_df.columns:
-                        prev_fixed_issue_ids = {
-                            str(row.get("Stable Issue ID")).strip()
-                            for _, row in previous_issue_inventory_df.iterrows()
-                            if str(row.get("Stable Issue ID", "")).strip()
-                            and str(row.get("Status", "")).strip().lower()
-                            in {"fixed", "done", "closed"}
-                        }
-                else:
-                    logger.warning(
-                        "Previous audit IssueInventory is missing 'Stable Issue ID'. "
-                        "Delta compare will mark all current issues as New."
-                    )
-            else:
-                logger.warning(
-                    "Previous audit is missing 'IssueInventory'. "
-                    "Delta compare will mark all current issues as New."
-                )
-            if "Summary" in prev_xls.sheet_names:
-                prev_summary = pd.read_excel(previous_audit_path, sheet_name="Summary")
-                for _, srow in prev_summary.iterrows():
-                    if str(srow.get("Section", "")) == "Issue Counts":
-                        prev_counts[str(srow.get("Issue", ""))] = int(
-                            srow.get("Affected URL Count", 0) or 0
-                        )
-        except Exception as exc:
-            logger.warning("Could not parse previous audit for compare: %s", exc)
-            prev_issue_ids = set()
-            prev_counts = {}
-            prev_fixed_issue_ids = set()
-            previous_issue_inventory_df = pd.DataFrame()
+        previous_snapshot = load_run_snapshot(previous_audit_path)
+        if previous_snapshot is not None:
+            prev_issue_ids = set(previous_snapshot.issue_ids)
+            prev_fixed_issue_ids = set(previous_snapshot.fixed_issue_ids)
+            prev_counts = dict(previous_snapshot.issue_counts_by_name)
+            logger.info(
+                "Loaded previous run snapshot from %s (%s issues).",
+                previous_audit_path,
+                len(prev_issue_ids),
+            )
+        else:
+            logger.warning(
+                "Could not parse previous audit snapshot at %s; delta compare degraded.",
+                previous_audit_path,
+            )
     elif previous_audit_path:
         logger.warning(
             "Previous audit file not found: %s. Delta compare will mark all current issues as New.",
@@ -190,6 +207,10 @@ def execute_export(
     main_rows = sanitize_rows(main_rows)
     extra_rows = sanitize_rows(extra_rows)
     writer = None
+    current_snapshot = None
+    summary_rows: list[dict[str, Any]] = []
+    fixplan_rows: list[dict[str, Any]] = []
+    quick_wins_rows: list[dict[str, Any]] = []
     try:
         writer = pd.ExcelWriter(output_filename, engine="openpyxl")
         main_cols = list(main_rows[0].keys()) if main_rows else []
@@ -205,22 +226,8 @@ def execute_export(
                 sheet_columns[AIOSEO_RECOMMENDATIONS_SHEET],
                 aioseo_rows,
             )
-            redirects_rows = []
-            for row in extra_rows:
-                redirects_rows.append({
-                    "URL": row.get("URL"),
-                    "Status Code": row.get("Status Code"),
-                    "Final URL": row.get("Final URL"),
-                    "Redirect Chain Length": row.get("Redirect Chain Length"),
-                    "Redirect Target": row.get("Redirect Target"),
-                    "Redirect Hops": row.get("Redirect Hops"),
-                    "HTTP->HTTPS Redirect": row.get("HTTP->HTTPS Redirect"),
-                    "Redirect Loop Flag": (
-                        isinstance(row.get("Redirect Hops"), str)
-                        and normalize_url_key(row.get("URL", "")) == normalize_url_key(row.get("Final URL", ""))
-                        and int(row.get("Redirect Chain Length") or 0) > 0
-                    ),
-                })
+            redirects_rows = build_redirects_sheet_rows(extra_rows)
+            redirect_map_rows = build_redirect_map_rows(extra_rows)
             link_rows = []
             for row in extra_rows:
                 for item in row.get("Link Details", []):
@@ -265,6 +272,15 @@ def execute_export(
                 main_rows=typed_main_rows,
             )
             issue_inventory_df = pd.DataFrame(issue_inventory_rows)
+            run_timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+            register_snapshot = snapshot_from_current_run(
+                issue_inventory_df=issue_inventory_df,
+                main_rows=main_rows,
+                extra_rows=extra_rows,
+                source_path=output_filename,
+                run_date=run_timestamp,
+                previous_snapshot=previous_snapshot,
+            )
             technical_diagnostics_rows = build_technical_diagnostics_rows(
                 extra_rows, main_rows=main_rows
             )
@@ -274,6 +290,8 @@ def execute_export(
             issue_register_rows = build_issue_register_rows(
                 summary_rows=summary_rows,
                 issue_inventory_rows=issue_inventory_rows,
+                issue_records=register_snapshot.issues,
+                run_date=run_timestamp,
             )
             graph_rows = build_crawlgraph_rows(
                 main_urls=[str(row.get("URL") or "") for row in main_rows if row.get("URL")],
@@ -333,6 +351,15 @@ def execute_export(
                 merged_columns["Link Inventory"],
                 link_inventory_rows,
             )
+            broken_link_impact_rows = build_broken_link_impact_rows(
+                link_inventory_rows, extra_rows
+            )
+            write_dict_rows_sheet(
+                writer,
+                "Broken Link Impact",
+                merged_columns["Broken Link Impact"],
+                broken_link_impact_rows,
+            )
             ok_unique_ext, total_unique_ext = unique_external_health_counts(
                 link_inventory_rows
             )
@@ -360,6 +387,15 @@ def execute_export(
             else:
                 fixplan_df = pd.DataFrame(columns=list(_fixplan_top_blocker_cols))
             to_excel_safe(fixplan_df, writer, "FixPlan", index=False)
+            quick_wins_rows = build_quick_wins_rows(
+                extra_rows, fixplan_rows, summary_rules
+            )
+            write_dict_rows_sheet(
+                writer,
+                "Quick Wins",
+                merged_columns["Quick Wins"],
+                quick_wins_rows,
+            )
             hub_base_rows, hub_metrics_rows = build_content_optimisation_hub_rows(
                 typed_main_rows, typed_extra_rows, fixplan_rows
             )
@@ -633,6 +669,35 @@ def execute_export(
                 },
             ]
             playbook_rows = list(quick_reference_rows)
+            playbook_rows.extend(
+                [
+                    {"Section": "", "Item": "", "Guideline": "", "Why It Matters": ""},
+                    {
+                        "Section": "[Issue Playbook]",
+                        "Item": "",
+                        "Guideline": "",
+                        "Why It Matters": "",
+                    },
+                ]
+            )
+            for issue_row in build_issue_playbook_rows(summary_rules):
+                playbook_rows.append(
+                    {
+                        "Section": issue_row["Section"],
+                        "Item": issue_row["Issue"],
+                        "Guideline": (
+                            f"What: {issue_row['What It Is']}\n"
+                            f"Fix: {issue_row['How To Fix']}\n"
+                            f"Verify: {issue_row['How To Verify']}"
+                        ),
+                        "Why It Matters": (
+                            f"{issue_row['Why It Matters']} "
+                            f"(Severity: {issue_row['Severity']}; "
+                            f"Owner: {issue_row['Owner']}; "
+                            f"Time: {issue_row['Time To Fix']})"
+                        ),
+                    }
+                )
             semantic_probe = probe_semantic_engine()
             crawl_semantic_modes = {
                 str(row.values.get("Semantic Analysis Mode") or "").strip()
@@ -674,7 +739,7 @@ def execute_export(
             )
             logger.info("Crawl duration for Dashboard RunMetadata: %.1fs", crawl_duration_s)
             run_meta_rows = [
-                {"Key": "Run Timestamp", "Value": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")},
+                {"Key": "Run Timestamp", "Value": run_timestamp},
                 {"Key": "Total URLs", "Value": len(urls)},
                 {"Key": "Duration (s)", "Value": crawl_duration_s},
                 {"Key": "Crawl Mode", "Value": setup.crawl_mode},
@@ -719,19 +784,24 @@ def execute_export(
                     "Key": "External Sniff Performed",
                     "Value": int(1 if setup.check_external_link_status else 0),
                 },
+                {
+                    "Key": "OG Image Validation Performed",
+                    "Value": int(1 if setup.check_og_images else 0),
+                },
             ]
             to_excel_safe(
                 pd.DataFrame(run_meta_rows), writer, AUDIT_RUN_DETAILS_SHEET, index=False
             )
-            delta_rows, resolved_issues_df = build_delta_and_trend_rows(
+            delta_rows, resolved_issues_df, current_snapshot = build_delta_workbook_output(
                 issue_inventory_df=issue_inventory_df,
+                main_rows=main_rows,
+                extra_rows=extra_rows,
                 typed_extra_rows=typed_extra_rows,
                 summary_rules=summary_rules,
-                prev_issue_ids=prev_issue_ids,
-                prev_fixed_issue_ids=prev_fixed_issue_ids,
-                prev_counts=prev_counts,
-                previous_issue_inventory_df=previous_issue_inventory_df,
-                baseline_report=not previous_audit_exists,
+                previous_snapshot=previous_snapshot,
+                baseline_report=previous_snapshot is None,
+                output_path=output_filename,
+                run_date=run_timestamp,
             )
             to_excel_safe(pd.DataFrame(delta_rows), writer, "DeltaFromPreviousRun", index=False)
             to_excel_safe(resolved_issues_df, writer, "ResolvedIssues", index=False)
@@ -772,9 +842,80 @@ def execute_export(
             to_excel_safe(pd.DataFrame(playbook_rows), writer, "Playbook", index=False)
             sitemap_rows = build_sitemapqa_rows(
                 sitemap_meta=sitemap_meta,
+                sitemap_files_meta=sitemap_files_meta,
                 extra_rows=extra_rows,
             )
             to_excel_safe(pd.DataFrame(sitemap_rows), writer, "SitemapQA", index=False)
+            write_dict_rows_sheet(
+                writer,
+                "Redirects",
+                sheet_columns["Redirects"],
+                redirects_rows,
+            )
+            write_dict_rows_sheet(
+                writer,
+                REDIRECT_MAP_SHEET,
+                merged_columns[REDIRECT_MAP_SHEET],
+                redirect_map_rows,
+            )
+            robots_analysis_rows = build_robots_analysis_rows(
+                robots_by_domain=crawl_result.robots_by_domain or {},
+                extra_rows=extra_rows,
+                sitemap_url_keys=enrichment.sitemap_url_keys,
+            )
+            write_dict_rows_sheet(
+                writer,
+                ROBOTS_ANALYSIS_SHEET,
+                list(ROBOTS_ANALYSIS_COLUMNS),
+                robots_analysis_rows,
+            )
+            write_dict_rows_sheet(
+                writer,
+                CRAWL_LOG_SHEET,
+                list(CRAWL_LOG_COLUMNS),
+                crawl_log_sheet_rows(enrichment.crawl_log_entries),
+            )
+            graph_metrics = compute_internal_link_intelligence(extra_rows, crawl_result.source_label)
+            write_dict_rows_sheet(
+                writer,
+                LINK_EQUITY_MAP_SHEET,
+                list(LINK_EQUITY_COLUMNS),
+                build_link_equity_rows(extra_rows, graph_metrics),
+            )
+            write_dict_rows_sheet(
+                writer,
+                ANCHOR_TEXT_AUDIT_SHEET,
+                list(ANCHOR_TEXT_AUDIT_COLUMNS),
+                build_anchor_text_audit_rows(extra_rows),
+            )
+            write_dict_rows_sheet(
+                writer,
+                SNIPPET_OPPORTUNITIES_SHEET,
+                list(SNIPPET_OPPORTUNITY_COLUMNS),
+                build_snippet_opportunity_rows(extra_rows),
+            )
+            write_dict_rows_sheet(
+                writer,
+                SCRIPT_INVENTORY_SHEET,
+                list(SCRIPT_INVENTORY_COLUMNS),
+                build_script_inventory_rows(extra_rows),
+            )
+            write_dict_rows_sheet(
+                writer,
+                IMAGE_INVENTORY_SHEET,
+                list(IMAGE_INVENTORY_COLUMNS),
+                build_image_inventory_rows(
+                    extra_rows,
+                    enrichment.image_probe_by_url or {},
+                ),
+            )
+            if enrichment.competitor_benchmark_rows is not None:
+                write_dict_rows_sheet(
+                    writer,
+                    COMPETITOR_BENCHMARKS_SHEET,
+                    list(enrichment.competitor_benchmark_columns or ("Metric", "Client Site")),
+                    enrichment.competitor_benchmark_rows,
+                )
         registry_config = ExportRegistryConfig(full_suite=full_suite)
         for final_step in get_finalization_steps():
             if final_step == "apply_tab_hyperlinks":
@@ -791,11 +932,36 @@ def execute_export(
             elif final_step == "apply_workbook_export_guardrails":
                 apply_workbook_export_guardrails(writer.book)
         logger.info("Audit complete! Report saved to %s", output_filename)
+        try:
+            if current_snapshot is not None:
+                summary_path = delta_summary_path_for_workbook(output_filename)
+                save_run_snapshot_json(summary_path, current_snapshot)
+                logger.info("Delta summary saved to %s", summary_path)
+        except Exception as exc:
+            logger.warning("Could not save delta summary JSON: %s", exc)
     finally:
         if writer is not None:
             writer.close()
 
     patch_xlsx_app_xml_for_excel_compatibility(output_filename)
+
+    if os.getenv("HF_EXPORT_PDF", "").strip().lower() in {"1", "true", "yes"}:
+        try:
+            export_executive_summary_pdf(
+                workbook_path=output_filename,
+                client_domain=crawl_result.source_label,
+                summary_rows=summary_rows,
+                fixplan_rows=fixplan_rows,
+                main_rows=main_rows,
+                extra_rows=extra_rows,
+                quick_win_rows=quick_wins_rows,
+                client_name=os.getenv("HF_PDF_CLIENT_NAME", "").strip(),
+                prepared_by=os.getenv("HF_PDF_PREPARED_BY", "").strip(),
+                brand_colour=os.getenv("HF_PDF_BRAND_COLOUR", "#1a365d").strip() or "#1a365d",
+                logo_path=os.getenv("HF_PDF_LOGO_PATH", "").strip() or None,
+            )
+        except Exception as exc:
+            logger.warning("Could not export executive summary PDF: %s", exc)
 
     return ExportSummary(
         output_filename=output_filename,

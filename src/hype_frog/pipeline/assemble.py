@@ -26,6 +26,154 @@ from hype_frog.rules import (
 from hype_frog.core.text_utils import normalize_text_hash, to_bool
 from hype_frog.core.url_normalization import normalize_url
 
+TOP8_MAIN_MERGE_KEYS: tuple[str, ...] = (
+    "Schema Present",
+    "Schema Valid",
+    "Schema Types Found",
+    "Schema Types Valid",
+    "Schema Types With Errors",
+    "Schema Error Count",
+    "Schema Warning Count",
+    "Schema Parse Error Detail",
+    "Schema Validation Summary",
+    "Schema Issues Detail",
+    "E-E-A-T Signal Score",
+    "Schema Author Name",
+    "Meta Author",
+    "Has Byline Element",
+    "Byline Text",
+    "Schema Published Date",
+    "Schema Modified Date",
+    "OG Published Time",
+    "OG Modified Time",
+    "Has Time Element",
+    "Has Privacy Policy Link",
+    "Has Terms Link",
+    "Has Social Links",
+    "Social Profile Link Count",
+    "Has Phone Number",
+    "Has Email Address",
+    "Links to About Page",
+    "Has Authority External Links",
+    "Is Thin Content",
+    "Is Near Duplicate",
+    "Near Duplicate Of",
+    "Content Similarity Score",
+    "Is Draft or Test Page",
+    "Draft Signal",
+    "Published Date",
+    "Last Modified Date",
+    "HTTP Last-Modified",
+    "Content Age (days)",
+    "Freshness Status",
+)
+
+A1_MAIN_MERGE_KEYS: tuple[str, ...] = (
+    "OG Title",
+    "OG Description",
+    "OG Type",
+    "OG URL",
+    "OG Image URL",
+    "OG Image Width",
+    "OG Image Height",
+    "OG Image OK",
+    "OG Image Dimensions OK",
+    "OG URL Mismatch",
+    "Twitter Card Type",
+    "Twitter Title",
+    "Twitter Description",
+    "Twitter Image",
+    "OG Completeness Score",
+    "Open Graph Complete",
+)
+
+A3_MAIN_MERGE_KEYS: tuple[str, ...] = (
+    "Final URL",
+    "Redirect Chain",
+    "Redirect Chain Length",
+    "Redirect Chain Hops",
+    "Has 302 in Chain",
+    "Has Mixed Redirect Types",
+    "Redirect Loop Flag",
+)
+
+B1_MAIN_MERGE_KEYS: tuple[str, ...] = (
+    "Canonical Chain Depth",
+    "Canonical Chain Final",
+    "Canonical Chain",
+    "Canonical Loop Detected",
+    "Canonical Points to Redirect",
+    "Canonical Points to Non-200",
+)
+
+B4_MAIN_MERGE_KEYS: tuple[str, ...] = (
+    "GSC Index Status",
+    "GSC Last Crawl Date",
+    "GSC Mobile Usability",
+    "GSC Rich Result Status",
+    "GSC Coverage Reason",
+    "Days Since Last Crawl",
+)
+
+A5_MAIN_MERGE_KEYS: tuple[str, ...] = (
+    "Robots.txt: Googlebot",
+    "Robots.txt: Bingbot",
+    "Robots.txt: GPTBot",
+    "Robots.txt: ClaudeBot",
+    "Robots.txt: PerplexityBot",
+    "Crawl-Delay Applies",
+)
+
+A2_MAIN_MERGE_KEYS: tuple[str, ...] = (
+    "Third Party Script Count",
+    "Third Party Scripts",
+    "Third Party Total Size (KB)",
+    "Has Google Analytics",
+    "Has Tag Manager",
+    "Has Meta Pixel",
+    "Has Chat Widget",
+    "Has Consent Manager",
+    "Third Party JS Blocking",
+)
+
+A4_MAIN_MERGE_KEYS: tuple[str, ...] = (
+    "Image Count",
+    "Broken Image Count",
+    "Large Image Count",
+    "Broken Image URLs",
+    "Oversized Image URLs",
+    "Has Broken Images",
+)
+
+B2_MAIN_MERGE_KEYS: tuple[str, ...] = (
+    "PageRank Percentile",
+    "Equity Tier",
+    "Inbound Internal Link Count",
+    "Generic Inbound Anchor %",
+    "Generic Anchor Dominance",
+)
+
+B3_MAIN_MERGE_KEYS: tuple[str, ...] = (
+    "Featured Snippet Type",
+    "Featured Snippet Readiness",
+    "GSC Position Opportunity",
+)
+
+B6_MAIN_MERGE_KEYS: tuple[str, ...] = (
+    "Top TF-IDF Terms",
+    "Keyword in Title",
+    "Keyword in H1",
+    "Keyword in First Paragraph",
+    "Keyword Density (%)",
+)
+
+A6_MAIN_MERGE_KEYS: tuple[str, ...] = (
+    "Hreflang Declared Languages",
+    "Hreflang Alternate URLs",
+    "Hreflang Reciprocal Status",
+    "Hreflang Code Valid",
+)
+
 
 def normalize_url_key(url: object, keep_query: bool = True) -> str:
     return normalize_url(url, keep_query=keep_query)
@@ -259,6 +407,23 @@ def assemble_enriched_row(
         "Technical Health": round(technical_health, 2),
         "Copy Score": round(copy_score, 2),
         "SEO Score": round(seo_score, 2),
+        **{key: extra_values.get(key) for key in TOP8_MAIN_MERGE_KEYS},
+        **{key: extra_values.get(key) for key in A1_MAIN_MERGE_KEYS},
+        **{key: extra_values.get(key) for key in A3_MAIN_MERGE_KEYS},
+        **{key: extra_values.get(key) for key in B1_MAIN_MERGE_KEYS},
+        **{key: extra_values.get(key) for key in B4_MAIN_MERGE_KEYS},
+        **{key: extra_values.get(key) for key in A5_MAIN_MERGE_KEYS},
+        **{key: extra_values.get(key) for key in A2_MAIN_MERGE_KEYS},
+        **{key: extra_values.get(key) for key in A4_MAIN_MERGE_KEYS},
+        **{key: extra_values.get(key) for key in B2_MAIN_MERGE_KEYS},
+        **{key: extra_values.get(key) for key in B3_MAIN_MERGE_KEYS},
+        **{key: extra_values.get(key) for key in B6_MAIN_MERGE_KEYS},
+        **{key: extra_values.get(key) for key in A6_MAIN_MERGE_KEYS},
+        "OG-Image": (
+            extra_values.get("OG Image URL")
+            or extra_values.get("OG Image")
+            or main_values.get("OG-Image")
+        ),
     }
     validated = CrawlResultModel.model_validate(
         {"main": merged_row, "extra": extra_values}
@@ -338,6 +503,8 @@ def row_with_psi_gsc_harden(
             "Origin CrUX INP (ms)": _psi_numeric(psi.get("Origin CrUX INP (ms)")),
             "CWV Data Source": psi.get("CWV Data Source", "None"),
             "Field vs Lab": psi.get("Field vs Lab", "N/A"),
+            "PSI Network Items": psi.get("PSI Network Items"),
+            "PSI Render Blocking URLs": psi.get("PSI Render Blocking URLs"),
             **_psi_lighthouse_projection(psi),
         }
     elif psi_map:
@@ -388,9 +555,14 @@ def row_with_canonical_and_internal_links(
         else None
     )
     if row_values.get("Hreflang Present"):
-        out["Hreflang Reciprocal Check"] = norm(
-            row_values.get("Final URL", "")
-        ) in crawled_finals and bool(row_values.get("Hreflang Self Reference"))
+        reciprocal_ok = row_values.get("Hreflang Reciprocal Check")
+        if reciprocal_ok is None:
+            reciprocal_ok = (
+                str(row_values.get("Hreflang Reciprocal Status") or "").strip() == "Valid"
+            )
+        out["Hreflang Reciprocal Check"] = bool(reciprocal_ok) and bool(
+            row_values.get("Hreflang Self Reference")
+        )
     link_details = row_values.get("Link Details") or []
     broken_internal = count_broken_internal_from_link_details(link_details)
     unresolved_internal = 0

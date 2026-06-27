@@ -6,12 +6,14 @@ This document is the **single canonical narrative** for modular layout, runtime 
 
 1. **Orchestration (entry layer)** — `hype_frog/main.py` triggers the flow under `hype_frog/orchestration/`: run configuration, URL set construction, bounded async execution, enrichment/export coordination, runtime policy kept separate from domain logic.
 2. **Crawler** — `hype_frog/crawler/` owns HTTP/browser execution and crawl-result assembly (sessions, retries, fetch paths; assemblers normalise payloads into row-ready shapes).
-3. **Extractors** — `hype_frog/extractors/` is parsing-only (HTML, metadata, schema, snippets, semantic AEO); no workbook I/O.
-4. **Pipeline** — `hype_frog/pipeline/` owns enrichment, scoring glue, export-safe transforms; graph logic stays in dedicated graph modules.
-5. **Rules** — `hype_frog/rules/` owns issues, severity/priority, stable identifiers, scoring contracts.
-6. **Reporter** — `hype_frog/reporter/` owns workbook construction (sheets, formatting, guardrails, TOC, navigation, view-state safety).
-7. **Checkpoint** — `hype_frog/checkpoint/` persists resumable crawl state for long runs.
-8. **Core and config** — `hype_frog/core/` and shared config: logging, URL normalisation, cross-layer helpers.
+3. **Extractors** — `hype_frog/extractors/` is parsing-only (HTML, metadata, schema, snippets, semantic AEO, E-E-A-T, freshness); no workbook I/O.
+4. **Validators** — `hype_frog/validators/` owns JSON-LD schema validation (`schema_validator.py`); invoked during HTML assembly, not from reporters.
+5. **Analysis** — `hype_frog/analysis/` owns post-crawl domain passes that mutate row dicts in place (canonical/hreflang chains, link equity, third-party scripts, snippets, topical authority, content similarity, competitor benchmarks, delta engine).
+6. **Pipeline** — `hype_frog/pipeline/` owns enrichment glue, graph intelligence, scoring helpers, image/OG probes, export-safe transforms.
+7. **Rules** — `hype_frog/rules/` owns `IssueRule` definitions, severity/priority, stable identifiers, playbook metadata.
+8. **Reporter** — `hype_frog/reporter/` owns workbook construction (sheets, formatting, guardrails, TOC, navigation, view-state safety).
+9. **Checkpoint** — `hype_frog/checkpoint/` persists resumable crawl state for long runs (`store.py`).
+10. **Core and config** — `hype_frog/core/` and shared config: logging, URL normalisation, Pydantic contracts, cross-layer helpers.
 
 ## Staged async pipeline
 
@@ -19,14 +21,18 @@ This document is the **single canonical narrative** for modular layout, runtime 
 2. `hype_frog.orchestration.crawl_runner.execute_crawl` owns URL scheduling, checkpoints, cache writes, crawl concurrency.
 3. `hype_frog.crawler.fetcher.fetch_and_parse` fetches HTTP/rendered content, assembles row payloads, records extraction state.
 4. `hype_frog.crawler.data_assembler.assemble_from_html` parses HTML into additive `main` and `extra` row dictionaries.
-5. `hype_frog.orchestration.enrichment_flow.run_enrichment` adds PSI, GSC, link graph, issues, scores.
-6. `hype_frog.orchestration.export_flow.execute_export` builds workbook tabs through the reporter layer.
+5. `hype_frog.orchestration.enrichment_flow.run_enrichment` runs five phases: GSC analytics context, optional GSC URL Inspection batch, PSI batch, link/image/OG probes and canonical/robots passes, then scoring/graph/issue assembly (including `analysis/*` enrichments and Main merge via `pipeline/assemble.py`).
+6. `hype_frog.orchestration.export_flow.execute_export` builds workbook tabs through the reporter layer and merged sheet builders.
 
 ## BFS spider
 
 The crawler uses a **breadth-first queue**. Seeds (sitemap or single URL) enter at depth `0`; discovered internal links enqueue at `depth + 1`; a `queued_urls` set prevents duplicate scheduling; **`HF_MAX_DEPTH`** caps discovery (default `3`). Bounded async concurrency is preserved alongside spider-style discovery.
 
 `fetch_and_parse` receives the live `depth` and passes it into `assemble_from_html`, which writes **`Crawl Depth`** so diagnostics distinguish seeds from deeper pages.
+
+### CMS action URL exclusion
+
+URLs whose query string contains CMS/WooCommerce action parameters are **not** enqueued for crawl or internal-link discovery. The canonical list lives in `config_defaults.EXCLUDED_CMS_ACTION_QUERY_PARAMS` (`add-to-cart`, `wc-ajax`, `preview`, etc.) and is enforced via `orchestration/crawl_runner.cms_action_exclusion_keys`. Excluded URLs discovered from inlinks are listed on the **CMS Action URLs** sheet during full-suite export.
 
 ## Async model
 
@@ -53,6 +59,8 @@ Fetch sets `partial` when rendering is incomplete or degraded mid-pipeline (time
 
 **Rendered diagnostics are additive.** When rendering fails or is disabled, the HTTP row still completes with partial or raw extraction state; missing rendered metrics stay blank/zero-safe.
 
+**Non-integer status codes:** `data_assembler.finalize_row_state` treats string statuses such as `timeout`, `error`, `connection error`, and `dns error` as not indexable and records them in `Indexability Reason` before scoring.
+
 ## Retries, sessions, Playwright, URL identity
 
 - **Retries:** `config.py` supplies max attempts, base/max delay, backoff factor, jitter, retryable status codes. Logic stays **bounded**; exhausted retries surface as structured row state, not infinite loops.
@@ -68,7 +76,24 @@ Runtime rows are dictionary pairs wrapped by Pydantic models (details: [data_con
 - `ExtraRowPayload` — diagnostics, enrichment, links, AEO, report-only fields.
 - `CrawlRowPayload` — carries both through crawl and enrichment.
 
-`ExtraRowPayload` only preserves keys listed in `EXTRA_ROW_DEFAULTS` during validation. New fields (`Search Intent`, `Crawl Depth`, semantic scores, ROI signals, `skip_reason`, etc.) must be **additive defaults** before they survive enrichment and export.
+`ExtraRowPayload` only preserves keys listed in `EXTRA_ROW_DEFAULTS` (including `ENRICHMENT_PIPELINE_DEFAULTS`) during validation. New fields must be **additive defaults** before they survive enrichment and export.
+
+## Rules engine
+
+`rules/registry.py` defines **`IssueRule`** (`severity`, `name`, `fn`, `scope` defaulting to `"url"`). `get_summary_rules()` returns **99** rules: **90** URL-scoped, **8** site-scoped, **1** server-scoped.
+
+- **URL scope** — one IssueInventory / FixPlan row per affected URL.
+- **Site / server scope** — aggregated rows in IssueInventory and Issue Register with labels `(site-wide)` / `(server config)` and **`Affected URL Count`** instead of duplicating per URL (`reporter/summary_builder.py`).
+
+## PSI, Lighthouse, and CrUX
+
+`crawler/psi_engine.py` fetches PageSpeed Insights for **mobile** and **desktop** strategies with all four Lighthouse categories: **performance**, **accessibility**, **best-practices**, **seo**.
+
+- Responses are cached in SQLite (`psi_cache`) with TTL from config.
+- Lab metrics project to `PSI_LIGHTHOUSE_EXPORT_KEYS` on extra rows; network items support third-party script inventory.
+- **CrUX level:** URL-level field data when `loadingExperience` is present; otherwise **origin** fallback when `originLoadingExperience` is available (`CrUX Level` = `URL` | `Origin`).
+- **`PSI Data Status`**, **`Field vs Lab`**, and **`CWV Data Source`** are derived in `_resolve_cwv_labelling` (for example `PSI + CrUX Field (URL)`, `PSI Lab`, `Not available`).
+- Registry rules such as **CWV LCP Above 4.0s (Field Data)** require `CrUX Level == "URL"` so origin-only CrUX does not false-trigger URL-level CWV criticals.
 
 Strict models in `hype_frog.core.models` also validate HTTP, PSI, and GSC payloads via `hype_frog.core.api_clients`; failures log and return `None` so workers continue.
 
@@ -117,6 +142,20 @@ Hub conditional formatting: colour scale on **`Semantic AEO Score`**; **`CRITICA
 ## Workbook integrity
 
 Reporter output stays **openpyxl**-based; do not introduce XlsxWriter on the workbook path. Observe [excel_reporting_standards.md](./excel_reporting_standards.md): string sanitization, freeze-pane guardrails, TOC/tab name alignment, additive columns, numeric/blank-safe conditional-format inputs.
+
+### Full-suite workbook tabs
+
+Tab order and visibility are defined in `reporter/sheets/workbook_layout.py`.
+
+**Primary (visible):** Table of Contents, Dashboard, Executive Dashboard, Summary, Priority URLs, FixPlan, Quick Wins, Content Optimisation Hub, Content Hub Metrics, Main, AIOSEO Recommendations, Link Inventory, Broken Link Impact, SitemapQA, Template & Duplication Risks, Playbook.
+
+**Advanced (hidden by default, linked from Dashboard/TOC):** Issue Register, Technical Diagnostics, Content & AI Readiness, Link Intelligence, CMS Action URLs, IssueInventory, Redirects, Redirect Map, Robots.txt Analysis, Crawl Log, Link Equity Map, Anchor Text Audit, Snippet Opportunities, Competitor Benchmarks (when `--competitors` / `HF_COMPETITORS` set), Script Inventory, Image Inventory, ResolvedIssues, DeltaFromPreviousRun, Audit Run Details.
+
+Legacy standalone Technical/Content/AEO tabs are **not** emitted in full-suite mode; merged **Technical Diagnostics** and **Content & AI Readiness** supersede them.
+
+### CMS Action URLs
+
+Lists URLs excluded from crawl because they carry CMS action query parameters (see BFS exclusion above), with the triggering parameter keys and discovery parent URL.
 
 ## Extensibility
 

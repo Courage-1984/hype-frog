@@ -1,0 +1,43 @@
+{
+  "lighthouseResult": {
+    "categories": {
+      "performance": {"score": 0.72},
+      "accessibility": {"score": 0.88},
+      "best-practices": {"score": 0.91},
+      "seo": {"score": 0.95}
+    },
+    "audits": {
+      "largest-contentful-paint": {"numericValue": 2800, "score": 0.55},
+      "cumulative-layout-shift": {"numericValue": 0.04, "score": 0.95},
+      "interaction-to-next-paint": {"numericValue": 180, "score": 0.75},
+      "total-blocking-time": {"numericValue": 220, "score": 0.7},
+      "first-contentful-paint": {"numericValue": 1600, "score": 0.8},
+      "speed-index": {"numericValue": 3400, "score": 0.6},
+      "interactive": {"numericValue": 4200, "score": 0.55},
+      "server-response-time": {"numericValue": 450, "score": 0.75},
+      "total-byte-weight": {"numericValue": 620000, "score": 0.45},
+      "dom-size": {"numericValue": 920, "score": 0.8},
+      "bootup-time": {"numericValue": 1100, "score": 0.65},
+      "network-requests": {
+        "details": {
+          "items": [
+            {"url": "https://example.com/app.js", "transferSize": 12000, "resourceType": "Script"},
+            {"url": "https://www.googletagmanager.com/gtm.js", "transferSize": 45000, "resourceType": "Script"}
+          ]
+        }
+      },
+      "uses-text-compression": {"score": 1.0},
+      "uses-long-cache-ttl": {"score": 0.5},
+      "render-blocking-resources": {"score": 0.0},
+      "uses-webp-images": {"score": 0.0},
+      "modern-image-formats": {"score": 1.0}
+    }
+  },
+  "loadingExperience": {
+    "id": "https://example.com/page",
+    "metrics": {
+      "LARGEST_CONTENTFUL_PAINT_MS": {"percentile": 2400, "category": "AVERAGE"},
+      "CUMULATIVE_LAYOUT_SHIFT_SCORE": {"percentile": 6, "category": "GOOD"}
+    }
+  }
+}

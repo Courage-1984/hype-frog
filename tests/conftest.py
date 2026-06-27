@@ -28,3 +28,8 @@ def malformed_schema_html(fixtures_dir: Path) -> str:
 @pytest.fixture
 def aeo_content_html(fixtures_dir: Path) -> str:
     return (fixtures_dir / "aeo_content.html").read_text(encoding="utf-8")
+
+
+@pytest.fixture
+def sample_page_html(fixtures_dir: Path) -> str:
+    return (fixtures_dir / "sample_page.html").read_text(encoding="utf-8")

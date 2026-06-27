@@ -6,6 +6,18 @@ from typing import Any, Callable
 
 import pandas as pd
 
+from hype_frog.analysis.delta_engine import (
+    BASELINE_DELTA_NOTE,
+    IssueRecord,
+    RunSnapshot,
+    build_delta_sheet_rows,
+    build_delta_workbook_output,
+    build_resolved_issues_dataframe,
+    delta_summary_path_for_workbook,
+    load_run_snapshot,
+    save_run_snapshot_json,
+    snapshot_from_current_run,
+)
 from hype_frog.core.models import ExtraRowPayload
 from hype_frog.rules import IssueRule
 from hype_frog.core.text_utils import normalize_text_hash
@@ -16,19 +28,36 @@ from hype_frog.orchestration.crawl_runner import (
 )
 from hype_frog.reporter.sheets.config import (
     AIOSEO_RECOMMENDATIONS_SHEET,
+    ANCHOR_TEXT_AUDIT_SHEET,
     AUDIT_RUN_DETAILS_SHEET,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    COMPETITOR_BENCHMARKS_SHEET,
+    CRAWL_LOG_SHEET,
+    IMAGE_INVENTORY_SHEET,
+    LINK_EQUITY_MAP_SHEET,
+    REDIRECT_MAP_SHEET,
+    ROBOTS_ANALYSIS_SHEET,
+    SCRIPT_INVENTORY_SHEET,
+    SNIPPET_OPPORTUNITIES_SHEET,
 )
+from hype_frog.analysis.link_equity import ANCHOR_TEXT_AUDIT_COLUMNS, LINK_EQUITY_COLUMNS
+from hype_frog.analysis.snippet_opportunities import SNIPPET_OPPORTUNITY_COLUMNS
+from hype_frog.analysis.third_party_scripts import SCRIPT_INVENTORY_COLUMNS
+from hype_frog.pipeline.image_inventory import IMAGE_INVENTORY_COLUMNS
+from hype_frog.crawler.robots_mapping import ROBOTS_ANALYSIS_COLUMNS
+from hype_frog.core.crawl_log import CRAWL_LOG_COLUMNS
 from hype_frog.reporter.sheets.merged_builders import (
+    BROKEN_LINK_IMPACT_COLUMNS,
     CONTENT_AI_READINESS_COLUMNS,
     ISSUE_REGISTER_COLUMNS,
     LINK_INTELLIGENCE_COLUMNS,
     LINK_INVENTORY_COLUMNS,
+    QUICK_WINS_COLUMNS,
+    REDIRECT_MAP_COLUMNS,
     TECHNICAL_DIAGNOSTICS_COLUMNS,
     TEMPLATE_DUPLICATION_RISKS_COLUMNS,
 )
-
 
 def normalize_url_key(url: object, keep_query: bool = True) -> str:
     return normalize_url(url, keep_query=keep_query)
@@ -94,7 +123,10 @@ STANDARD_SHEET_COLUMNS: dict[str, list[str]] = {
     ],
     "Schema & Metadata": [
         "URL", "Schema Types Found", "Schema Types Count", "Schema Parse Errors",
-        "OG Title", "OG Description", "OG Image", "Open Graph Complete", "Twitter Card Type",
+        "OG Title", "OG Description", "OG Type", "OG URL", "OG Image", "OG Image URL",
+        "OG Image Width", "OG Image Height", "OG Image OK", "OG Completeness Score",
+        "Open Graph Complete", "Twitter Card Type", "Twitter Title", "Twitter Description",
+        "Twitter Image",
     ],
     "AEO": [
         "URL", "AEO Badge", "AEO Readiness Score", "Why It Matters", "FAQ Section Count",
@@ -121,9 +153,23 @@ STANDARD_SHEET_COLUMNS: dict[str, list[str]] = {
         "Canonical Matches Final URL", "Canonical in Sitemap Match",
     ],
     "Redirects": [
-        "URL", "Status Code", "Final URL", "Redirect Chain Length", "Redirect Target",
-        "Redirect Hops", "HTTP->HTTPS Redirect", "Redirect Loop Flag",
+        "URL",
+        "Status Code",
+        "Final URL",
+        "Redirect Chain",
+        "Redirect Chain Length",
+        "Redirect Chain Hops",
+        "Has 302 in Chain",
+        "Has Mixed Redirect Types",
+        "Redirect Target",
+        "Redirect Hops",
+        "HTTP->HTTPS Redirect",
+        "Redirect Loop Flag",
+        "Redirect SEO Risk",
     ],
+    REDIRECT_MAP_SHEET: list(REDIRECT_MAP_COLUMNS),
+    ROBOTS_ANALYSIS_SHEET: list(ROBOTS_ANALYSIS_COLUMNS),
+    CRAWL_LOG_SHEET: list(CRAWL_LOG_COLUMNS),
 }
 
 CMS_ACTION_URLS_SHEET = "CMS Action URLs"
@@ -141,11 +187,13 @@ _FULL_SUITE_FORMAT_SHEETS: list[str] = [
     "Summary",
     "Priority URLs",
     "FixPlan",
+    "Quick Wins",
     CONTENT_OPTIMISATION_HUB_SHEET,
     CONTENT_HUB_METRICS_SHEET,
     "Main",
     AIOSEO_RECOMMENDATIONS_SHEET,
     "Link Inventory",
+    "Broken Link Impact",
     "SitemapQA",
     "Template & Duplication Risks",
     "Playbook",
@@ -156,6 +204,15 @@ _FULL_SUITE_FORMAT_SHEETS: list[str] = [
     "Link Intelligence",
     CMS_ACTION_URLS_SHEET,
     "Redirects",
+    REDIRECT_MAP_SHEET,
+    ROBOTS_ANALYSIS_SHEET,
+    CRAWL_LOG_SHEET,
+    LINK_EQUITY_MAP_SHEET,
+    ANCHOR_TEXT_AUDIT_SHEET,
+    SNIPPET_OPPORTUNITIES_SHEET,
+    SCRIPT_INVENTORY_SHEET,
+    IMAGE_INVENTORY_SHEET,
+    COMPETITOR_BENCHMARKS_SHEET,
     "ResolvedIssues",
     "DeltaFromPreviousRun",
     AUDIT_RUN_DETAILS_SHEET,
@@ -181,7 +238,17 @@ def get_merged_sheet_columns() -> dict[str, list[str]]:
         "Content & AI Readiness": list(CONTENT_AI_READINESS_COLUMNS),
         "Link Intelligence": list(LINK_INTELLIGENCE_COLUMNS),
         "Link Inventory": list(LINK_INVENTORY_COLUMNS),
+        "Quick Wins": list(QUICK_WINS_COLUMNS),
+        "Broken Link Impact": list(BROKEN_LINK_IMPACT_COLUMNS),
         "Template & Duplication Risks": list(TEMPLATE_DUPLICATION_RISKS_COLUMNS),
+        REDIRECT_MAP_SHEET: list(REDIRECT_MAP_COLUMNS),
+        ROBOTS_ANALYSIS_SHEET: list(ROBOTS_ANALYSIS_COLUMNS),
+        CRAWL_LOG_SHEET: list(CRAWL_LOG_COLUMNS),
+        LINK_EQUITY_MAP_SHEET: list(LINK_EQUITY_COLUMNS),
+        ANCHOR_TEXT_AUDIT_SHEET: list(ANCHOR_TEXT_AUDIT_COLUMNS),
+        SNIPPET_OPPORTUNITIES_SHEET: list(SNIPPET_OPPORTUNITY_COLUMNS),
+        SCRIPT_INVENTORY_SHEET: list(SCRIPT_INVENTORY_COLUMNS),
+        IMAGE_INVENTORY_SHEET: list(IMAGE_INVENTORY_COLUMNS),
     }
 
 
@@ -423,9 +490,6 @@ def build_priority_rows(
     )
 
 
-BASELINE_DELTA_NOTE = "No previous run found — this is a baseline report."
-
-
 def build_delta_and_trend_rows(
     *,
     issue_inventory_df: pd.DataFrame,
@@ -436,83 +500,97 @@ def build_delta_and_trend_rows(
     prev_counts: dict[str, int],
     previous_issue_inventory_df: pd.DataFrame,
     baseline_report: bool = False,
+    previous_snapshot: RunSnapshot | None = None,
+    main_rows: list[dict[str, Any]] | None = None,
+    extra_rows: list[dict[str, Any]] | None = None,
+    output_path: str = "",
+    run_date: str | None = None,
 ) -> tuple[list[dict[str, Any]], pd.DataFrame]:
-    current_issue_ids = {
-        str(value).strip()
-        for value in issue_inventory_df.get("Stable Issue ID", pd.Series(dtype="object"))
-        .dropna()
-        .tolist()
-        if str(value).strip()
-    }
+    if previous_snapshot is not None or (main_rows is not None and extra_rows is not None):
+        delta_rows, resolved_df, _snapshot = build_delta_workbook_output(
+            issue_inventory_df=issue_inventory_df,
+            main_rows=main_rows or [],
+            extra_rows=extra_rows or [],
+            typed_extra_rows=typed_extra_rows,
+            summary_rules=summary_rules,
+            previous_snapshot=previous_snapshot,
+            baseline_report=baseline_report,
+            output_path=output_path,
+            run_date=run_date,
+        )
+        return delta_rows, resolved_df
+
+    current_snapshot = snapshot_from_current_run(
+        issue_inventory_df=issue_inventory_df,
+        main_rows=[],
+        extra_rows=[row.values for row in typed_extra_rows],
+        source_path=output_path,
+        run_date=run_date,
+    )
     if baseline_report:
-        delta_rows: list[dict[str, Any]] = [
-            {"Metric": "Report Status", "Count": BASELINE_DELTA_NOTE},
-            {
-                "Metric": "Current Issues (baseline inventory)",
-                "Count": len(current_issue_ids),
-            },
-        ]
-        resolved_issues_df = pd.DataFrame(
-            [
-                {
-                    "Stable Issue ID": "",
-                    "Issue": BASELINE_DELTA_NOTE,
-                    "URL": "",
-                }
-            ]
-        )
-        return delta_rows, resolved_issues_df
-
-    resolved_issues = prev_issue_ids - current_issue_ids
-    delta_rows = [
-        {"Metric": "New Issues", "Count": len(current_issue_ids - prev_issue_ids)},
-        {"Metric": "Resolved Issues", "Count": len(resolved_issues)},
-        {"Metric": "Unchanged Issues", "Count": len(current_issue_ids & prev_issue_ids)},
-        {
-            "Metric": "Previously Fixed But Reopened",
-            "Count": len(current_issue_ids & prev_fixed_issue_ids),
-        },
-    ]
-    for rule in summary_rules:
-        issue_name = rule.name
-        current_count = len(
-            [
-                row
-                for row in typed_extra_rows
-                if issue_name in str(row.values.get("Matched Issues") or "").split(" | ")
-            ]
-        )
-        delta_rows.append(
-            {
-                "Metric": f"Issue Delta: {issue_name}",
-                "Count": current_count - int(prev_counts.get(issue_name, 0)),
-            }
+        return (
+            build_delta_sheet_rows(
+                current=current_snapshot,
+                previous=None,
+                baseline_report=True,
+                typed_extra_rows=typed_extra_rows,
+                summary_rules=summary_rules,
+            ),
+            build_resolved_issues_dataframe(
+                current=current_snapshot,
+                previous=None,
+                baseline_report=True,
+            ),
         )
 
+    previous = RunSnapshot(
+        run_date=run_date or "",
+        source_path="legacy-compare",
+        issues={},
+        issue_counts_by_name=dict(prev_counts),
+        fixed_issue_ids=set(prev_fixed_issue_ids),
+    )
     if (
         not previous_issue_inventory_df.empty
         and "Stable Issue ID" in previous_issue_inventory_df.columns
     ):
-        resolved_issues_df = previous_issue_inventory_df.copy()
-        resolved_issues_df["Stable Issue ID"] = (
-            resolved_issues_df["Stable Issue ID"].astype(str).str.strip()
+        for _, row in previous_issue_inventory_df.iterrows():
+            stable_id = str(row.get("Stable Issue ID") or "").strip()
+            if not stable_id:
+                continue
+            previous.issues[stable_id] = IssueRecord(
+                stable_issue_id=stable_id,
+                url=str(row.get("URL") or "").strip(),
+                issue=str(row.get("Issue") or "").strip(),
+                severity=str(row.get("Severity") or "").strip(),
+                last_seen=previous.run_date or None,
+            )
+    for stable_id in prev_issue_ids:
+        previous.issues.setdefault(
+            stable_id,
+            IssueRecord(
+                stable_issue_id=stable_id,
+                url="",
+                issue="",
+                severity="",
+                last_seen=previous.run_date or None,
+            ),
         )
-        resolved_issues_df = resolved_issues_df[
-            resolved_issues_df["Stable Issue ID"].isin(resolved_issues)
-        ].copy()
-    else:
-        resolved_issues_df = pd.DataFrame(columns=["Stable Issue ID"])
-    if resolved_issues_df.empty:
-        resolved_issues_df = pd.DataFrame(
-            [
-                {
-                    "Stable Issue ID": "",
-                    "Issue": "No resolved issues identified for this comparison run.",
-                    "URL": "",
-                }
-            ]
-        )
-    return delta_rows, resolved_issues_df
+
+    return (
+        build_delta_sheet_rows(
+            current=current_snapshot,
+            previous=previous,
+            baseline_report=False,
+            typed_extra_rows=typed_extra_rows,
+            summary_rules=summary_rules,
+        ),
+        build_resolved_issues_dataframe(
+            current=current_snapshot,
+            previous=previous,
+            baseline_report=False,
+        ),
+    )
 
 
 def build_schema_and_snippets_rows(
@@ -590,18 +668,74 @@ def build_crawlgraph_rows(
 def build_sitemapqa_rows(
     *,
     sitemap_meta: dict[str, dict[str, Any]],
+    sitemap_files_meta: dict[str, dict[str, Any]] | None = None,
     extra_rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     sitemap_rows: list[dict[str, Any]] = []
-    if not sitemap_meta:
-        return [
+    empty_row = {
+        "Record Type": "",
+        "Sitemap URL": "No Sitemap data available for this run.",
+        "Final URL": "",
+        "Status Code": "",
+        "Found via Crawl": "",
+        "Found via Sitemap": "",
+        "Discovery Source": "",
+        "In Sitemap but Non-200": "",
+        "Sitemap URL Redirects": "",
+        "In Sitemap but Canonicalized Elsewhere": "",
+        "Missing <lastmod>": "",
+        "Missing <changefreq>": "",
+        "Missing <priority>": "",
+        "Sitemap <lastmod>": "",
+        "Sitemap <changefreq>": "",
+        "Sitemap <priority>": "",
+        "Source Sitemap": "",
+        "Sitemap Kind": "",
+        "Sitemap URL Count": "",
+        "Sitemap Size (KB)": "",
+        "Lastmod vs HTTP Match": "",
+        "Canonical vs Sitemap Match": "",
+        "Crawled but Missing from Sitemap": "",
+    }
+    if not sitemap_meta and not sitemap_files_meta:
+        return [empty_row]
+
+    def _normalize_date(value: object) -> str:
+        text = str(value or "").strip()
+        return text[:10] if text else ""
+
+    def _lastmod_match(sitemap_lastmod: object, http_lastmod: object) -> str:
+        sitemap_day = _normalize_date(sitemap_lastmod)
+        http_day = _normalize_date(http_lastmod)
+        if not sitemap_day or not http_day:
+            return "Unknown"
+        return "Match" if sitemap_day == http_day else "Mismatch"
+
+    def _canonical_match(sitemap_url: str, matched: dict[str, Any] | None) -> str:
+        if not matched:
+            return "Unknown"
+        canonical = str(matched.get("Canonical URL") or matched.get("URL") or "").strip()
+        if not canonical:
+            return "Unknown"
+        return (
+            "Match"
+            if normalize_url_key(canonical) == normalize_url_key(sitemap_url)
+            else "Mismatch"
+        )
+
+    sitemap_url_keys = {normalize_url_key(url) for url in sitemap_meta.keys()}
+
+    for file_url, file_meta in (sitemap_files_meta or {}).items():
+        size_kb = round(float(file_meta.get("size_bytes") or 0) / 1024.0, 1)
+        sitemap_rows.append(
             {
-                "Sitemap URL": "No Sitemap data available for this run.",
+                "Record Type": "Sitemap File",
+                "Sitemap URL": file_url,
                 "Final URL": "",
                 "Status Code": "",
                 "Found via Crawl": "",
-                "Found via Sitemap": "",
-                "Discovery Source": "",
+                "Found via Sitemap": True,
+                "Discovery Source": "Sitemap",
                 "In Sitemap but Non-200": "",
                 "Sitemap URL Redirects": "",
                 "In Sitemap but Canonicalized Elsewhere": "",
@@ -611,9 +745,16 @@ def build_sitemapqa_rows(
                 "Sitemap <lastmod>": "",
                 "Sitemap <changefreq>": "",
                 "Sitemap <priority>": "",
-                "Source Sitemap": "",
+                "Source Sitemap": file_url,
+                "Sitemap Kind": file_meta.get("kind"),
+                "Sitemap URL Count": file_meta.get("url_count"),
+                "Sitemap Size (KB)": size_kb,
+                "Lastmod vs HTTP Match": "",
+                "Canonical vs Sitemap Match": "",
+                "Crawled but Missing from Sitemap": "",
             }
-        ]
+        )
+
     for sitemap_url, meta in sitemap_meta.items():
         matched = next(
             (
@@ -627,6 +768,7 @@ def build_sitemapqa_rows(
         status_code = matched.get("Status Code") if matched else None
         sitemap_rows.append(
             {
+                "Record Type": "Sitemap URL",
                 "Sitemap URL": sitemap_url,
                 "Final URL": final_url,
                 "Status Code": status_code,
@@ -647,6 +789,53 @@ def build_sitemapqa_rows(
                 "Sitemap <changefreq>": meta.get("changefreq"),
                 "Sitemap <priority>": meta.get("priority"),
                 "Source Sitemap": meta.get("source_sitemap"),
+                "Sitemap Kind": meta.get("sitemap_kind"),
+                "Sitemap URL Count": "",
+                "Sitemap Size (KB)": "",
+                "Lastmod vs HTTP Match": _lastmod_match(
+                    meta.get("lastmod"),
+                    matched.get("HTTP Last-Modified") if matched else None,
+                ),
+                "Canonical vs Sitemap Match": _canonical_match(sitemap_url, matched),
+                "Crawled but Missing from Sitemap": False,
+            }
+        )
+
+    for row in extra_rows:
+        url = str(row.get("URL") or "").strip()
+        if not url:
+            continue
+        if normalize_url_key(url) in sitemap_url_keys:
+            continue
+        if int(float(row.get("Status Code") or 0)) != 200:
+            continue
+        sitemap_rows.append(
+            {
+                "Record Type": "Crawled URL",
+                "Sitemap URL": url,
+                "Final URL": row.get("Final URL"),
+                "Status Code": row.get("Status Code"),
+                "Found via Crawl": True,
+                "Found via Sitemap": False,
+                "Discovery Source": "Crawl",
+                "In Sitemap but Non-200": False,
+                "Sitemap URL Redirects": row.get("Redirect Chain Length", 0) > 0,
+                "In Sitemap but Canonicalized Elsewhere": (
+                    row.get("Canonical Type") == "cross-canonical"
+                ),
+                "Missing <lastmod>": "",
+                "Missing <changefreq>": "",
+                "Missing <priority>": "",
+                "Sitemap <lastmod>": "",
+                "Sitemap <changefreq>": "",
+                "Sitemap <priority>": "",
+                "Source Sitemap": "",
+                "Sitemap Kind": "",
+                "Sitemap URL Count": "",
+                "Sitemap Size (KB)": "",
+                "Lastmod vs HTTP Match": "",
+                "Canonical vs Sitemap Match": "",
+                "Crawled but Missing from Sitemap": True,
             }
         )
     return sitemap_rows

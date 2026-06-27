@@ -1,31 +1,35 @@
 Metadata-Version: 2.4
 Name: hype-frog
-Version: 0.2.0
+Version: 0.3.0
 Summary: Technical site crawl and workbook reporting
 Requires-Python: >=3.12
 Description-Content-Type: text/markdown
-Requires-Dist: aiohttp>=3.10.0
-Requires-Dist: beautifulsoup4>=4.12.0
-Requires-Dist: lxml>=5.0.0
-Requires-Dist: networkx>=3.0
-Requires-Dist: scipy>=1.11.0
-Requires-Dist: openpyxl>=3.1.0
-Requires-Dist: pandas>=2.2.0
-Requires-Dist: pydantic>=2.0.0
-Requires-Dist: python-dotenv>=1.0.0
-Requires-Dist: google-api-python-client>=2.0.0
-Requires-Dist: google-auth-oauthlib>=1.0.0
-Requires-Dist: playwright>=1.59.0
+Requires-Dist: aiohttp==3.13.5
+Requires-Dist: beautifulsoup4==4.14.3
+Requires-Dist: lxml==6.1.0
+Requires-Dist: networkx==3.6.1
+Requires-Dist: scipy==1.17.1
+Requires-Dist: openpyxl==3.1.5
+Requires-Dist: pandas==3.0.2
+Requires-Dist: pydantic==2.13.3
+Requires-Dist: python-dotenv==1.2.2
+Requires-Dist: google-api-python-client==2.195.0
+Requires-Dist: google-auth-oauthlib==1.3.1
+Requires-Dist: playwright==1.59.0
+Requires-Dist: simhash==2.1.2
+Requires-Dist: python-dateutil==2.9.0.post0
+Requires-Dist: pyyaml==6.0.2
+Requires-Dist: reportlab==4.4.2
 Provides-Extra: semantic
 Requires-Dist: spacy>=3.8.14; extra == "semantic"
 Requires-Dist: en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl ; extra == "semantic"
 Provides-Extra: dev
-Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: pytest==9.0.3; extra == "dev"
 Requires-Dist: pytest-asyncio>=0.23.0; extra == "dev"
 Requires-Dist: ruff>=0.3.0; extra == "dev"
 Requires-Dist: mypy>=1.9.0; extra == "dev"
 Provides-Extra: render
-Requires-Dist: playwright>=1.40.0; extra == "render"
+Requires-Dist: playwright==1.59.0; extra == "render"
 Provides-Extra: llm
 Requires-Dist: openai>=1.0.0; extra == "llm"
 
@@ -39,8 +43,9 @@ Concurrent **Python 3.12** pipeline for large-scale URL crawling, structured ext
 
 - Ingests a single URL or a sitemap document, deduplicates and optionally caps URL volume.
 - Crawls with configurable concurrency and delay profiles; discovers internal links in **breadth-first** order subject to depth and deduplication caps.
-- Produces a multi-sheet **audit workbook** (primary inventory, technical and content tabs, optional full suite) with sanitization and governed view state to reduce client corruption risk.
+- Produces a multi-sheet **audit workbook** (primary inventory, merged diagnostics, optional full suite) with sanitization and governed view state to reduce client corruption risk.
 - Supports checkpointed runs for long crawls and optional comparison against a prior workbook.
+- Optional PSI lab + CrUX field data, GSC Search Analytics and URL Inspection, schema validation, E-E-A-T signals, content similarity, third-party script inventory, snippet opportunities, and competitor benchmarking.
 
 ## Project structure (Wave 2 modular)
 
@@ -48,12 +53,16 @@ Concurrent **Python 3.12** pipeline for large-scale URL crawling, structured ext
 |------|-------------------|-------------------|
 | `src/hype_frog/core/` | Foundation contracts | Shared models (`core/models.py`), logging, URL normalisation, CLI/run helpers, and cross-layer primitives. |
 | `src/hype_frog/orchestration/` | Flow layer | Resolves run configuration and coordinates async crawl -> enrich -> export stages. |
-| `src/hype_frog/crawler/` | Crawl engine | Handles network execution, retries/backoff, fetch-mode selection, and typed crawl-result assembly. |
-| `src/hype_frog/pipeline/` | Enrichment engine | Applies post-crawl transforms, scoring glue, sanitisation helpers, and graph analysis before reporting. |
-| `src/hype_frog/reporter/` | Reporting engine | Builds Excel sheets with separate I/O, formatting, row-shaping, TOC/navigation, and guardrails modules. |
+| `src/hype_frog/crawler/` | Crawl engine | Handles network execution, retries/backoff, fetch-mode selection, PSI/GSC, and typed crawl-result assembly. |
+| `src/hype_frog/extractors/` | Parsing | HTML/metadata/schema, semantic AEO, E-E-A-T, freshness — no workbook I/O. |
+| `src/hype_frog/validators/` | Schema validation | JSON-LD validation during assembly (`schema_validator.py`). |
+| `src/hype_frog/analysis/` | Post-crawl analysis | Canonical/hreflang chains, link equity, snippets, topical authority, similarity, competitors, delta. |
+| `src/hype_frog/pipeline/` | Enrichment engine | Graph intelligence, scoring glue, image/OG probes, sanitisation, assemble/merge. |
+| `src/hype_frog/rules/` | Issue registry | `IssueRule` dataclass, 99 summary rules, playbook metadata. |
+| `src/hype_frog/reporter/` | Reporting engine | Excel sheets with separate I/O, formatting, row-shaping, TOC/navigation, and guardrails modules. |
 | `src/hype_frog/checkpoint/` | Durable state | Stores resumable crawl progress for long-running jobs. |
 
-Runtime execution follows this sequence: **`orchestration/` -> `crawler/` -> `pipeline/` -> `reporter/`**.
+Runtime execution follows: **`orchestration/` -> `crawler/` + `extractors/` -> `analysis/` + `pipeline/` -> `reporter/`**.
 
 ## Tech stack
 
@@ -63,22 +72,32 @@ Runtime execution follows this sequence: **`orchestration/` -> `crawler/` -> `pi
 | Optional rendering | `playwright.async_api` (install browser binaries separately when using accurate mode) |
 | Parsing | `beautifulsoup4`, `lxml` |
 | Data | `pandas`, `pydantic` (row/state contracts enforced via `core/models.py`) |
-| Workbooks | `openpyxl` (via pandas ExcelWriter and post-processing) |
-| Graph / analysis | `networkx`, `numpy` |
-| Config | `python-dotenv` |
+| Workbooks | `openpyxl` (via pandas ExcelWriter and post-processing); optional PDF via `reportlab` |
+| Graph / analysis | `networkx`, `scipy`, `simhash` (near-duplicate detection) |
+| Dates | `python-dateutil` |
+| Config | `python-dotenv`, optional `pyyaml` (`hype_frog.config.yaml`) |
 
-See `pyproject.toml` for pinned dependency ranges.
+See `pyproject.toml` and **`uv.lock`** for pinned dependency versions. Install with `uv sync` so the lockfile resolves reproducible builds.
+
+### Dependency policy (D8)
+
+- **Runtime** libraries (`aiohttp`, `openpyxl`, `pandas`, etc.) are pinned to exact versions in `pyproject.toml`.
+- **`uv.lock`** is the source of truth for transitive resolution; commit it with application changes.
+- Use **`uv sync`** (not `pip install`) to match the locked environment.
 
 ## Requirements
 
-- **Python 3.12+**
-- Recommended: **[uv](https://docs.astral.sh/uv/)** for installs.
+- **Python 3.12+** (tested on Windows 10/11 and Linux)
+- Recommended: **[uv](https://docs.astral.sh/uv/)** for installs and virtual environments
 
 ## Setup
 
 ```bash
 # From repository root
 uv sync
+
+# Development + tests
+uv sync --extra dev
 ```
 
 For **accurate** (rendered) crawl mode install the optional extra and browser binaries:
@@ -93,8 +112,12 @@ playwright install chromium
 ## Configuration
 
 - Copy `.env.example` to `.env` for runtime variables (see the example file for **PSI** and **GSC** setup notes). Do not commit secrets.
+- **Optional YAML overrides:** create `hype_frog.config.yaml` in the project root to tune thresholds without editing source (e.g. `THIN_CONTENT_WORD_THRESHOLD`, `PSI_BASE_DELAY_SECONDS`). Keys must match names in `src/hype_frog/config_defaults.py`.
+- **PSI pacing:** `--psi-delay SECONDS` sets the base delay between PageSpeed Insights API calls (default **2.5s** with ±30% jitter).
 - **PSI:** set `PSI_API_KEY` in `.env` when you want PageSpeed Insights lab data. The key must belong to a Google Cloud project with the PageSpeed Insights API enabled.
 - **GSC:** the app uses the **OAuth desktop** flow via `secrets/client_secrets.json` and `secrets/token.json` (see `.env.example`). Run `uv run hype-frog --gsc-auth` once per machine to create or refresh `secrets/token.json`. Legacy fallbacks: the same filenames under `src/hype_frog/` or the repo root. The signed-in user needs Search Console access to a property that matches the crawl target; the code requests read-only scope `https://www.googleapis.com/auth/webmasters.readonly`.
+- **Optional flags:** `--check-og-images`, `--check-images`, `--gsc-url-inspection`, `--gsc-url-inspection-full`, `--competitors`, `--benchmarks`, `--previous-run`, `--streaming`, `--max-memory-mb`, `--export-pdf`, `--psi-delay` (see `uv run hype-frog --help`).
+- **Environment:** `HF_COMPETITORS`, `HF_STREAMING`, `HF_MAX_MEMORY_MB`, `GSC_URL_INSPECTION`, `CHECK_CONTENT_IMAGES`, `CHECK_OG_IMAGES`, `HF_EXPORT_PDF`, `HF_OUTPUT_FILENAME`, `HF_MAX_DEPTH`.
 - Interactive runs prompt for crawl profile, suite mode, checkpoint interval, and optional previous workbook path.
 
 ## Running
@@ -144,7 +167,7 @@ uv run hype-frog --quick-test
 1. **Preflight** — GSC OAuth files, property match for the crawl target, PSI key presence (no slow PSI live probe).
 2. **Pytest regression** — focused reporter/crawler/extractor tests (~30 cases).
 3. **Pipeline** — `page-sitemap.xml` seed (max 10 URLs), external-link checks, PSI on up to 3 URLs when `PSI_API_KEY` is set.
-4. **Workbook audit** — TOC at index 0, tab order, freeze panes, Main `Extraction State` contract, Content Hub literals.
+4. **Workbook audit** — TOC at index 0, tab order, freeze panes, Main `Extraction State` contract, Content Hub literals, merged diagnostic sheets when present.
 
 Exit code `0` only when all non-skipped phases pass. A summary block is printed at the end.
 

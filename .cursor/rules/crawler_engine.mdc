@@ -31,6 +31,16 @@ Maintain consistently for observability and scoring:
 
 New extractor or fetch outcomes must map into **complete** / **partial** / **skipped** with an explicit reason where applicable.
 
+**String status codes:** `data_assembler.finalize_row_state` handles non-integer `Status Code` values (`timeout`, `connection error`, `dns error`, etc.) for indexability before scoring.
+
+## URL parameter exclusion
+
+CMS/WooCommerce action query parameters block crawl-queue and internal-link discovery (`config_defaults.EXCLUDED_CMS_ACTION_QUERY_PARAMS`, enforced in `orchestration/crawl_runner.py`). Extend the frozenset in `config_defaults.py` when new CMS actions appear.
+
+## PSI Lighthouse categories
+
+`psi_engine._PSI_CATEGORIES` requests **performance**, **accessibility**, **best-practices**, and **seo** for each mobile/desktop PSI call.
+
 ## Skipped with reason (dead-letter policy)
 
 When **Extraction State** is **`skipped`**, the row must not be a silent hole:

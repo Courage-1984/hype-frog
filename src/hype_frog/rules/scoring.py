@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from hype_frog.core.status_codes import (
+    is_error_status,
+    status_as_int_or_none,
+)
 from hype_frog.rules.registry import IssueRule
 
 # Rows with HTML-derived signals use these states (see crawler fetcher). "partial" still
@@ -14,12 +18,14 @@ def score_url_health(
     row: dict[str, Any], summary_rules: list[IssueRule]
 ) -> tuple[Any, str, str, dict[str, list[str]]]:
     raw_status = row.get("Status Code")
-    status_code: int | None = None
-    try:
-        if raw_status is not None and str(raw_status).strip() != "":
-            status_code = int(float(raw_status))
-    except (TypeError, ValueError):
-        status_code = None
+    status_code = status_as_int_or_none(raw_status)
+    if is_error_status(raw_status) and not isinstance(raw_status, int):
+        return (
+            0,
+            "Critical",
+            "FAIL 🔴",
+            {"Critical": ["Non-200 Status"], "Warning": [], "Observation": []},
+        )
     if status_code == 404:
         return (
             0,

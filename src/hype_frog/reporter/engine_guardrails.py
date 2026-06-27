@@ -8,7 +8,10 @@ from openpyxl.worksheet.worksheet import Worksheet
 from hype_frog.reporter.sheets.config import (
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    CRAWL_LOG_SHEET,
     EXECUTIVE_DASHBOARD_SHEET,
+    REDIRECT_MAP_SHEET,
+    ROBOTS_ANALYSIS_SHEET,
 )
 from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
 from hype_frog.reporter.sheets.layout import (
@@ -37,6 +40,9 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "FixPlan": (
         "Prioritized list of technical and content fixes with estimated effort."
     ),
+    "Quick Wins": (
+        "Top 15 high-impact, low-effort fixes ranked by traffic and business risk."
+    ),
     "Technical": (
         "Deep-dive diagnostic data for every crawled URL (Status, Load Time, etc.)."
     ),
@@ -56,6 +62,9 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "Link Inventory": (
         "Every anchor-level outbound link with type, rel attributes, status codes, and generic-anchor flags."
     ),
+    "Broken Link Impact": (
+        "Broken destinations ranked by inbound link count and source-page GSC clicks."
+    ),
     "Media": "Image inventory, alt coverage, filename quality, and mixed content flags.",
     "Schema & Metadata": "JSON-LD, microdata, Open Graph, and Twitter card signals.",
     "AIOSEO Recommendations": (
@@ -65,6 +74,15 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "PSI Performance": "Lab PageSpeed scores and mobile CWV-related proxies.",
     "Indexability": "Robots directives, canonicals, and indexability classification.",
     "Redirects": "Redirect chains, hop lists, HTTPS upgrades, and loop detection.",
+    REDIRECT_MAP_SHEET: (
+        "Per-source redirect chains with hop status codes, 302 flags, and SEO risk notes."
+    ),
+    ROBOTS_ANALYSIS_SHEET: (
+        "Parsed robots.txt content, user-agent rules, blocked URLs, and sitemap conflicts."
+    ),
+    CRAWL_LOG_SHEET: (
+        "Errors and warnings from fetch, render, PSI, and GSC phases for this audit run."
+    ),
     "Duplicates": "Near-duplicate titles and meta descriptions across the crawl set.",
     "Pattern and Template Issues": (
         "Folder-level clusters and template-wide systemic issue patterns."
@@ -75,10 +93,16 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "Glossary & Legend": "Definitions for metrics, badges, and workbook conventions.",
     "Audit Run Details": "Run configuration, timestamps, and environment notes.",
     "Playbook": (
-        "SEO and AEO copy standards, glossary, and workflow reference (start here for rules)."
+        "Client education reference: editorial standards plus per-issue playbooks "
+        "with what/why/fix/verify guidance."
+    ),
+    "Competitor Benchmarks": (
+        "Optional client-vs-competitor comparison on sampled pages when "
+        "--competitors is configured."
     ),
     "DeltaFromPreviousRun": (
-        "New, fixed, and persistent issues compared to a prior audit workbook. "
+        "New, resolved, and persistent issues compared to a prior audit workbook or delta JSON. "
+        "Sections: summary counts, new issues, resolved issues, metric changes, and SEO health trend. "
         "First runs show a baseline note when no previous export was supplied."
     ),
     "ResolvedIssues": (
@@ -87,7 +111,8 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     ),
     "CrawlGraph": "Derived link graph metrics (click depth, inlinks, PageRank proxy).",
     "Issue Register": (
-        "Unified issue log: site-wide rollups from Summary plus per-URL rows from Issue Inventory."
+        "Tracked issue backlog with first-seen dates, days open, assignment fields, "
+        "and client notes. Unified rollups from Summary plus per-URL rows from Issue Inventory."
     ),
     "Technical Diagnostics": (
         "Per-URL technical, indexability, redirect, security, PSI, and Search Console signals."

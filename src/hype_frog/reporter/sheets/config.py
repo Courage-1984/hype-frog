@@ -13,6 +13,15 @@ CONTENT_OPTIMISATION_HUB_SHEET: str = "Content Optimisation Hub"
 CONTENT_HUB_METRICS_SHEET: str = "Content Hub Metrics"
 AIOSEO_RECOMMENDATIONS_SHEET: str = "AIOSEO Recommendations"
 AUDIT_RUN_DETAILS_SHEET: str = "Audit Run Details"
+REDIRECT_MAP_SHEET: str = "Redirect Map"
+ROBOTS_ANALYSIS_SHEET: str = "Robots.txt Analysis"
+CRAWL_LOG_SHEET: str = "Crawl Log"
+SCRIPT_INVENTORY_SHEET: str = "Script Inventory"
+IMAGE_INVENTORY_SHEET: str = "Image Inventory"
+LINK_EQUITY_MAP_SHEET: str = "Link Equity Map"
+ANCHOR_TEXT_AUDIT_SHEET: str = "Anchor Text Audit"
+SNIPPET_OPPORTUNITIES_SHEET: str = "Snippet Opportunities"
+COMPETITOR_BENCHMARKS_SHEET: str = "Competitor Benchmarks"
 EXECUTIVE_DASHBOARD_SHEET: str = "Executive Dashboard"
 CHART_DATA_SHEET: str = "Chart Data"
 # Freeze through Assigned Owner + URL Slug Normalization; URL scrolls from column I.
@@ -56,6 +65,15 @@ __all__ = [
     "CONTENT_HUB_METRICS_SHEET",
     "AIOSEO_RECOMMENDATIONS_SHEET",
     "AUDIT_RUN_DETAILS_SHEET",
+    "REDIRECT_MAP_SHEET",
+    "ROBOTS_ANALYSIS_SHEET",
+    "CRAWL_LOG_SHEET",
+    "SCRIPT_INVENTORY_SHEET",
+    "IMAGE_INVENTORY_SHEET",
+    "LINK_EQUITY_MAP_SHEET",
+    "ANCHOR_TEXT_AUDIT_SHEET",
+    "SNIPPET_OPPORTUNITIES_SHEET",
+    "COMPETITOR_BENCHMARKS_SHEET",
     "EXECUTIVE_DASHBOARD_SHEET",
     "CHART_DATA_SHEET",
     "CONTENT_HUB_FREEZE_PANES",

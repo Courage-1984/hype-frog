@@ -326,3 +326,297 @@
 - CWV LCP Above 4.0s (Field Data) rows: **0**
 - Lab LCP Above 4.0s (Mobile) rows: **3** PSI URLs in IssueInventory
 
+---
+
+## Top 8 Expansion — Context Map (LI-HF-EXPAND-P0)
+
+| Area | Location |
+|------|----------|
+| JSON-LD extraction | `src/hype_frog/extractors/schema.py` — `parse_jsonld_summary`, `extract_json_ld_blocks` |
+| Schema validation | `src/hype_frog/validators/schema_validator.py` — integrated in `data_assembler.py` |
+| Probable Draft rule (legacy) | `src/hype_frog/rules/registry.py` — replaced by thin / near-dup / draft rules |
+| Duplicate enrichment (legacy) | `src/hype_frog/pipeline/content_duplicates.py` |
+| Simhash near-duplicate pass | `src/hype_frog/analysis/content_similarity.py` — `enrichment_flow.py` |
+| BFS queue / checkpoint | `src/hype_frog/orchestration/crawl_runner.py`, `src/hype_frog/checkpoint/store.py` |
+| HTTP headers | `src/hype_frog/crawler/fetcher.py` → `Last-Modified`, freshness in `extractors/freshness.py` |
+| OG tags | `src/hype_frog/crawler/data_assembler.py` — `resolve_best_og_image_url` |
+| Link Inventory builder | `src/hype_frog/reporter/sheets/merged_builders.py` — `build_link_inventory_rows` |
+| Main conditional formatting | `src/hype_frog/reporter/sheets/conditional.py` — `apply_main_sheet_heatmaps` |
+| Sheet registration | `export_registry.py`, `export_flow.py`, `workbook_layout.py`, `engine_guardrails.py` |
+| Main column groups | `src/hype_frog/reporter/sheets/layout.py` — `MAIN_COLUMN_GROUP_DEFINITIONS` |
+
+## Top 8 Expansion — LI-HF-EXPAND-P0
+
+| Part | Description | Status | Test Passed |
+|------|-------------|--------|-------------|
+| 1 | Schema validation | ✅ Done | ⬜ |
+| 2 | E-E-A-T signal capture | ✅ Done | ⬜ |
+| 3 | Proper duplicate detection | ✅ Done | ⬜ |
+| 4 | Checkpoint/resume (BFS queue) | ✅ Done | ⬜ |
+| 5 | Conditional formatting Main | ✅ Done | ⬜ |
+| 6 | Quick Wins tab | ✅ Done | ⬜ |
+| 7 | Broken Link Impact tab | ✅ Done | ⬜ |
+| 8 | Content freshness signals | ✅ Done | ⬜ |
+
+---
+
+## Full Backlog — D4 / D5
+
+### D4 — Status Code Normalisation 🟡 P2
+
+- **File:** `src/hype_frog/core/status_codes.py`
+- **Status:** ✅ Done
+- **Change summary:** Central helpers (`normalise_status_code`, `is_error_status`, `is_success_status`, etc.) wired into `fetcher.py`, `registry.py` (Non-200 Status), `scoring.py`, and `enrichment_flow.py`. Fixes Timeout/Request Failed treated as success regressions.
+- **Tests:** `tests/core/test_status_normalisation.py` — 5 tests pass
+
+### D5 — Test Suite Foundation 🟡 P2
+
+- **Status:** ✅ Done
+- **Change summary:** Minimum viable suite under `tests/` mirroring `src/hype_frog/` layout (not `tests/unit/`). Shared fixtures in `tests/fixtures/` (`sample_page.html`, `sample_schema.json`, `sample_psi_response.json`). Parametrised trigger matrix for all registry rules; checkpoint save/load/delete round-trip; E-E-A-T extraction; offline assemble + PSI merge smoke tests.
+- **New test files:**
+  - `tests/rules/test_registry_rules.py` — all ~67 registry rules
+  - `tests/checkpoint/test_store.py` — BFS queue checkpoint round-trip
+  - `tests/extractors/test_eeat.py` — author/byline/privacy/terms extraction
+  - `tests/integration/test_sample_page_pipeline.py` — assemble + schema + PSI merge
+- **Pre-existing (Top 8 / D4):** `tests/validators/test_schema_validator.py`, `tests/analysis/test_content_similarity.py`, `tests/core/test_status_normalisation.py`, `tests/crawler/test_psi_engine.py`
+- **Tests:** Full suite **388 passed** (2026-06-27)
+
+### A1 — Open Graph & Social Card Audit 🔴 P1
+
+- **Status:** ✅ Done
+- **Files:** `src/hype_frog/extractors/og_social.py`, `src/hype_frog/pipeline/og_image_validation.py`, `data_assembler.py`, `models.py`, `assemble.py`, `registry.py`, `layout.py` (Social Cards group), `enrichment_flow.py`, `run_config.py`, `cli.py`, `main.py` (`--check-og-images`)
+- **Change summary:** Full og:* and twitter:* extraction; Main Social Cards column group; OG Completeness Score (0–5); optional async OG image HTTP/dimension validation gated by `--check-og-images` / interactive prompt / `CHECK_OG_IMAGES=1`; eight new registry rules.
+- **Tests:** `tests/extractors/test_og_social.py`, `tests/pipeline/test_og_image_validation.py`, registry matrix extended
+
+### C1 — Comprehensive Delta Tracking 🔴 P1
+
+- **Status:** ✅ Done
+- **Files:** `src/hype_frog/analysis/delta_engine.py`, `export_flow.py`, `export_registry.py`, `main.py` (`--previous-run`), `crawl_runner.py`
+- **Change summary:** Multi-section `DeltaFromPreviousRun` tab (summary, new/resolved issues, metric changes, SEO health trend); compact `_delta_summary.json` auto-saved beside each xlsx; prior run load from JSON sidecar or legacy xlsx.
+- **Tests:** `tests/analysis/test_delta_engine.py`, updated `tests/orchestration/test_export_registry_delta.py`
+
+### A3 — Full Redirect Chain Mapping 🔴 P1
+
+- **Status:** ✅ Done
+- **Files:** `src/hype_frog/crawler/redirect_chain.py`, `network_engine.py`, `fetcher.py`, `models.py`, `assemble.py`, `registry.py`, `merged_builders.py`, `export_flow.py`, `export_registry.py`, `layout.py`, `workbook_layout.py`, `toc.py`, `engine_guardrails.py`
+- **Change summary:** Per-hop redirect capture (301 vs 302) from aiohttp history; Main **Redirects** column group; **Redirect Map** sheet (hop URL/status columns, SEO risk); Redirects tab now written on export; rules for 302, mixed chain, and redirect loop.
+- **Tests:** `tests/crawler/test_redirect_chain.py`, registry matrix extended for A3 rules
+
+### B1 — Canonical Chain Tracing 🔴 P1
+
+- **Status:** ✅ Done
+- **Files:** `analysis/canonical_chain.py`, `models.py`, `assemble.py`, `enrichment_flow.py`, `registry.py`, `layout.py`
+- **Change summary:** Post-crawl canonical graph resolution (depth, chain display, loop/redirect/broken-target flags); Main **Canonical Chain** group; four registry rules.
+- **Tests:** `tests/analysis/test_canonical_chain.py`
+
+### B4 — GSC Coverage & Index Status Integration 🔴 P1
+
+- **Status:** ✅ Done
+- **Files:** `pipeline/gsc_inspection.py`, `crawler/gsc_engine.py`, `enrichment_flow.py`, `models.py`, `assemble.py`, `registry.py`, `layout.py`, `main.py` (`--gsc-url-inspection`, `--gsc-url-inspection-full`)
+- **Change summary:** URL Inspection API gated by CLI (limited 50 URLs or full); B4 Main/GSC columns (`GSC Index Status`, last crawl, mobile usability, rich results, coverage reason, days since crawl); four registry rules. Default runs skip inspection unless flag set.
+- **Tests:** `tests/pipeline/test_gsc_inspection.py`, registry matrix extended
+
+### D1 — Memory Management for Large Sites 🔴 P1
+
+- **Status:** ✅ Done (Phase 1 + 3)
+- **Files:** `core/memory_guard.py`, `crawl_runner.py`, `run_setup.py`, `main.py` (`--max-memory-mb`, `--streaming`)
+- **Change summary:** Cache-first crawl persistence (rows reloaded from SQLite at end); pre-crawl memory estimate warning (>2 GB); optional RSS abort cap; `--streaming` flag for cache-first mode logging.
+- **Tests:** `tests/core/test_memory_guard.py`
+
+### A5 — robots.txt Rule Mapping Against Crawled URLs 🟡 P2
+
+- **Status:** ✅ Done
+- **Files:** `crawler/robots_mapping.py`, `fetcher.py`, `crawl_runner.py`, `enrichment_flow.py`, `models.py`, `assemble.py`, `registry.py`, `layout.py`, `export_flow.py`, `export_registry.py`
+- **Change summary:** Per-URL robots.txt access for Googlebot/Bingbot/GPTBot/ClaudeBot/PerplexityBot; **Robots.txt Analysis** sheet (raw rules, blocked URLs, sitemap conflicts); six registry rules.
+- **Tests:** `tests/crawler/test_robots_mapping.py`, registry matrix extended
+
+### D7 — Error Reporting & Crawl Log 🟡 P2
+
+- **Status:** ✅ Done
+- **Files:** `core/crawl_log.py`, `fetcher.py`, `crawl_runner.py`, `enrichment_flow.py`, `export_flow.py`, `export_registry.py`
+- **Change summary:** **Crawl Log** sheet records fetch/render/extract/intent/PSI/GSC errors and warnings with timestamp, phase, detail, and recovery action.
+- **Tests:** `tests/core/test_crawl_log.py`
+
+### A2 — Third-Party Script Inventory 🟡 P2
+
+- **Status:** ✅ Done
+- **Files:** `analysis/third_party_scripts.py`, `crawler/psi_engine.py`, `enrichment_flow.py`, `assemble.py`, `export_flow.py`, `registry.py`
+- **Change summary:** PSI `network-requests` parsed per URL; Main third-party columns; **Script Inventory** sheet; three registry rules.
+- **Tests:** `tests/analysis/test_third_party_scripts.py`
+
+### A4 — Broken / Oversized Image Detection 🟡 P2
+
+- **Status:** ✅ Done
+- **Files:** `pipeline/image_inventory.py`, `crawler/data_assembler.py`, `enrichment_flow.py`, `main.py` (`--check-images`), `assemble.py`, `export_flow.py`, `registry.py`
+- **Change summary:** Content `<img>` inventory with optional HTTP probe; broken/oversized counts on Main; **Image Inventory** sheet; two registry rules.
+- **Tests:** (covered via enrichment/export smoke)
+
+### B2 — Internal Link Equity Distribution 🟡 P2
+
+- **Status:** ✅ Done
+- **Files:** `analysis/link_equity.py`, `enrichment_flow.py`, `export_flow.py`, `assemble.py`, `registry.py`
+- **Change summary:** PageRank percentile, equity tier, inbound/generic-anchor metrics; **Link Equity Map** and **Anchor Text Audit** sheets; two registry rules.
+- **Tests:** `tests/analysis/test_link_equity.py`
+
+### B3 — Featured Snippet & PAA Opportunities 🟡 P2
+
+- **Status:** ✅ Done
+- **Files:** `analysis/snippet_opportunities.py`, `enrichment_flow.py`, `assemble.py`, `export_flow.py`
+- **Change summary:** Snippet type/readiness scoring, GSC position opportunity flag; **Snippet Opportunities** sheet.
+- **Tests:** `tests/analysis/test_snippet_opportunities.py`
+
+### D3 — PSI Request Delay Jitter 🟡 P2
+
+- **Status:** ✅ Done
+- **Files:** `crawler/psi_engine.py`, `config_defaults.py`, `main.py` (`--psi-delay`)
+- **Change summary:** Jittered spacing between PSI HTTP calls via `_PsiRequestPacer`; retry and mobile/desktop strategy gaps use `_jittered_delay()`; CLI and YAML override for base delay.
+- **Tests:** `tests/crawler/test_psi_engine.py` (jitter bounds)
+
+### D6 — Configuration Centralisation 🟢 P3
+
+- **Status:** ✅ Done
+- **Files:** `config_defaults.py`, `config_loader.py`, `config.py`; wired into registry, content similarity, freshness, Quick Wins, crawl/PSI pacing
+- **Change summary:** Central defaults for thresholds and crawl settings; optional `hype_frog.config.yaml` overrides at project root.
+- **Tests:** `tests/config/test_config_loader.py`
+
+### D8 — Dependency Version Pinning & Environment Documentation 🟢 P3
+
+- **Status:** ✅ Done
+- **Files:** `pyproject.toml`, `uv.lock`, `README.md`, `CHANGELOG.md`
+- **Change summary:** Runtime dependencies pinned to lockfile versions; README documents Python/OS setup, `uv sync`, API keys, YAML config, and PSI delay flag; changelog from LI-HF-AUDIT-P0 baseline.
+
+---
+
+## Governance Sync — Investigation Output
+
+*LI-HF-DOCSYNC-P0 | 27 June 2026 — source of truth for documentation updates.*
+
+### 1.1 Directories under `src/hype_frog/`
+
+Present: `analysis/`, `checkpoint/`, `core/`, `crawler/`, `extractors/`, `orchestration/`, `pipeline/`, `reporter/`, `rules/`, `validators/`. No `junk-drawer` packages. `analysis/` and `validators/` were under-documented in governance.
+
+### 1.2 Rules engine
+
+- `IssueRule` is a frozen `@dataclass` in `rules/registry.py`: `severity`, `name`, `fn`, `scope` (default `"url"`).
+- `get_summary_rules()` returns `list[IssueRule]`.
+- **99** rules total: **90** `url`, **8** `site`, **1** `server`.
+- Site/server scopes aggregate in `summary_builder.py` (`IssueInventory`, `Issue Register`) with `(site-wide)` / `(server config)` labels and `Affected URL Count`.
+
+### 1.3 PSI / CrUX
+
+- API requests all four Lighthouse categories: `performance`, `accessibility`, `best-practices`, `seo` (`_PSI_CATEGORIES`).
+- Mobile + desktop strategies; SQLite cache per URL/strategy.
+- CrUX URL vs origin via `originLoadingExperience` / `origin_fallback`; `crux_data_level` → `CrUX Level` (`URL` | `Origin`).
+- `PSI Data Status` labels include `PSI + CrUX Field (URL)`, `PSI Lab`, `Not available`, etc.
+- `PSI_LIGHTHOUSE_EXPORT_KEYS` + `PSI Network Items` / render-blocking URLs exported when PSI runs.
+
+### 1.4 Indexability / status codes
+
+- `finalize_row_state` handles string statuses: `timeout`, `error`, `connection error`, `dns error` → Not Indexable.
+- Integer `>= 400` → Not Indexable.
+
+### 1.5 GSC coverage
+
+- When unmatched: `GSC Clicks`, `Impressions`, `CTR`, `Avg Position` → **`None`** (not `0.0`).
+- `GSC Coverage Note` still uses `resolve_gsc_coverage_note` with zero impressions/clicks for messaging.
+
+### 1.6 CMS action URL exclusion
+
+- `EXCLUDED_CMS_ACTION_QUERY_PARAMS` in `config_defaults.py`: `add-to-cart`, `removed_item`, `undo_item`, `wc-ajax`, `add_to_wishlist`, `share_token`, `preview_id`, `preview_nonce`, `preview`.
+- Applied in `crawl_runner.cms_action_exclusion_keys` for BFS queue and internal-link discovery; excluded URLs surface on **CMS Action URLs** sheet.
+
+### 1.7 Link Inventory dedup
+
+- `build_link_inventory_rows` in `merged_builders.py` dedupes on `(Source URL, Target URL, Anchor Text)`.
+
+### 1.8 Click depth / orphans
+
+- `CLICK_DEPTH_UNREACHABLE = -1` for no path from detected homepage.
+- `Orphan Pages` = zero in-degree in crawl graph (distinct from click depth).
+- `Reachable from Homepage` = click depth ≠ -1.
+
+### 1.9 Duplicate column prevention
+
+- `header_exists_in_worksheet` in `style_helpers.py`; `navigation.py` guards **BACK TO DASHBOARD**.
+
+### 1.10 Workbook sheets (full-suite)
+
+From `workbook_layout.py` — **visible:** Table of Contents, Dashboard, Executive Dashboard, Summary, Priority URLs, FixPlan, Quick Wins, Content Optimisation Hub, Content Hub Metrics, Main, AIOSEO Recommendations, Link Inventory, Broken Link Impact, SitemapQA, Template & Duplication Risks, Playbook.
+
+**Advanced (hidden by default):** Issue Register, Technical Diagnostics, Content & AI Readiness, Link Intelligence, CMS Action URLs, IssueInventory, Redirects, Redirect Map, Robots.txt Analysis, Crawl Log, Link Equity Map, Anchor Text Audit, Snippet Opportunities, Competitor Benchmarks, Script Inventory, Image Inventory, ResolvedIssues, DeltaFromPreviousRun, Audit Run Details.
+
+### 1.11 Checkpoint
+
+- `checkpoint/store.py` — JSON checkpoint save/load/delete for resume runs.
+
+### 1.12 New modules confirmed
+
+- **validators/** — `schema_validator.py` (JSON-LD validation).
+- **analysis/** — canonical chain, hreflang, link equity, third-party scripts, snippet opportunities, topical authority, content similarity, competitor benchmarks, delta engine, content hub recommendations.
+- **extractors/** — `eeat.py`, `freshness.py`, semantic engine, OG/social, heading outline.
+
+### 1.13 Pydantic whitelist
+
+- `ENRICHMENT_PIPELINE_DEFAULTS` in `models.py` registers post-crawl keys (A2–A6, B2–B3, B6, PSI network items, content images) so `ExtraRowPayload.model_validate()` does not strip enrichment fields.
+
+### 1.14 Dependencies (`pyproject.toml`)
+
+- Present: `simhash`, `python-dateutil`, `reportlab`, `pyyaml`, `scipy`, `networkx`, `playwright`, Google API clients.
+- No `CACHE_VERSION` constant found in codebase.
+
+### 1.15 Tests
+
+- **77** test modules under `tests/` mirroring `src/hype_frog/` layout.
+
+### 1.16 Main columns
+
+- `MAIN_COLUMN_GROUP_DEFINITIONS` in `reporter/sheets/layout.py` (grouped URL, extraction, health, CWV, PSI Lighthouse, GSC, enrichment merges).
+
+### 1.17 Main conditional formatting
+
+- `apply_main_sheet_heatmaps` in `conditional.py`: colour scales on SEO Health, PSI, Lighthouse, AEO scores; inverted scale on Lab LCP; Status Code ≥400 highlight.
+
+### 1.18 FixPlan
+
+- `build_fixplan_rows` in `engine_rows.py` includes **`Affected Link Instances`** (sum of broken/unresolved internal links).
+
+### 1.19 IssueInventory scope
+
+- `summary_builder.py` branches on `rule.scope != "url"` for aggregate rows with `Affected URL Count`.
+
+### 1.20 Quick test
+
+- `--quick-test` / `--quick-test-fast` in `main.py`; preset in `core/quick_test.py` and `core/run_config.py` (10 URLs, BFS depth 2, full suite).
+
+---
+
+## Governance Sync — LI-HF-DOCSYNC-P0
+
+### Investigation completed: 27 June 2026
+
+### Files updated:
+
+- [x] docs/system_architecture.md
+- [x] docs/data_contracts.md
+- [x] docs/excel_reporting_standards.md
+- [x] .cursorrules
+- [x] .cursor/rules/architecture.mdc
+- [x] .cursor/rules/auto_documentation.mdc
+- [x] .cursor/rules/crawler_engine.mdc
+- [x] .cursor/rules/excel_engine.mdc
+- [x] README.md
+- [x] pyproject.toml (version 0.3.0)
+- [x] .cursorignore
+
+### Key findings:
+
+- Governance lagged behind `analysis/`, `validators/`, merged diagnostic sheets, enrichment pipeline defaults, and expanded CLI.
+- `IssueRule.scope` and GSC `None` semantics were not documented.
+- PSI four-category + CrUX origin fallback were implemented but not in architecture docs.
+
+### New directories documented: `analysis/`, `validators/`
+
+### New sheets documented: Technical Diagnostics, Content & AI Readiness, Issue Register, CMS Action URLs, Script/Image Inventory, Snippet Opportunities, Competitor Benchmarks, etc.
+
+### Features NOT found: dedicated `CACHE_VERSION` bump constant; legacy per-tab Technical/Content/AEO sheets are not written in full-suite mode (merged tabs supersede).
+

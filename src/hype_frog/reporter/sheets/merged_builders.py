@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from typing import Any
+
+from hype_frog.crawler.redirect_chain import RedirectHopRecord, build_redirect_map_row
+from hype_frog.config import get_quick_wins_max_effort_hours, get_quick_wins_max_results
+from hype_frog.analysis.delta_engine import IssueRecord, days_between
 
 TECHNICAL_DIAGNOSTICS_LIGHTHOUSE_COLUMNS: tuple[str, ...] = (
     "CrUX Level",
@@ -70,6 +75,10 @@ TECHNICAL_DIAGNOSTICS_COLUMNS: tuple[str, ...] = (
     "Security: HSTS",
     "Security: CSP",
     "Hreflang Signals",
+    "Hreflang Declared Languages",
+    "Hreflang Alternate URLs",
+    "Hreflang Reciprocal Status",
+    "Hreflang Code Valid",
 )
 
 CONTENT_AI_READINESS_COLUMNS: tuple[str, ...] = (
@@ -113,6 +122,10 @@ ISSUE_REGISTER_COLUMNS: tuple[str, ...] = (
     "Affected URLs Sample",  # K
     "Source Legacy Tab",  # L
     "Source Row ID",  # M
+    "Date First Detected",  # N
+    "Days Open",  # O
+    "Assigned To",  # P
+    "Client Notes",  # Q
 )
 
 LINK_INTELLIGENCE_COLUMNS: tuple[str, ...] = (
@@ -428,9 +441,15 @@ def build_technical_diagnostics_rows(
                 "Canonical URL": row.get("Canonical URL"),
                 "Meta Robots Raw": row.get("Meta Robots Raw"),
                 "X-Robots-Tag": row.get("X-Robots-Tag"),
-                "GSC Index Status": _to_str(row.get("GSC Inspection Verdict")),
-                "GSC Last Crawl": _to_str(row.get("GSC Inspection Last Crawl")),
-                "GSC Coverage Category": _to_str(row.get("GSC Inspection Coverage State")),
+                "GSC Index Status": _to_str(
+                    row.get("GSC Index Status") or row.get("GSC Inspection Verdict")
+                ),
+                "GSC Last Crawl": _to_str(
+                    row.get("GSC Last Crawl Date") or row.get("GSC Inspection Last Crawl")
+                ),
+                "GSC Coverage Category": _to_str(
+                    row.get("GSC Coverage Reason") or row.get("GSC Inspection Coverage State")
+                ),
                 "Discovered On URL": _to_str(row.get("Discovered On URL")),
                 "Discovery Rank": row.get("Discovery Rank"),
                 "Reachable from Homepage": _to_bool(row.get("Reachable from Homepage")),
@@ -439,6 +458,10 @@ def build_technical_diagnostics_rows(
                 "Security: HSTS": _to_bool(row.get("Security: HSTS")),
                 "Security: CSP": _to_bool(row.get("Security: CSP")),
                 "Hreflang Signals": _to_str(row.get("Hreflang Signals")),
+                "Hreflang Declared Languages": _to_str(row.get("Hreflang Declared Languages")),
+                "Hreflang Alternate URLs": _to_str(row.get("Hreflang Alternate URLs")),
+                "Hreflang Reciprocal Status": _to_str(row.get("Hreflang Reciprocal Status")),
+                "Hreflang Code Valid": _to_bool(row.get("Hreflang Code Valid")),
             }
         )
     return rows
@@ -520,10 +543,29 @@ def build_content_ai_readiness_rows(
     return rows
 
 
+def _issue_register_history_fields(
+    *,
+    stable_issue_id: str,
+    issue_records: dict[str, IssueRecord] | None,
+    run_date: str | None,
+) -> dict[str, Any]:
+    record = (issue_records or {}).get(stable_issue_id)
+    first_seen = record.first_seen if record and record.first_seen else (run_date or "")
+    days_open = days_between(first_seen, run_date) if first_seen and run_date else ""
+    return {
+        "Date First Detected": first_seen,
+        "Days Open": days_open if days_open is not None else "",
+        "Assigned To": "",
+        "Client Notes": "",
+    }
+
+
 def build_issue_register_rows(
     *,
     summary_rows: list[dict[str, Any]],
     issue_inventory_rows: list[dict[str, Any]],
+    issue_records: dict[str, IssueRecord] | None = None,
+    run_date: str | None = None,
 ) -> list[dict[str, Any]]:
     """Build merged rows for the 'Issue Register' worksheet."""
     rows: list[dict[str, Any]] = []
@@ -540,6 +582,11 @@ def build_issue_register_rows(
         affected_count = _to_int(raw_count, 0)
         if affected_count <= 0:
             continue
+        history = _issue_register_history_fields(
+            stable_issue_id="",
+            issue_records=issue_records,
+            run_date=run_date,
+        )
         rows.append(
             {
                 "URL": "",
@@ -555,10 +602,17 @@ def build_issue_register_rows(
                 "Affected URLs Sample": _to_str(row.get("Affected URLs (sample)")),
                 "Source Legacy Tab": "Summary",
                 "Source Row ID": idx,
+                **history,
             }
         )
 
     for idx, row in enumerate(issue_inventory_rows, start=2):
+        stable_id = _to_str(row.get("Stable Issue ID"))
+        history = _issue_register_history_fields(
+            stable_issue_id=stable_id,
+            issue_records=issue_records,
+            run_date=run_date,
+        )
         rows.append(
             {
                 "URL": _to_str(row.get("URL")),
@@ -567,17 +621,23 @@ def build_issue_register_rows(
                 "Severity": _to_str(row.get("Severity")),
                 "Affected URL Count": 1,
                 "Reference Area": _to_str(row.get("Reference Tab")),
-                "Stable Issue ID": _to_str(row.get("Stable Issue ID")),
+                "Stable Issue ID": stable_id,
                 "Owner": _to_str(row.get("Owner")),
                 "Sprint": _to_str(row.get("Sprint")),
                 "Status": _to_str(row.get("Status")) or "Open",
                 "Affected URLs Sample": _to_str(row.get("URL")),
                 "Source Legacy Tab": "IssueInventory",
                 "Source Row ID": idx,
+                **history,
             }
         )
 
     if not rows:
+        history = _issue_register_history_fields(
+            stable_issue_id="",
+            issue_records=issue_records,
+            run_date=run_date,
+        )
         rows.append(
             {
                 "URL": "",
@@ -593,6 +653,7 @@ def build_issue_register_rows(
                 "Affected URLs Sample": "All crawled URLs passed configured issue rules.",
                 "Source Legacy Tab": "Summary",
                 "Source Row ID": 2,
+                **history,
             }
         )
     return rows
@@ -854,6 +915,257 @@ def build_template_duplication_risks_rows(
     return rows
 
 
+QUICK_WINS_COLUMNS: tuple[str, ...] = (
+    "Priority Score",
+    "URL",
+    "Issue",
+    "Severity",
+    "Effort (hrs)",
+    "Owner",
+    "GSC Clicks (30d)",
+    "Business Risk Score",
+    "Recommended Fix",
+    "Sprint",
+    "Revenue Risk",
+    "Jump to FixPlan",
+)
+
+BROKEN_LINK_IMPACT_COLUMNS: tuple[str, ...] = (
+    "Priority Score",
+    "Broken URL",
+    "Status Code",
+    "Inbound Link Count",
+    "Source Page Clicks Total",
+    "Source Pages (first 5)",
+    "Anchor Texts Used",
+    "Recommended Action",
+)
+
+
+def build_quick_wins_rows(
+    extra_rows: list[dict[str, Any]],
+    fixplan_rows: list[dict[str, Any]],
+    summary_rules: list[Any],
+) -> list[dict[str, Any]]:
+    """Build Quick Wins tab: top 15 high-impact low-effort URL+issue combinations."""
+    fp_index: dict[str, dict[str, Any]] = {}
+    for fp_row in fixplan_rows:
+        name = str(fp_row.get("Issue Type") or "")
+        fp_index[name] = fp_row
+
+    rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+
+    for rule in summary_rules:
+        rule_name = rule.name if hasattr(rule, "name") else str(rule[1])
+        fp = fp_index.get(rule_name)
+        if not fp:
+            continue
+        hours_raw = fp.get("Est. Hours", 99)
+        try:
+            hours = float(hours_raw)
+        except (TypeError, ValueError):
+            hours = 99.0
+        if hours > get_quick_wins_max_effort_hours():
+            continue
+
+        rule_fn = rule.fn if hasattr(rule, "fn") else rule[2]
+        severity = rule.severity if hasattr(rule, "severity") else rule[0]
+        for row in extra_rows:
+            url = str(row.get("URL") or "")
+            try:
+                if not rule_fn(row):
+                    continue
+            except Exception:
+                continue
+            if (url, rule_name) in seen:
+                continue
+            seen.add((url, rule_name))
+
+            clicks = float(row.get("GSC Clicks") or 0)
+            risk = float(row.get("Business Risk Score") or 0)
+            if clicks == 0 and risk <= 100:
+                continue
+
+            composite = (clicks * (risk / 100) + risk) / max(hours, 0.5)
+            rows.append(
+                {
+                    "Priority Score": round(composite, 1),
+                    "URL": url,
+                    "Issue": rule_name,
+                    "Severity": severity,
+                    "Effort (hrs)": hours,
+                    "Owner": fp.get("Owner", ""),
+                    "GSC Clicks (30d)": int(clicks),
+                    "Business Risk Score": risk,
+                    "Recommended Fix": fp.get("Recommended Fix", ""),
+                    "Sprint": fp.get("Aging/Priority", ""),
+                    "Revenue Risk": fp.get("Revenue Risk", ""),
+                    "Jump to FixPlan": fp.get("Jump to Details", ""),
+                }
+            )
+
+    rows.sort(key=lambda item: item["Priority Score"], reverse=True)
+    capped = rows[: get_quick_wins_max_results()]
+    return [{col: row.get(col) for col in QUICK_WINS_COLUMNS} for row in capped]
+
+
+def build_broken_link_impact_rows(
+    link_inventory_rows: list[dict[str, Any]],
+    extra_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Rank broken internal destinations by inbound link volume and source traffic."""
+    from collections import defaultdict
+
+    url_index: dict[str, dict[str, Any]] = {
+        str(row.get("URL") or ""): row for row in extra_rows
+    }
+    broken_targets: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {
+            "source_urls": [],
+            "source_clicks_total": 0.0,
+            "anchor_texts": [],
+            "status_code": None,
+        }
+    )
+
+    for link in link_inventory_rows:
+        target = str(link.get("Target URL") or "")
+        status = link.get("Status Code")
+        link_type = str(link.get("Link Type") or "")
+
+        if link_type.lower() != "internal":
+            continue
+        try:
+            status_code = int(status)
+            if status_code < 400:
+                continue
+        except (TypeError, ValueError):
+            if str(status).lower() not in ("timeout", "error"):
+                continue
+            status_code = str(status)
+
+        source = str(link.get("Source URL") or "")
+        anchor = str(link.get("Anchor Text") or "")
+        source_row = url_index.get(source, {})
+        source_clicks = float(source_row.get("GSC Clicks") or 0)
+
+        entry = broken_targets[target]
+        entry["status_code"] = status_code
+        if source not in entry["source_urls"]:
+            entry["source_urls"].append(source)
+            entry["source_clicks_total"] += source_clicks
+        if anchor and anchor not in entry["anchor_texts"]:
+            entry["anchor_texts"].append(anchor)
+
+    output_rows: list[dict[str, Any]] = []
+    for target_url, data in broken_targets.items():
+        inbound_count = len(data["source_urls"])
+        clicks = data["source_clicks_total"]
+        priority = clicks + (inbound_count * 10)
+        status_code = data["status_code"]
+        if isinstance(status_code, int) and status_code == 404:
+            action = "Restore page OR set up 301 redirect to nearest equivalent"
+        elif isinstance(status_code, str):
+            action = "Investigate — page is timing out"
+        else:
+            action = f"Investigate {status_code} response"
+
+        output_rows.append(
+            {
+                "Priority Score": round(priority, 0),
+                "Broken URL": target_url,
+                "Status Code": status_code,
+                "Inbound Link Count": inbound_count,
+                "Source Page Clicks Total": int(clicks),
+                "Source Pages (first 5)": " | ".join(data["source_urls"][:5]),
+                "Anchor Texts Used": " | ".join(data["anchor_texts"][:5]),
+                "Recommended Action": action,
+            }
+        )
+
+    output_rows.sort(key=lambda item: item["Priority Score"], reverse=True)
+    return [{col: row.get(col) for col in BROKEN_LINK_IMPACT_COLUMNS} for row in output_rows]
+
+
+REDIRECT_MAP_COLUMNS: tuple[str, ...] = (
+    "Source URL",
+    "Hop 1 URL",
+    "Hop 1 Status",
+    "Hop 2 URL",
+    "Hop 2 Status",
+    "Hop 3 URL",
+    "Hop 3 Status",
+    "Final URL",
+    "Chain Length",
+    "Has 302",
+    "SEO Risk",
+    "Redirect Chain",
+)
+
+
+def _hop_records_from_extra_row(row: dict[str, Any]) -> list[RedirectHopRecord]:
+    raw = row.get("Redirect Chain Hops")
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw) if isinstance(raw, str) else raw
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    records: list[RedirectHopRecord] = []
+    for item in parsed:
+        if not isinstance(item, dict) or item.get("url") is None:
+            continue
+        try:
+            records.append(
+                RedirectHopRecord(url=str(item["url"]), status=int(item["status"]))
+            )
+        except (TypeError, ValueError):
+            continue
+    return records
+
+
+def build_redirects_sheet_rows(extra_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Build rows for the legacy Redirects worksheet."""
+    return [
+        {
+            "URL": row.get("URL"),
+            "Status Code": row.get("Status Code"),
+            "Final URL": row.get("Final URL"),
+            "Redirect Chain": row.get("Redirect Chain"),
+            "Redirect Chain Length": row.get("Redirect Chain Length"),
+            "Redirect Chain Hops": row.get("Redirect Chain Hops"),
+            "Has 302 in Chain": row.get("Has 302 in Chain"),
+            "Has Mixed Redirect Types": row.get("Has Mixed Redirect Types"),
+            "Redirect Target": row.get("Redirect Target"),
+            "Redirect Hops": row.get("Redirect Hops"),
+            "HTTP->HTTPS Redirect": row.get("HTTP->HTTPS Redirect"),
+            "Redirect Loop Flag": row.get("Redirect Loop Flag"),
+            "Redirect SEO Risk": row.get("Redirect SEO Risk"),
+        }
+        for row in extra_rows
+    ]
+
+
+def build_redirect_map_rows(extra_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One row per source URL that returned a redirect chain."""
+    rows: list[dict[str, Any]] = []
+    for row in extra_rows:
+        if int(row.get("Redirect Chain Length") or 0) <= 0:
+            continue
+        hop_records = _hop_records_from_extra_row(row)
+        map_row = build_redirect_map_row(
+            source_url=str(row.get("URL") or ""),
+            hop_records=hop_records,
+            final_url=row.get("Final URL"),
+            fields=row,
+        )
+        rows.append({col: map_row.get(col) for col in REDIRECT_MAP_COLUMNS})
+    return rows
+
+
 __all__ = [
     "TECHNICAL_DIAGNOSTICS_COLUMNS",
     "TECHNICAL_DIAGNOSTICS_LIGHTHOUSE_COLUMNS",
@@ -862,11 +1174,18 @@ __all__ = [
     "LINK_INTELLIGENCE_COLUMNS",
     "LINK_INVENTORY_COLUMNS",
     "TEMPLATE_DUPLICATION_RISKS_COLUMNS",
+    "QUICK_WINS_COLUMNS",
+    "BROKEN_LINK_IMPACT_COLUMNS",
+    "REDIRECT_MAP_COLUMNS",
     "build_technical_diagnostics_rows",
     "build_content_ai_readiness_rows",
     "build_issue_register_rows",
     "build_link_intelligence_rows",
     "build_link_inventory_rows",
     "build_template_duplication_risks_rows",
+    "build_quick_wins_rows",
+    "build_broken_link_impact_rows",
+    "build_redirects_sheet_rows",
+    "build_redirect_map_rows",
 ]
 

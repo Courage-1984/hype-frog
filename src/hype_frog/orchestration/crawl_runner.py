@@ -7,17 +7,24 @@ import os
 import time
 from collections import deque
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from hype_frog.checkpoint import AuditCache, load_checkpoint, save_checkpoint
+from hype_frog.checkpoint import AuditCache, delete_checkpoint, load_checkpoint, save_checkpoint
 from hype_frog.config import (
-    DELAY_BETWEEN_REQUESTS,
     EXCLUDED_CMS_ACTION_QUERY_PARAMS,
     MAX_RETRIES,
     MAX_WORKERS,
     TIMEOUT_SECONDS,
+    get_delay_between_requests,
 )
 from hype_frog.core import get_logger
+from hype_frog.core.memory_guard import (
+    MemoryLimitExceeded,
+    check_memory_limit,
+    warn_if_large_crawl,
+)
+from hype_frog.core.crawl_log import CrawlLogCollector
 from hype_frog.core.file_utils import build_output_filename
 from hype_frog.core.url_normalization import normalize_url
 from hype_frog.crawler import create_session, fetch_and_parse, parse_sitemap
@@ -192,6 +199,7 @@ async def _apply_search_intent(
     row: CrawlRowPayload,
     *,
     analyzer: IntentAnalyzer,
+    crawl_log: CrawlLogCollector | None = None,
 ) -> None:
     main_values = row.main.values
     extra_values = row.extra.values
@@ -207,6 +215,14 @@ async def _apply_search_intent(
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.warning("Search intent classification failed for %s: %s", main_values.get("URL"), exc)
         extra_values["Search Intent"] = "Unknown"
+        if crawl_log is not None:
+            crawl_log.record(
+                url=str(main_values.get("URL") or ""),
+                phase="intent",
+                error_type="Intent Classification Failed",
+                error_detail=str(exc),
+                recovery_action="Search Intent set to Unknown.",
+            )
 
 
 @dataclass(frozen=True)
@@ -217,6 +233,7 @@ class CrawlExecutionResult:
     max_psi_urls: int | None
     crawl_urls: list[str]
     sitemap_meta: dict[str, dict[str, str | None]]
+    sitemap_files_meta: dict[str, dict[str, Any]]
     source_label: str
     workers: int
     request_delay: float
@@ -225,21 +242,30 @@ class CrawlExecutionResult:
     checkpoint_every: int
     crawl_completed: bool
     check_external_link_status: bool
+    check_og_images: bool = False
+    check_content_images: bool = False
     crawl_duration_seconds: float = 0.0
     excluded_cms_action_urls: tuple[ExcludedCmsActionUrl, ...] = ()
+    gsc_url_inspection: str | None = None
+    max_memory_mb: int | None = None
+    streaming: bool = False
+    crawl_log_entries: list[Any] | None = None
+    robots_by_domain: dict[str, dict[str, Any]] | None = None
+    competitor_domains: tuple[str, ...] = ()
 
 
 async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
     urls: list[str] = []
     sitemap_meta: dict[str, dict[str, str | None]] = {}
+    sitemap_files_meta: dict[str, dict[str, Any]] = {}
     workers = MAX_WORKERS
-    request_delay = DELAY_BETWEEN_REQUESTS
+    request_delay = get_delay_between_requests()
     source_label = "manual_input"
 
     async with create_session() as session:
         if setup.target_input.lower().endswith(".xml"):
             _log_phase_banner("SETUP: Parsing provided sitemap seed list")
-            urls, sitemap_meta = await parse_sitemap(setup.target_input, session)
+            urls, sitemap_meta, sitemap_files_meta = await parse_sitemap(setup.target_input, session)
             parsed_source = urlparse(setup.target_input)
             source_label = parsed_source.netloc or "sitemap"
         else:
@@ -297,10 +323,12 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             request_delay = (
                 setup.request_delay_preset
                 if setup.request_delay_preset is not None
-                else DELAY_BETWEEN_REQUESTS
+                else get_delay_between_requests()
             )
             full_suite = bool(setup.full_suite_preset)
             previous_audit_path = (setup.previous_audit_path_preset or "").strip()
+            if not previous_audit_path:
+                previous_audit_path = os.getenv("HF_PREVIOUS_AUDIT_PATH", "").strip()
             checkpoint_every = int(setup.checkpoint_every_preset or 0)
             logger.info(
                 "Crawl safety profile: preset (%s workers, %ss delay)",
@@ -325,11 +353,11 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                 request_delay = 1.5
             elif profile_choice == "2" or profile_choice == "":
                 workers = MAX_WORKERS
-                request_delay = DELAY_BETWEEN_REQUESTS
+                request_delay = get_delay_between_requests()
             else:
                 logger.info("> Invalid input, defaulting to Balanced.")
                 workers = MAX_WORKERS
-                request_delay = DELAY_BETWEEN_REQUESTS
+                request_delay = get_delay_between_requests()
 
             suite_choice = input(
                 "Audit Depth: [1] Main Inventory Only | [2] Full AEO/SEO Suite: "
@@ -345,8 +373,10 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                 full_suite = True
 
             previous_audit_path = input(
-                "Previous Audit Path (.xlsx) for Delta Analysis [leave blank to skip]: "
+                "Previous Audit Path (.xlsx or _delta_summary.json) [leave blank to skip]: "
             ).strip()
+            if not previous_audit_path:
+                previous_audit_path = os.getenv("HF_PREVIOUS_AUDIT_PATH", "").strip()
             checkpoint_raw = input(
                 "Auto-Save Checkpoint Frequency (N URLs) [0 to disable]: "
             ).strip()
@@ -369,6 +399,11 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
         print("\n" + "=" * 30)
         crawl_started = time.perf_counter()
         logger.info("Starting crawl of %s URLs...", len(urls))
+        if setup.streaming:
+            logger.info(
+                "Streaming mode: crawl rows persist to SQLite cache during fetch "
+                "(reduces in-memory duplication)."
+            )
         logger.info(
             f"Max Workers: {workers} | Delay: {request_delay}s | "
             f"Retries: {MAX_RETRIES} | Timeout: {TIMEOUT_SECONDS}s | "
@@ -377,6 +412,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
 
         semaphore = asyncio.Semaphore(workers)
         robots_cache: dict[str, dict[str, object]] = {}
+        crawl_log = CrawlLogCollector()
         playwright_manager: PlaywrightSessionManager | None = None
         accurate_render_available = setup.crawl_mode == "accurate"
         if accurate_render_available:
@@ -394,6 +430,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                 )
         resumed_results: list[CrawlResult] = []
         checkpoint_completed_urls: set[str] = set()
+        bfs_state: dict[str, object] = {}
         if os.path.exists(checkpoint_file):
             if setup.resume_checkpoint_mode == "prompt":
                 resume_choice = (
@@ -413,7 +450,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                 )
             if want_resume:
                 try:
-                    resumed_results, checkpoint_completed_urls = load_checkpoint(
+                    resumed_results, checkpoint_completed_urls, bfs_state = load_checkpoint(
                         checkpoint_file
                     )
                     cache.upsert_results(resumed_results)
@@ -427,10 +464,12 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                     logger.warning("Could not load checkpoint. Starting fresh. (%s)", exc)
                     resumed_results = []
                     checkpoint_completed_urls = set()
+                    bfs_state = {}
 
         completed_urls_runtime = set(checkpoint_completed_urls)
         pending_batch: list[CrawlResult] = []
-        typed_results: list[CrawlRowPayload] = []
+        total_crawl_urls = len(urls) + len(checkpoint_completed_urls)
+        warn_if_large_crawl(total_crawl_urls)
         crawled_count = len(checkpoint_completed_urls)
         completed_normalized = {
             _normalize_url_key(url) for url in completed_urls_runtime if url
@@ -440,20 +479,51 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
         queued_urls: set[str] = set(completed_normalized)
         crawl_urls_runtime: list[str] = []
         sitemap_seed_urls: set[str] = set()
-        for url in urls:
-            normalized = _normalize_url_key(url)
-            if not normalized or normalized in queued_urls:
-                continue
-            seed_queue.append((normalized, 0, None))
-            queued_urls.add(normalized)
-            crawl_urls_runtime.append(normalized)
-            sitemap_seed_urls.add(normalized)
+        restored_runtime = bfs_state.get("crawl_urls_runtime") if bfs_state else None
+        if isinstance(restored_runtime, list) and restored_runtime:
+            crawl_urls_runtime = [str(url) for url in restored_runtime]
+            seed_queue.extend(
+                tuple(item)  # type: ignore[misc]
+                for item in (bfs_state.get("seed_queue_pending") or [])
+            )
+            bfs_queue.extend(
+                tuple(item)  # type: ignore[misc]
+                for item in (bfs_state.get("queue_pending") or [])
+            )
+            restored_queued = bfs_state.get("queued_set") or []
+            queued_urls.update(str(url) for url in restored_queued)
+            seed_phase_value = bfs_state.get("seed_phase_active")
+            seed_phase_active = (
+                bool(seed_phase_value) if seed_phase_value is not None else bool(seed_queue)
+            )
+        else:
+            seed_phase_active = False
+            for url in urls:
+                normalized = _normalize_url_key(url)
+                if not normalized or normalized in queued_urls:
+                    continue
+                seed_queue.append((normalized, 0, None))
+                queued_urls.add(normalized)
+                crawl_urls_runtime.append(normalized)
+                sitemap_seed_urls.add(normalized)
+            seed_phase_active = bool(seed_queue)
+        if not sitemap_seed_urls:
+            for url in crawl_urls_runtime:
+                sitemap_seed_urls.add(url)
         total_urls = len(crawl_urls_runtime) + len(checkpoint_completed_urls)
         in_flight: dict[
             asyncio.Task[CrawlRowPayload], tuple[str, int, str | None, str]
         ] = {}
         intent_analyzer = IntentAnalyzer()
-        seed_phase_active = bool(seed_queue)
+
+        def _checkpoint_bfs_state() -> dict[str, object]:
+            return {
+                "queue_pending": list(bfs_queue),
+                "queued_set": list(queued_urls),
+                "seed_queue_pending": list(seed_queue),
+                "seed_phase_active": seed_phase_active,
+                "crawl_urls_runtime": list(crawl_urls_runtime),
+            }
 
         def _can_enqueue() -> bool:
             return setup.max_urls is None or len(queued_urls) < setup.max_urls
@@ -497,6 +567,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                         depth=next_depth,
                         render_pages=accurate_render_available,
                         playwright_session_manager=playwright_manager,
+                        crawl_log=crawl_log,
                     )
                 )
                 in_flight[task] = (next_url, next_depth, discovered_on_url, phase)
@@ -523,8 +594,9 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                     else:
                         result_payload.main.values["Discovered On URL"] = discovered_from
                         result_payload.extra.values["Discovered On URL"] = discovered_from
-                    await _apply_search_intent(result_payload, analyzer=intent_analyzer)
-                    typed_results.append(result_payload)
+                    await _apply_search_intent(
+                        result_payload, analyzer=intent_analyzer, crawl_log=crawl_log
+                    )
                     main_row, extra_row = result_payload.model_dump_rows()
                     result: CrawlResult = {"main": main_row, "extra": extra_row}
                     pending_batch.append(result)
@@ -551,6 +623,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                     if len(pending_batch) >= flush_batch_size:
                         cache.upsert_results(pending_batch)
                         pending_batch = []
+                        check_memory_limit(setup.max_memory_mb)
                     done_count = crawled_count
                     if checkpoint_every > 0 and done_count % checkpoint_every == 0:
                         if pending_batch:
@@ -562,6 +635,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                             checkpoint_results,
                             crawl_urls_runtime,
                             checkpoint_completed_urls,
+                            bfs_state=_checkpoint_bfs_state(),
                         )
                         logger.info(
                             "Checkpoint saved: %s/%s -> %s",
@@ -585,12 +659,14 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
         if pending_batch:
             cache.upsert_results(pending_batch)
         if checkpoint_every > 0:
-            checkpoint_results = cache.all_results()
-            save_checkpoint(
-                checkpoint_file,
-                checkpoint_results,
-                crawl_urls_runtime,
-                checkpoint_completed_urls,
+            delete_checkpoint(checkpoint_file)
+
+        typed_results: list[CrawlRowPayload] = []
+        for cached in cache.iter_results():
+            typed_results.append(
+                CrawlRowPayload.model_validate(
+                    {"main": cached.get("main", {}), "extra": cached.get("extra", {})}
+                )
             )
 
         rendered_rows = sum(
@@ -629,6 +705,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             max_psi_urls=setup.max_psi_urls,
             crawl_urls=crawl_urls_runtime,
             sitemap_meta=sitemap_meta,
+            sitemap_files_meta=sitemap_files_meta,
             source_label=source_label,
             workers=workers,
             request_delay=request_delay,
@@ -637,6 +714,14 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             checkpoint_every=checkpoint_every,
             crawl_completed=True,
             check_external_link_status=setup.check_external_link_status,
+            check_og_images=setup.check_og_images,
+            check_content_images=setup.check_content_images,
             crawl_duration_seconds=crawl_duration_seconds,
             excluded_cms_action_urls=tuple(cms_exclusions.values()),
+            gsc_url_inspection=setup.gsc_url_inspection,
+            max_memory_mb=setup.max_memory_mb,
+            streaming=setup.streaming,
+            crawl_log_entries=crawl_log.entries,
+            robots_by_domain=dict(robots_cache),
+            competitor_domains=setup.competitor_domains,
         )

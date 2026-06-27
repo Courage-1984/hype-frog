@@ -11,6 +11,10 @@ from hype_frog.checkpoint.cache import AuditCache
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.core.scoring import calculate_executive_roi
 from hype_frog.pipeline.content_hub_metrics import resolve_content_hub_metrics
+from hype_frog.analysis.content_hub_recommendations import (
+    build_hub_priority_reason,
+    build_hub_recommended_action,
+)
 from hype_frog.pipeline.og_image_consistency import (
     build_og_image_site_profile,
     classify_og_image_consistency,
@@ -397,6 +401,8 @@ _CONTENT_HUB_FIELDS_PRE_REORDER: tuple[str, ...] = (
     "SEO Score",
     "Technical Health",
     "Copy Score",
+    "Recommended Action",
+    "Priority Reason",
     "Entity Density (%)",
     "Top Entities",
     "Citation Candidate Count",
@@ -716,6 +722,8 @@ def build_content_optimisation_hub_rows(
                 "SEO Score": _hub_score_value(e.get("SEO Score")),
                 "Technical Health": _hub_score_value(e.get("Technical Health")),
                 "Copy Score": _hub_score_value(e.get("Copy Score")),
+                "Recommended Action": build_hub_recommended_action(m, e),
+                "Priority Reason": build_hub_priority_reason(m, e),
                 "Entity Density (%)": _round2(e.get("Entity Density (%)")),
                 "Top Entities": _hub_display_text(str(e.get("Top Entities") or "")),
                 # Display-safe string: the shared number formatter treats any

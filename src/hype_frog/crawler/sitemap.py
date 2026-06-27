@@ -26,12 +26,28 @@ def _strip_default_namespace(xml_data: str) -> ET.Element:
     return ET.fromstring(sanitized)
 
 
-async def parse_sitemap(url: str, session: aiohttp.ClientSession) -> tuple[list[str], dict[str, dict[str, Any]]]:
+def _detect_sitemap_kind(root: ET.Element, xml_data: str) -> str:
+    tag = str(root.tag or "").lower()
+    if tag.endswith("sitemapindex"):
+        return "sitemapindex"
+    lowered = xml_data.lower()
+    if "image:image" in lowered or root.find(".//image") is not None:
+        return "image"
+    if "video:video" in lowered or root.find(".//video") is not None:
+        return "video"
+    return "urlset"
+
+
+async def parse_sitemap(
+    url: str, session: aiohttp.ClientSession
+) -> tuple[list[str], dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Return discovered URLs, per-URL metadata, and per-sitemap-file metadata."""
     logger.info("Fetching sitemap from: %s", url)
     visited_sitemaps: set[str] = set()
     discovered_urls: list[str] = []
     seen_page_urls: set[str] = set()
     sitemap_meta: dict[str, dict[str, Any]] = {}
+    sitemap_files_meta: dict[str, dict[str, Any]] = {}
 
     async def _walk(sitemap_url: str, depth: int) -> None:
         if depth > MAX_SITEMAP_RECURSION_DEPTH:
@@ -48,15 +64,22 @@ async def parse_sitemap(url: str, session: aiohttp.ClientSession) -> tuple[list[
             logger.warning("Skipping sitemap %s (%s)", sitemap_key, exc)
             return
 
-        # Nested sitemap index: recurse into child sitemaps.
-        if root.tag == "sitemapindex":
+        kind = _detect_sitemap_kind(root, xml_data)
+        file_url_count = 0
+
+        if root.tag.endswith("sitemapindex") or kind == "sitemapindex":
+            sitemap_files_meta[sitemap_key] = {
+                "kind": "sitemapindex",
+                "url_count": len(root.findall("./sitemap")),
+                "size_bytes": len(xml_data.encode("utf-8")),
+                "is_index": True,
+            }
             for sm_node in root.findall("./sitemap"):
                 child_loc = sm_node.findtext("loc")
                 if child_loc and child_loc.strip():
                     await _walk(child_loc.strip(), depth + 1)
             return
 
-        # Standard URL set.
         for url_node in root.findall("./url"):
             loc_node = url_node.find("loc")
             if loc_node is None or not loc_node.text:
@@ -64,16 +87,37 @@ async def parse_sitemap(url: str, session: aiohttp.ClientSession) -> tuple[list[
             page_url = loc_node.text.strip()
             if not page_url:
                 continue
+            file_url_count += 1
             if page_url not in seen_page_urls:
                 seen_page_urls.add(page_url)
                 discovered_urls.append(page_url)
             if page_url not in sitemap_meta:
                 sitemap_meta[page_url] = {
-                    "changefreq": url_node.findtext("changefreq").strip() if url_node.findtext("changefreq") else None,
-                    "priority": url_node.findtext("priority").strip() if url_node.findtext("priority") else None,
-                    "lastmod": url_node.findtext("lastmod").strip() if url_node.findtext("lastmod") else None,
+                    "changefreq": (
+                        url_node.findtext("changefreq").strip()
+                        if url_node.findtext("changefreq")
+                        else None
+                    ),
+                    "priority": (
+                        url_node.findtext("priority").strip()
+                        if url_node.findtext("priority")
+                        else None
+                    ),
+                    "lastmod": (
+                        url_node.findtext("lastmod").strip()
+                        if url_node.findtext("lastmod")
+                        else None
+                    ),
                     "source_sitemap": sitemap_key,
+                    "sitemap_kind": kind,
                 }
+
+        sitemap_files_meta[sitemap_key] = {
+            "kind": kind,
+            "url_count": file_url_count,
+            "size_bytes": len(xml_data.encode("utf-8")),
+            "is_index": False,
+        }
 
     try:
         await _walk(url, depth=0)
@@ -83,7 +127,7 @@ async def parse_sitemap(url: str, session: aiohttp.ClientSession) -> tuple[list[
             len(urls),
             len(visited_sitemaps),
         )
-        return urls, sitemap_meta
+        return urls, sitemap_meta, sitemap_files_meta
     except Exception as e:
         logger.warning("Error parsing sitemap: %s", e)
-        return [], {}
+        return [], {}, {}

@@ -7,6 +7,7 @@ import math
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import Any
 
 from hype_frog.core import get_logger
 from hype_frog.core.discovery_order import order_main_and_extra_rows
@@ -20,6 +21,15 @@ from hype_frog.crawler.gsc_engine import (
     fetch_gsc_url_inspections_batch,
     load_gsc_enrichment_context,
 )
+from hype_frog.analysis.canonical_chain import enrich_extra_rows_canonical_chains
+from hype_frog.analysis.competitor_benchmarks import benchmark_competitor_domains
+from hype_frog.analysis.hreflang_audit import enrich_hreflang_reciprocity
+from hype_frog.analysis.link_equity import enrich_link_equity_fields
+from hype_frog.analysis.snippet_opportunities import enrich_snippet_opportunity_fields
+from hype_frog.analysis.third_party_scripts import enrich_third_party_script_fields
+from hype_frog.analysis.topical_authority import enrich_topical_authority_fields
+from hype_frog.core.crawl_log import CrawlLogCollector
+from hype_frog.crawler.robots_mapping import enrich_extra_rows_robots_mapping
 from hype_frog.orchestration.crawl_runner import CrawlExecutionResult
 from hype_frog.core.models import CrawlRowPayload, ExtraRowPayload, MainRowPayload
 from hype_frog.pipeline.assemble import (
@@ -37,14 +47,23 @@ from hype_frog.pipeline.link_inventory import (
     annotate_link_details_with_status,
     sniff_external_domains_head,
 )
-from hype_frog.pipeline.content_duplicates import enrich_content_duplicate_signals
+from hype_frog.pipeline.image_inventory import enrich_content_image_inventory
+from hype_frog.pipeline.og_image_validation import enrich_og_image_validation
+from hype_frog.analysis.content_similarity import enrich_content_similarity
 from hype_frog.pipeline.gsc_coverage import format_gsc_data_freshness
+from hype_frog.pipeline.gsc_inspection import (
+    apply_gsc_inspection_fields,
+    inspection_url_candidates_from_rows,
+    select_gsc_inspection_urls,
+)
 from hype_frog.pipeline.content_hub_metrics import backfill_extra_content_hub_metrics
 from hype_frog.pipeline.enrich import (
     compute_internal_link_intelligence,
 )
 from hype_frog.rules import get_summary_rules
+from hype_frog.core.status_codes import is_success_status
 from hype_frog.core.url_normalization import normalize_url
+from hype_frog.pipeline.content_duplicates import enrich_content_duplicate_signals
 
 logger = get_logger(__name__)
 
@@ -74,10 +93,7 @@ def normalize_url_key(url: object, keep_query: bool = True) -> str:
 
 
 def _extra_status_is_200(status: object) -> bool:
-    try:
-        return int(float(status)) == 200
-    except (TypeError, ValueError):
-        return False
+    return is_success_status(status)
 
 
 def _url_passes_gsc_inspection_smart_gate(
@@ -112,12 +128,12 @@ def _url_passes_gsc_inspection_smart_gate(
 
 def _merge_gsc_url_inspection_row(
     row: ExtraRowPayload,
-    inspection_fields: dict[str, str | None] | None,
+    inspection_fields: dict[str, object] | None,
 ) -> ExtraRowPayload:
     if not inspection_fields:
         return row
     merged = dict(row.values)
-    merged.update(inspection_fields)
+    apply_gsc_inspection_fields(merged, inspection_fields)  # type: ignore[arg-type]
     return ExtraRowPayload.model_validate(merged)
 
 
@@ -127,6 +143,10 @@ class EnrichmentResult:
     typed_extra_rows: list[ExtraRowPayload]
     status_by_url: dict[str, object]
     sitemap_url_keys: set[str]
+    crawl_log_entries: list[Any] | None = None
+    image_probe_by_url: dict[str, dict[str, Any]] | None = None
+    competitor_benchmark_rows: list[dict[str, Any]] | None = None
+    competitor_benchmark_columns: tuple[str, ...] | None = None
 
     @property
     def main_rows(self) -> list[dict[str, object]]:
@@ -187,6 +207,10 @@ def _sync_main_rows_seo_fields_from_extra(
 
 async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult:
     _log_phase_banner("ENRICHMENT: Starting post-crawl data pipeline")
+    image_probe_by_url: dict[str, dict[str, Any]] | None = None
+    crawl_log = CrawlLogCollector()
+    if crawl_result.crawl_log_entries is not None:
+        crawl_log.entries.extend(crawl_result.crawl_log_entries)
     crawl_rows: list[CrawlRowPayload] = list(crawl_result.crawl_rows)
     main_rows = [row.main for row in crawl_rows]
     extra_rows = [row.extra for row in crawl_rows]
@@ -218,26 +242,22 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                 "GSC metrics unavailable (missing credentials, property mismatch, or query error)."
             )
 
-        inspection_targets: list[str] = []
-        for main_row, extra_row in zip(main_rows, extra_rows, strict=True):
-            ev = extra_row.values
-            url_key = str(ev.get("Final URL") or ev.get("URL") or "").strip()
-            if not url_key:
-                continue
-            nk = normalize_url_key(url_key)
-            if _url_passes_gsc_inspection_smart_gate(
-                analytics_query_succeeded=gsc_ctx.analytics_query_succeeded,
-                main_values=main_row.values,
-                extra_values=ev,
-                url_key=url_key,
-                normalized_key=nk,
-                gsc_metrics=gsc_metrics,
-            ):
-                inspection_targets.append(url_key)
-        unique_inspection_urls = list(dict.fromkeys(inspection_targets))
-        inspection_by_url: dict[str, dict[str, str | None]] = {}
+        inspection_targets = inspection_url_candidates_from_rows(
+            main_rows,
+            extra_rows,
+            analytics_query_succeeded=gsc_ctx.analytics_query_succeeded,
+            gsc_metrics=gsc_metrics,
+            gate_fn=_url_passes_gsc_inspection_smart_gate,
+        )
+        inspection_mode = crawl_result.gsc_url_inspection or ""
+        unique_inspection_urls = select_gsc_inspection_urls(
+            inspection_targets,
+            mode=inspection_mode,
+        )
+        inspection_by_url: dict[str, dict[str, object]] = {}
         if (
-            unique_inspection_urls
+            inspection_mode
+            and unique_inspection_urls
             and gsc_ctx.service is not None
             and gsc_ctx.site_url is not None
         ):
@@ -245,7 +265,8 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                 "ENRICHMENT PHASE 2/5: GSC URL Inspection batch"
             )
             logger.info(
-                "GSC URL Inspection smart gate: %s of %s crawled URLs qualify for inspection API.",
+                "GSC URL Inspection (%s): %s of %s crawled URLs selected.",
+                inspection_mode,
                 len(unique_inspection_urls),
                 len(extra_rows),
             )
@@ -260,6 +281,18 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             except Exception as exc:
                 logger.warning("GSC URL Inspection batch failed: %s", exc)
                 inspection_by_url = {}
+                crawl_log.record(
+                    url=crawl_result.target_input,
+                    phase="GSC",
+                    error_type="URL Inspection Batch Failed",
+                    error_detail=str(exc),
+                    recovery_action="Inspection columns left blank for this run.",
+                )
+        elif inspection_mode:
+            logger.info(
+                "GSC URL Inspection enabled (%s) but no URLs qualified or GSC API unavailable.",
+                inspection_mode,
+            )
 
         if crawl_result.max_psi_urls == 0:
             psi_map: dict[str, dict[str, object]] = {}
@@ -301,7 +334,21 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                 gsc_data_freshness=gsc_data_freshness,
             )
             insp = inspection_by_url.get(url_key) or inspection_by_url.get(normalized_key)
-            extra_work.append(_merge_gsc_url_inspection_row(hardened, insp))
+            merged_row = _merge_gsc_url_inspection_row(hardened, insp)
+            if crawl_log is not None and insp:
+                coverage = str(merged_row.values.get("GSC Inspection Coverage") or "")
+                if coverage == "Error":
+                    crawl_log.record(
+                        url=url_key,
+                        phase="GSC",
+                        error_type="URL Inspection Error",
+                        error_detail=str(
+                            merged_row.values.get("GSC Coverage Reason")
+                            or "Inspection API error"
+                        ),
+                        recovery_action="Skipped inspection fields for this URL.",
+                    )
+            extra_work.append(merged_row)
 
         status_by_url: dict[str, object] = {}
         for row in extra_work:
@@ -344,6 +391,31 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
         else:
             logger.info("External domain HEAD checks disabled for this run.")
 
+        if crawl_result.check_og_images:
+            _log_phase_banner("ENRICHMENT: OG image status and dimension checks")
+            await enrich_og_image_validation(
+                session,
+                extra_work,
+                workers=crawl_result.workers,
+            )
+            logger.info("OG image validation completed for pages with og:image set.")
+        else:
+            logger.info("OG image validation disabled for this run.")
+
+        if crawl_result.check_content_images:
+            _log_phase_banner("ENRICHMENT: Content image status and size checks")
+            image_probe_by_url = await enrich_content_image_inventory(
+                session,
+                extra_work,
+                workers=crawl_result.workers,
+            )
+            logger.info(
+                "Content image validation completed (%s unique URLs probed).",
+                len(image_probe_by_url or {}),
+            )
+        else:
+            logger.info("Content image validation disabled for this run.")
+
         annotate_link_details_with_status(
             extra_work,
             status_by_url=status_by_url,
@@ -351,6 +423,27 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             sniff_external=crawl_result.check_external_link_status,
             normalize_url_key_fn=normalize_url_key,
         )
+        enrich_extra_rows_canonical_chains(
+            [row.values for row in extra_work],
+            status_by_url=status_by_url,
+        )
+        enrich_extra_rows_robots_mapping(
+            [row.values for row in extra_work],
+            robots_by_domain=crawl_result.robots_by_domain or {},
+        )
+        for extra_row in extra_work:
+            psi_status = str(extra_row.values.get("PSI Data Status") or "").strip().lower()
+            if psi_status in {"not available", "error", "failed"}:
+                url_key = str(
+                    extra_row.values.get("Final URL") or extra_row.values.get("URL") or ""
+                ).strip()
+                crawl_log.record(
+                    url=url_key,
+                    phase="PSI",
+                    error_type="PSI Unavailable",
+                    error_detail=psi_status or "not measured",
+                    recovery_action="PSI columns left blank for this URL.",
+                )
 
     _log_phase_banner("ENRICHMENT PHASE 5/5: Scoring, intelligence, and row assembly")
     with _log_stage_timer(
@@ -382,6 +475,23 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             extra_work,
             inlinks_map=inlinks_map,
         )
+        titles_by_url = {
+            str(row.values.get("URL") or "").strip(): row.values.get("Title")
+            for row in main_rows
+            if row.values.get("URL")
+        }
+        for extra_row in extra_work:
+            url_key = str(extra_row.values.get("URL") or "").strip()
+            main_match = main_by_url_pre.get(url_key)
+            if main_match is not None:
+                extra_row.values["Word Count (Body)"] = main_match.values.get(
+                    "Word Count (Body)"
+                )
+        enrich_content_similarity(extra_work, titles_by_url=titles_by_url)
+        enrich_topical_authority_fields(extra_work)
+        enrich_hreflang_reciprocity(extra_work)
+        enrich_third_party_script_fields(extra_work)
+        enrich_link_equity_fields(extra_work, graph_metrics)
         extra_work = [row_with_aeo_readiness_fields(row) for row in extra_work]
         extra_work = [
             row_with_seo_health_enrichment(
@@ -400,6 +510,10 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
         enriched_extra_rows = enrich_extra_rows_with_composite_scores(
             extra_work, main_by_url=main_by_url_pre
         )
+        enrich_snippet_opportunity_fields(enriched_extra_rows)
+        enriched_extra_rows = [
+            ExtraRowPayload.model_validate(row.values) for row in enriched_extra_rows
+        ]
         _apply_seo_health_export_defaults(enriched_extra_rows)
 
         extra_by_url: dict[str, ExtraRowPayload] = {
@@ -443,9 +557,25 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                 gsc_ctx.analytics_row_count,
             )
 
+    competitor_rows: list[dict[str, Any]] | None = None
+    competitor_columns: tuple[str, ...] | None = None
+    competitor_domains = list(crawl_result.competitor_domains or ())
+    if competitor_domains:
+        with _log_stage_timer("Competitor benchmark sampling"):
+            competitor_rows, competitor_columns = await benchmark_competitor_domains(
+                client_label=crawl_result.source_label,
+                main_rows=[row.values for row in enriched_main_rows],
+                extra_rows=[row.values for row in enriched_extra_rows],
+                competitor_domains=competitor_domains,
+            )
+
     return EnrichmentResult(
         typed_main_rows=enriched_main_rows,
         typed_extra_rows=enriched_extra_rows,
         status_by_url=status_by_url,
         sitemap_url_keys=sitemap_url_keys,
+        crawl_log_entries=crawl_log.entries,
+        image_probe_by_url=image_probe_by_url,
+        competitor_benchmark_rows=competitor_rows,
+        competitor_benchmark_columns=competitor_columns,
     )

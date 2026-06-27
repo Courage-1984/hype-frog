@@ -18,7 +18,7 @@ def _resolve_crawl_engine(raw: str) -> str:
 
 
 def get_user_config() -> tuple[
-    str, int | None, int | None, list[str], str, int, int, bool
+    str, int | None, int | None, list[str], str, int, int, bool, bool
 ]:
     target_input = input("Target URL or Sitemap Path: ").strip()
     max_urls_raw = input(
@@ -39,6 +39,10 @@ def get_user_config() -> tuple[
         "Perform External Link Status Checks? [y/N, blank skip]: "
     ).strip().lower()
     check_external_link_status = external_checks_raw in {"y", "yes"}
+    og_image_checks_raw = input(
+        "Verify OG image URLs (status + dimensions)? [y/N, blank skip]: "
+    ).strip().lower()
+    check_og_images = og_image_checks_raw in {"y", "yes"}
 
     max_urls: int | None = None
     max_psi_urls: int | None = None
@@ -88,4 +92,5 @@ def get_user_config() -> tuple[
         render_wait_ms,
         selector_wait_ms,
         check_external_link_status,
+        check_og_images,
     )

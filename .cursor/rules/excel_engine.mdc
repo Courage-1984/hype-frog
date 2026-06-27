@@ -62,7 +62,19 @@ Do not inject **non-numeric strings** into columns governed by numeric condition
 
 ## New sheets
 
-When adding a sheet: update **TOC**, apply **view-state** guardrails for that sheet, run **sanitization** on written rows. Keep modular split: rows → `engine_rows.py`, I/O → `engine_io.py`, formatting → `engine_formatting.py`, invariants → `engine_guardrails.py`.
+When adding a sheet: update **TOC** (`workbook_layout.py` tab order + `engine_guardrails.friendly_toc_description`), apply **view-state** guardrails, run **sanitization** on written rows. Merged builders live in `reporter/sheets/merged_builders.py`.
+
+## Link Inventory deduplication
+
+Dedup key: `(Source URL, Target URL, Anchor Text)` in `build_link_inventory_rows`.
+
+## Main sheet conditional formatting
+
+`apply_main_sheet_heatmaps` in `conditional.py` — colour scales on health/PSI/Lighthouse/AEO columns; respect `HF_DISABLE_CONDITIONAL_FORMATTING`.
+
+## Duplicate column prevention
+
+Use `header_exists_in_worksheet` before inserting navigation headers such as **BACK TO DASHBOARD**.
 
 ## Testing touchpoints
 

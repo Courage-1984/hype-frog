@@ -210,25 +210,37 @@ def _rows_to_page_metrics(rows: list[dict[str, Any]]) -> dict[str, dict[str, flo
     return page_metrics
 
 
-def _parse_inspection_to_row_fields(payload: dict[str, Any]) -> dict[str, str | None]:
-    """Map URL Inspection JSON into extra-row string fields."""
-    result = payload.get("inspectionResult") or {}
-    idx = result.get("indexStatusResult") or {}
-    verdict = idx.get("verdict")
-    coverage_state = idx.get("coverageState")
-    google_canonical = idx.get("googleCanonical")
-    crawl_state = idx.get("pageFetchState")
-    robots_state = idx.get("robotsTxtState")
-    last_crawl = idx.get("lastCrawlTime") or idx.get("last_crawl_time")
-    last_crawl_str = str(last_crawl).strip() if last_crawl is not None else None
+def _parse_inspection_to_row_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    """Map URL Inspection JSON into extra-row fields."""
+    from hype_frog.pipeline.gsc_inspection import parse_gsc_inspection_payload
+
+    parsed = parse_gsc_inspection_payload(payload)
+    row: dict[str, Any] = {}
+    for key, value in parsed.items():
+        if key == "Days Since Last Crawl":
+            row[key] = int(value) if value is not None else None
+        elif value is None:
+            row[key] = None
+        else:
+            row[key] = str(value)
+    return row
+
+
+def _inspection_error_fields() -> dict[str, Any]:
     return {
-        "GSC Inspection Coverage": "Inspected",
-        "GSC Inspection Verdict": str(verdict) if verdict is not None else None,
-        "GSC Inspection Coverage State": str(coverage_state) if coverage_state is not None else None,
-        "GSC Inspection Google Canonical": str(google_canonical) if google_canonical is not None else None,
-        "GSC Inspection Crawl State": str(crawl_state) if crawl_state is not None else None,
-        "GSC Inspection Robots State": str(robots_state) if robots_state is not None else None,
-        "GSC Inspection Last Crawl": last_crawl_str,
+        "GSC Inspection Coverage": "Error",
+        "GSC Inspection Verdict": None,
+        "GSC Inspection Coverage State": None,
+        "GSC Inspection Google Canonical": None,
+        "GSC Inspection Crawl State": None,
+        "GSC Inspection Robots State": None,
+        "GSC Inspection Last Crawl": None,
+        "GSC Index Status": None,
+        "GSC Last Crawl Date": None,
+        "GSC Mobile Usability": None,
+        "GSC Rich Result Status": None,
+        "GSC Coverage Reason": None,
+        "Days Since Last Crawl": None,
     }
 
 
@@ -238,7 +250,7 @@ def _inspect_url_sync(
     inspection_url: str,
     conn: sqlite3.Connection,
     cache_lock: threading.Lock,
-) -> dict[str, str | None]:
+) -> dict[str, Any]:
     cached = _inspection_cache_get(conn, inspection_url)
     if cached is not None:
         return _parse_inspection_to_row_fields(cached)
@@ -251,15 +263,7 @@ def _inspect_url_sync(
         )
     except HttpError as exc:
         logger.warning("GSC URL Inspection failed for %s: %s", inspection_url, exc)
-        return {
-            "GSC Inspection Coverage": "Error",
-            "GSC Inspection Verdict": None,
-            "GSC Inspection Coverage State": None,
-            "GSC Inspection Google Canonical": None,
-            "GSC Inspection Crawl State": None,
-            "GSC Inspection Robots State": None,
-            "GSC Inspection Last Crawl": None,
-        }
+        return _inspection_error_fields()
     with cache_lock:
         _inspection_cache_put(conn, inspection_url, payload)
     return _parse_inspection_to_row_fields(payload)
@@ -358,13 +362,13 @@ def fetch_gsc_url_inspections_batch(
     service: Any,
     site_url: str,
     inspection_urls: list[str],
-) -> dict[str, dict[str, str | None]]:
+) -> dict[str, dict[str, Any]]:
     """Run URL Inspection for each URL (sequential, SQLite-cached 24h). Keys match inspection URL strings."""
     if not inspection_urls or service is None or not site_url:
         return {}
     conn = _open_inspection_cache_db()
     cache_lock = threading.Lock()
-    out: dict[str, dict[str, str | None]] = {}
+    out: dict[str, dict[str, Any]] = {}
     inspected_count = 0
     total = len(inspection_urls)
     log_every = 10

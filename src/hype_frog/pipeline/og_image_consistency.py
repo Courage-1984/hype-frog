@@ -67,13 +67,16 @@ def resolve_og_image_url(
     main_values: Mapping[str, Any] | None,
     extra_values: Mapping[str, Any] | None,
 ) -> str:
-    """Prefer extra ``OG Image``, then Main ``OG-Image``."""
+    """Prefer ``OG Image URL``, then extra ``OG Image``, then Main ``OG-Image``."""
     m = main_values or {}
     e = extra_values or {}
-    for key in ("OG Image", "OG-Image"):
-        raw = m.get(key) if key == "OG-Image" else e.get(key)
-        if raw is None and key == "OG-Image":
-            raw = m.get("OG Image")
+    for key in ("OG Image URL", "OG Image", "OG-Image"):
+        if key == "OG Image URL":
+            raw = e.get(key) or m.get(key)
+        elif key == "OG-Image":
+            raw = m.get(key)
+        else:
+            raw = e.get(key)
         text = str(raw or "").strip()
         if text:
             return text

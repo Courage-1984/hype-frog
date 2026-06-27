@@ -249,3 +249,13 @@ def test_resolve_psi_data_status_complete_with_field() -> None:
         desktop_error=None,
     )
     assert status == "Complete (Lab + Field)"
+
+
+def test_jittered_seconds_stays_within_bounds() -> None:
+    samples = [psi._jittered_seconds(2.5, 0.3) for _ in range(200)]
+    assert all(1.75 <= value <= 3.25 for value in samples)
+
+
+def test_jittered_seconds_never_negative() -> None:
+    assert psi._jittered_seconds(0.0, 0.3) == 0.0
+

@@ -6,6 +6,17 @@ from typing import Any
 from bs4 import BeautifulSoup
 
 
+def extract_json_ld_blocks(html: str) -> list[str]:
+    """Return raw JSON string content from ``application/ld+json`` script tags."""
+    soup = BeautifulSoup(html, "lxml")
+    blocks: list[str] = []
+    for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        raw = (script.string or "").strip()
+        if raw:
+            blocks.append(raw)
+    return blocks
+
+
 def parse_jsonld_summary(html: str) -> dict[str, Any]:
     soup = BeautifulSoup(html, "lxml")
     scripts = soup.find_all("script", attrs={"type": "application/ld+json"})

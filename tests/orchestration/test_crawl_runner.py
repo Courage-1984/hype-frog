@@ -140,9 +140,19 @@ def _install_runner_mocks(
         fake_create_session,
     )
 
+    stored_results: list[dict[str, Any]] = []
+
+    def _upsert_results(batch: list[Any]) -> None:
+        stored_results.extend(batch)
+
+    def _iter_results() -> Any:
+        for item in stored_results:
+            yield item
+
     cache_stub = MagicMock(name="AuditCache_stub")
-    cache_stub.upsert_results = MagicMock()
-    cache_stub.all_results = MagicMock(return_value=[])
+    cache_stub.upsert_results = _upsert_results
+    cache_stub.iter_results = _iter_results
+    cache_stub.all_results = MagicMock(return_value=list(stored_results))
     cache_stub.close = MagicMock()
     monkeypatch.setattr(
         "hype_frog.orchestration.crawl_runner.AuditCache",
@@ -536,8 +546,10 @@ async def test_execute_crawl_sitemap_seed_phase_completes_before_bfs(
     call_order = _install_runner_mocks(monkeypatch, tmp_path, link_graph=link_graph)
     monkeypatch.setenv("HF_MAX_DEPTH", "5")
 
-    async def fake_parse_sitemap(_url: str, _session: Any) -> tuple[list[str], dict[str, dict[str, Any]]]:
-        return [s1, s2], {s1: {}, s2: {}}
+    async def fake_parse_sitemap(
+        _url: str, _session: Any
+    ) -> tuple[list[str], dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+        return [s1, s2], {s1: {}, s2: {}}, {}
 
     monkeypatch.setattr(
         "hype_frog.orchestration.crawl_runner.parse_sitemap",
@@ -567,8 +579,10 @@ async def test_execute_crawl_sets_discovered_on_url_for_non_sitemap_pages(
     _ = _install_runner_mocks(monkeypatch, tmp_path, link_graph=link_graph)
     monkeypatch.setenv("HF_MAX_DEPTH", "5")
 
-    async def fake_parse_sitemap(_url: str, _session: Any) -> tuple[list[str], dict[str, dict[str, Any]]]:
-        return [s1], {s1: {}}
+    async def fake_parse_sitemap(
+        _url: str, _session: Any
+    ) -> tuple[list[str], dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+        return [s1], {s1: {}}, {}
 
     monkeypatch.setattr(
         "hype_frog.orchestration.crawl_runner.parse_sitemap",

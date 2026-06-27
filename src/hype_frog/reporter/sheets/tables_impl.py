@@ -395,6 +395,8 @@ def adjust_sheet_format(writer, sheet_name):
             "Content & AI Readiness",
             "Link Intelligence",
             "Link Inventory",
+            "Broken Link Impact",
+            "Quick Wins",
             "Issue Register",
             "Template & Duplication Risks",
         ):

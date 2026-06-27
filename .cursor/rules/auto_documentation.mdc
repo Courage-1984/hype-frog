@@ -17,9 +17,9 @@ When code changes behaviour or contracts, update the **canonical** narrative in 
 
 | Area | Canonical location |
 |------|---------------------|
-| Pipeline, BFS, AEO, intent, ROI, layers | `docs/system_architecture.md` |
-| Row shapes, Pydantic, checkpoints | `docs/data_contracts.md` |
-| Excel integrity, TOC, hub, view state | `docs/excel_reporting_standards.md` |
+| Pipeline, BFS, AEO, intent, ROI, PSI/CrUX, layers | `docs/system_architecture.md` |
+| Row shapes, Pydantic, checkpoints, IssueRule scope, GSC null semantics | `docs/data_contracts.md` |
+| Excel integrity, TOC, hub, view state, merged sheets, Main CF | `docs/excel_reporting_standards.md` |
 
 Cross-link with relative paths; stay **vendor-neutral** in generated prose (no third-party marketing names).
 

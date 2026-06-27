@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import random
 import re
 import sqlite3
 import threading
@@ -14,6 +15,11 @@ from urllib.parse import quote, urlparse
 
 import aiohttp
 
+from hype_frog.config import (
+    get_psi_base_delay_seconds,
+    get_psi_jitter_fraction,
+    get_psi_strategy_gap_seconds,
+)
 from hype_frog.core import get_logger
 from hype_frog.core.url_normalization import normalize_url
 
@@ -26,7 +32,6 @@ _MAX_RETRY_ATTEMPTS = 6
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 _INITIAL_BACKOFF_S = 1.0
 _MAX_BACKOFF_S = 60.0
-_STRATEGY_GAP_S = 0.35
 _MAX_CLIENT_ERROR_RETRIES = 3
 
 _API_KEY_ERROR_RE = re.compile(
@@ -38,6 +43,42 @@ _RETRYABLE_ERROR_RE = re.compile(
     r"lighthouse.*error|could not load|chrome crashed|renderer|dns|socket",
     re.IGNORECASE,
 )
+
+
+def _jittered_seconds(base_seconds: float, jitter_fraction: float) -> float:
+    """Return ``base_seconds`` ± ``jitter_fraction`` × ``base_seconds``."""
+    jitter = random.uniform(-jitter_fraction, jitter_fraction) * base_seconds
+    return max(0.0, base_seconds + jitter)
+
+
+async def _jittered_delay(
+    base_seconds: float | None = None,
+    jitter_fraction: float | None = None,
+) -> None:
+    """Wait for a jittered interval (defaults to PSI base delay settings)."""
+    base = base_seconds if base_seconds is not None else get_psi_base_delay_seconds()
+    fraction = jitter_fraction if jitter_fraction is not None else get_psi_jitter_fraction()
+    await asyncio.sleep(_jittered_seconds(base, fraction))
+
+
+class _PsiRequestPacer:
+    """Serialises minimum spacing between outbound PSI HTTP requests."""
+
+    def __init__(self, base_seconds: float, jitter_fraction: float) -> None:
+        self._base_seconds = base_seconds
+        self._jitter_fraction = jitter_fraction
+        self._lock = asyncio.Lock()
+        self._last_request_at: float | None = None
+
+    async def wait(self) -> None:
+        async with self._lock:
+            if self._last_request_at is not None:
+                elapsed = time.monotonic() - self._last_request_at
+                target = _jittered_seconds(self._base_seconds, self._jitter_fraction)
+                remaining = target - elapsed
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
+            self._last_request_at = time.monotonic()
 
 
 def get_psi_api_key() -> str | None:
@@ -329,6 +370,51 @@ def _extract_lighthouse_data(
         out["Uses Modern Image Formats"] = webp_score == 100 or modern_score == 100
 
     return out
+
+
+def _extract_psi_network_payload(
+    raw_payload: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Extract Lighthouse network-requests and render-blocking URLs for A2."""
+    lh = raw_payload.get("lighthouseResult")
+    if not isinstance(lh, dict):
+        return [], []
+    audits = lh.get("audits", {})
+    if not isinstance(audits, dict):
+        return [], []
+
+    net_req = audits.get("network-requests", {})
+    raw_items: list[Any] = []
+    if isinstance(net_req, dict):
+        details = net_req.get("details") or {}
+        if isinstance(details, dict):
+            raw_items = details.get("items") or []
+
+    items: list[dict[str, Any]] = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url") or "").strip()
+        if not url:
+            continue
+        items.append(
+            {
+                "url": url,
+                "transferSize": item.get("transferSize"),
+                "resourceType": item.get("resourceType"),
+            }
+        )
+
+    blocking: list[str] = []
+    rb_audit = audits.get("render-blocking-resources", {})
+    if isinstance(rb_audit, dict):
+        rb_details = rb_audit.get("details") or {}
+        if isinstance(rb_details, dict):
+            for rb_item in rb_details.get("items") or []:
+                if isinstance(rb_item, dict) and rb_item.get("url"):
+                    blocking.append(str(rb_item["url"]))
+
+    return items, blocking
 
 
 def _apply_lighthouse_extraction(
@@ -661,6 +747,8 @@ async def _fetch_strategy_raw(
     api_key: str,
     strategy: str,
     abort_state: _BatchAbortState,
+    *,
+    pacer: _PsiRequestPacer | None = None,
 ) -> tuple[dict[str, Any], str | None]:
     if abort_state.api_key_rejected:
         return {}, abort_state.reject_reason or "PSI API key rejected"
@@ -680,6 +768,8 @@ async def _fetch_strategy_raw(
         payload: dict[str, Any] | None = None
         try:
             async with semaphore:
+                if pacer is not None:
+                    await pacer.wait()
                 async with session.get(
                     endpoint,
                     timeout=aiohttp.ClientTimeout(total=120),
@@ -715,7 +805,7 @@ async def _fetch_strategy_raw(
                                 last_error,
                             )
                             return {}, last_error
-                        await asyncio.sleep(delay)
+                        await _jittered_delay(delay, get_psi_jitter_fraction())
                         delay = min(delay * 2.0, _MAX_BACKOFF_S)
                         continue
 
@@ -744,7 +834,7 @@ async def _fetch_strategy_raw(
                         if attempt + 1 >= _MAX_RETRY_ATTEMPTS:
                             logger.warning("PSI malformed JSON for %s (%s).", strategy, url)
                             return {}, last_error
-                        await asyncio.sleep(delay)
+                        await _jittered_delay(delay, get_psi_jitter_fraction())
                         delay = min(delay * 2.0, _MAX_BACKOFF_S)
                         continue
 
@@ -754,7 +844,7 @@ async def _fetch_strategy_raw(
             if attempt + 1 >= _MAX_RETRY_ATTEMPTS:
                 logger.warning("PSI request failed for %s (%s): %s", strategy, url, exc)
                 return {}, last_error
-            await asyncio.sleep(delay)
+            await _jittered_delay(delay, get_psi_jitter_fraction())
             delay = min(delay * 2.0, _MAX_BACKOFF_S)
             continue
 
@@ -891,6 +981,10 @@ def _merge_url_results(
         mobile_ok=mobile_ok,
         desktop_ok=desktop_ok,
     )
+    network_source = mobile_raw if mobile_ok else desktop_raw if desktop_ok else {}
+    network_items, blocking_urls = _extract_psi_network_payload(network_source)
+    merged_flat["PSI Network Items"] = network_items
+    merged_flat["PSI Render Blocking URLs"] = blocking_urls
     return merged_flat
 
 
@@ -958,6 +1052,7 @@ async def fetch_psi_metrics_batch(
 
     conn = _open_cache_db()
     cache_lock = threading.Lock()
+    pacer = _PsiRequestPacer(get_psi_base_delay_seconds(), get_psi_jitter_fraction())
     try:
         logger.info(
             "PSI batch started: %s URLs (concurrent_requests=%s, cache_ttl=%sh).",
@@ -988,9 +1083,11 @@ async def fetch_psi_metrics_batch(
                     api_key,
                     "mobile",
                     abort_state,
+                    pacer=pacer,
                 )
-                if _STRATEGY_GAP_S > 0:
-                    await asyncio.sleep(_STRATEGY_GAP_S)
+                strategy_gap = get_psi_strategy_gap_seconds()
+                if strategy_gap > 0:
+                    await _jittered_delay(strategy_gap, get_psi_jitter_fraction())
                 desktop_raw, desktop_error = await _fetch_strategy_raw(
                     session,
                     semaphore,
@@ -1000,6 +1097,7 @@ async def fetch_psi_metrics_batch(
                     api_key,
                     "desktop",
                     abort_state,
+                    pacer=pacer,
                 )
                 mobile_ok = _strategy_ok(mobile_raw)
                 desktop_ok = _strategy_ok(desktop_raw)

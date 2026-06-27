@@ -25,6 +25,7 @@ class HttpFetchResult(TypedDict):
     final_url: str | None
     response_headers: dict[str, str]
     redirect_hops: list[str]
+    redirect_hop_details: list[dict[str, int | str]]
     html: str | None
     ttfb_ms: float | None
     total_request_ms: float | None
@@ -637,11 +638,16 @@ async def fetch_http(
                 content_type = (response.headers.get("Content-Type", "") or "").lower()
                 if status == 200 and "text/html" in content_type:
                     html = await response.text()
+                hop_details = [
+                    {"url": str(hop.url), "status": int(hop.status)}
+                    for hop in response.history
+                ]
                 return {
                     "status_code": status,
                     "final_url": str(response.url),
                     "response_headers": headers,
                     "redirect_hops": [str(h.url) for h in response.history],
+                    "redirect_hop_details": hop_details,
                     "html": html,
                     "ttfb_ms": round((time.time() - request_start) * 1000, 2),
                     "total_request_ms": round((time.time() - request_start) * 1000, 2),
@@ -667,6 +673,7 @@ async def fetch_http(
                 "final_url": None,
                 "response_headers": {},
                 "redirect_hops": [],
+                "redirect_hop_details": [],
                 "html": None,
                 "ttfb_ms": None,
                 "total_request_ms": None,
@@ -692,6 +699,7 @@ async def fetch_http(
                 "final_url": None,
                 "response_headers": {},
                 "redirect_hops": [],
+                "redirect_hop_details": [],
                 "html": None,
                 "ttfb_ms": None,
                 "total_request_ms": None,
@@ -703,6 +711,7 @@ async def fetch_http(
                 "final_url": None,
                 "response_headers": {},
                 "redirect_hops": [],
+                "redirect_hop_details": [],
                 "html": None,
                 "ttfb_ms": None,
                 "total_request_ms": None,
@@ -714,6 +723,7 @@ async def fetch_http(
         "final_url": None,
         "response_headers": {},
         "redirect_hops": [],
+        "redirect_hop_details": [],
         "html": None,
         "ttfb_ms": None,
         "total_request_ms": None,

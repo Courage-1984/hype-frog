@@ -1,0 +1,22 @@
+{
+  "valid_faqpage": {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is SEO?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Search engine optimisation improves visibility in organic search results."
+        }
+      }
+    ]
+  },
+  "invalid_faqpage_missing_main_entity": {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "name": "FAQ without mainEntity"
+  },
+  "parse_error": "{ not valid json "
+}

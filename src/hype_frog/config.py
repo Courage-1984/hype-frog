@@ -6,6 +6,64 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from hype_frog.config_defaults import (
+    CHECKPOINT_EVERY_N_PAGES,
+    CONNECT_TIMEOUT_SECONDS,
+    CONTENT_AGE_AGEING_DAYS,
+    CONTENT_AGE_RECENT_DAYS,
+    CONTENT_AGE_STALE_DAYS,
+    CWV_INP_WARNING_MS,
+    CWV_LCP_CRITICAL_THRESHOLD,
+    CWV_LCP_WARNING_THRESHOLD,
+    DEFAULT_EFFORT_BY_SEVERITY,
+    DEFAULT_OWNER_BY_SEVERITY,
+    DELAY_BETWEEN_REQUESTS,
+    EEAT_LOW_SCORE_THRESHOLD,
+    EXCLUDED_CMS_ACTION_QUERY_PARAMS,
+    HTTP_CONNECTOR_KEEPALIVE_TIMEOUT,
+    HTTP_CONNECTOR_LIMIT,
+    HTTP_CONNECTOR_LIMIT_PER_HOST,
+    LAB_TBT_CRITICAL_MS,
+    LAB_TBT_WARNING_MS,
+    MAX_RETRIES,
+    MAX_WORKERS,
+    NEAR_DUPLICATE_SIMHASH_DISTANCE,
+    OUTPUT_FILENAME,
+    PLAYWRIGHT_MAX_SESSIONS,
+    PSI_BASE_DELAY_SECONDS,
+    PSI_JITTER_FRACTION,
+    PSI_STRATEGY_GAP_SECONDS,
+    QUICK_WINS_MAX_EFFORT_HOURS,
+    QUICK_WINS_MAX_RESULTS,
+    READ_TIMEOUT_SECONDS,
+    REQUEST_JITTER_SECONDS,
+    RETRY_BACKOFF_FACTOR,
+    RETRY_BASE_DELAY_SECONDS,
+    RETRY_MAX_DELAY_SECONDS,
+    RETRYABLE_STATUS_CODES,
+    THIN_CONTENT_WORD_THRESHOLD,
+    TIMEOUT_SECONDS,
+    apply_runtime_override,
+    get_content_age_ageing_days,
+    get_content_age_recent_days,
+    get_content_age_stale_days,
+    get_cwv_inp_warning_ms,
+    get_cwv_lcp_critical_threshold,
+    get_cwv_lcp_warning_threshold,
+    get_delay_between_requests,
+    get_high_third_party_script_count,
+    get_lab_tbt_critical_ms,
+    get_near_duplicate_simhash_distance,
+    get_psi_base_delay_seconds,
+    get_psi_jitter_fraction,
+    get_psi_strategy_gap_seconds,
+    get_quick_wins_max_effort_hours,
+    get_quick_wins_max_results,
+    get_request_jitter_seconds,
+    get_thin_content_word_threshold,
+)
+from hype_frog.config_loader import apply_user_config, load_user_config
+
 # --- Repository layout (config.py lives at src/hype_frog/config.py) ---
 PACKAGE_ROOT: Path = Path(__file__).resolve().parent
 PROJECT_ROOT: Path = PACKAGE_ROOT.parent.parent
@@ -18,50 +76,6 @@ REPORTS_ARCHIVE_DIR: Path = PROJECT_ROOT / "reports" / "archive"
 
 
 def load_environment() -> None:
-    """Load `.env` from project root (no-op if missing)."""
+    """Load ``.env`` and optional ``hype_frog.config.yaml`` from the project root."""
     load_dotenv(PROJECT_ROOT / ".env")
-
-
-# --- Crawl / HTTP defaults (parity with legacy root config.py) ---
-MAX_WORKERS: int = 3
-DELAY_BETWEEN_REQUESTS: float = 2.5
-REQUEST_JITTER_SECONDS: float = 0.6
-TIMEOUT_SECONDS: int = 20
-CONNECT_TIMEOUT_SECONDS: int = 8
-READ_TIMEOUT_SECONDS: int = 20
-HTTP_CONNECTOR_LIMIT: int = 100
-HTTP_CONNECTOR_LIMIT_PER_HOST: int = 20
-HTTP_CONNECTOR_KEEPALIVE_TIMEOUT: int = 30
-PLAYWRIGHT_MAX_SESSIONS: int = 3
-MAX_RETRIES: int = 3
-RETRY_BASE_DELAY_SECONDS: float = 2.0
-RETRY_BACKOFF_FACTOR: float = 2.0
-RETRY_MAX_DELAY_SECONDS: float = 20.0
-RETRYABLE_STATUS_CODES: set[int] = {408, 425, 429, 500, 502, 503, 504}
-OUTPUT_FILENAME: str = "seo_audit_report.xlsx"
-
-# CMS / WooCommerce action query parameters — blocked from crawl queue (see crawl_runner).
-# Safe params such as page, lang, paged, orderby are intentionally omitted.
-EXCLUDED_CMS_ACTION_QUERY_PARAMS: frozenset[str] = frozenset(
-    {
-        "add-to-cart",
-        "removed_item",
-        "undo_item",
-        "wc-ajax",
-        "add_to_wishlist",
-        "share_token",
-        "preview_id",
-        "preview_nonce",
-        "preview",
-    }
-)
-DEFAULT_OWNER_BY_SEVERITY: dict[str, str] = {
-    "Critical": "Dev",
-    "Warning": "Copy Writer",
-    "Observation": "Copy Writer",
-}
-DEFAULT_EFFORT_BY_SEVERITY: dict[str, str] = {
-    "Critical": "M",
-    "Warning": "S",
-    "Observation": "S",
-}
+    apply_user_config(PROJECT_ROOT)

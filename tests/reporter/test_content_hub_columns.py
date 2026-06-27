@@ -28,8 +28,10 @@ def test_content_hub_operational_prefix_and_formula_letters() -> None:
     assert content_hub_column_letter("Title Health") == "L"
     assert content_hub_column_letter("On-Page Optimization Score") == "B"
     assert content_hub_column_letter("OG Image Health") == "AC"
-    assert content_hub_column_letter("Entity Density (%)") == "AF"
-    assert content_hub_column_letter("Semantic AEO Score") == "AI"
+    assert content_hub_column_letter("Recommended Action") == "AF"
+    assert content_hub_column_letter("Priority Reason") == "AG"
+    assert content_hub_column_letter("Entity Density (%)") == "AH"
+    assert content_hub_column_letter("Semantic AEO Score") == "AK"
 
 
 def test_hub_display_text_strips_zero_width_space() -> None:

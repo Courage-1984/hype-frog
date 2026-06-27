@@ -7,15 +7,17 @@ alwaysApply: true
 
 ## Module boundaries
 
-Preserve separation. Dependency direction: **core** and **config** are foundations; **crawler** and **extractors** consume them; **pipeline** orchestrates enrichment and export; **rules** encodes scoring and issue logic; **reporter** builds workbook output; **checkpoint** persists resume state.
+Preserve separation. Dependency direction: **core** and **config** are foundations; **crawler** and **extractors** consume them; **validators** and **analysis** enrich row dicts; **pipeline** orchestrates enrichment and export; **rules** encodes scoring and issue logic; **reporter** builds workbook output; **checkpoint** persists resume state.
 
-- `crawler/` — HTTP sessions, fetching, optional rendered capture, sitemap and auxiliary integrations.
+- `crawler/` — HTTP sessions, fetching, optional rendered capture, sitemap, PSI/GSC integrations.
 - `extractors/` — HTML and metadata parsing; no direct workbook writing.
-- `pipeline/` — Row assembly, sanitization helpers, scoring glue, export paths shared with the CLI entrypoint.
-- `rules/` — Issue definitions, scoring, stable identifiers.
+- `validators/` — JSON-LD schema validation (`schema_validator.py`).
+- `analysis/` — Post-crawl domain passes (canonical/hreflang chains, link equity, third-party scripts, snippets, topical authority, similarity, competitor benchmarks, delta).
+- `pipeline/` — Row assembly, sanitization helpers, scoring glue, graph engine, export paths shared with the CLI entrypoint.
+- `rules/` — `IssueRule` definitions, scoring, stable identifiers, playbook entries.
 - `src/hype_frog/reporter/` — Spreadsheet construction, tabs, conditional formats, navigation, view state.
 - `checkpoint/` — Durable crawl progress for long runs.
-- `core/` — Logging, CLI helpers, URL normalization shared across layers.
+- `core/` — Logging, CLI helpers, URL normalization, Pydantic contracts shared across layers.
 
 ## Concurrency and entrypoint
 
@@ -32,8 +34,8 @@ The primary entrypoint drives bounded **asyncio** concurrency over URL lists. Ne
 1. Discover URLs (manual URL, sitemap, or capped list).
 2. Fetch per URL (fast HTTP and/or rendered path per configuration).
 3. Normalize keys and merge into structured row dictionaries.
-4. Enrich with internal-link intelligence and optional external metric batches.
-5. Apply rules and scoring; emit **main** and **extra** row shapes.
+4. Enrich with internal-link intelligence, PSI/GSC batches, canonical/robots/hreflang/equity/snippet passes (`analysis/`), and optional image/OG probes.
+5. Apply rules and scoring; emit **main** and **extra** row shapes; merge to Main via `pipeline/assemble.py`.
 6. Export via sanitized DataFrames and openpyxl post-processing (freeze panes, TOC, validation).
 
 ## Historical and archive material

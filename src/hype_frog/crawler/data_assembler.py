@@ -7,6 +7,7 @@ from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
+from hype_frog.analysis.hreflang_audit import extract_hreflang_from_soup
 from hype_frog.core import get_logger
 from hype_frog.core.link_constants import GENERIC_ANCHOR_TERMS
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
@@ -22,14 +23,19 @@ from hype_frog.core.url_normalization import normalize_url
 from hype_frog.extractors import (
     extract_aeo_snippets,
     extract_heading_outline,
+    extract_json_ld_blocks,
     parse_html_signals,
     parse_jsonld_summary,
     resolve_indexability_directive,
 )
+from hype_frog.extractors.eeat import extract_eeat_signals
+from hype_frog.extractors.freshness import extract_freshness_signals
+from hype_frog.extractors.og_social import extract_og_social_fields
 from hype_frog.extractors.semantic_engine import (
     SemanticAnalyzer,
     get_default_analyzer,
 )
+from hype_frog.validators.schema_validator import flatten_to_row, validate_schemas_from_html
 
 logger = get_logger(__name__)
 
@@ -60,57 +66,6 @@ def _has_truthy_header(value: object) -> bool:
     if isinstance(value, str):
         return bool(value.strip())
     return bool(value)
-
-
-def _extract_hreflang_signals(
-    soup: BeautifulSoup, resolved_url: str
-) -> tuple[str | None, int, bool, bool]:
-    """Return (joined_signals, count, self_referenced, x_default_present).
-
-    Reads ``<link rel="alternate" hreflang="...">`` tags from the parsed
-    document and joins them as ``"lang: url; lang: url"`` for the
-    workbook. No additional network requests are issued — this is
-    purely on-page extraction per the Sprint 4 brief.
-    """
-    pairs: list[str] = []
-    count = 0
-    self_referenced = False
-    x_default = False
-    resolved_norm = normalize_url_key(resolved_url)
-    seen: set[tuple[str, str]] = set()
-    try:
-        candidates = soup.find_all(
-            "link", attrs={"rel": True, "hreflang": True}
-        )
-    except Exception:
-        return None, 0, False, False
-    for tag in candidates:
-        rel_tokens = tag.get("rel") or []
-        if isinstance(rel_tokens, str):
-            rel_tokens = [rel_tokens]
-        if not any("alternate" in str(t).lower() for t in rel_tokens):
-            continue
-        lang = (tag.get("hreflang") or "").strip()
-        href = (tag.get("href") or "").strip()
-        if not lang or not href:
-            continue
-        try:
-            absolute = normalize_url_key(urljoin(resolved_url, href))
-        except Exception:
-            absolute = href
-        key = (lang.lower(), absolute)
-        if key in seen:
-            continue
-        seen.add(key)
-        count += 1
-        pairs.append(f"{lang}: {absolute}")
-        if lang.lower() == "x-default":
-            x_default = True
-        if absolute == resolved_norm:
-            self_referenced = True
-    if not pairs:
-        return None, 0, False, False
-    return "; ".join(pairs), count, self_referenced, x_default
 
 
 # Open Graph / social preview image: accept common CMS variants, JSON-LD, and relative URLs.
@@ -322,6 +277,7 @@ def assemble_from_html(
     resolved_url: str,
     semantic_analyzer: SemanticAnalyzer | None = None,
     depth: int = 0,
+    response_headers: dict[str, str] | None = None,
 ) -> None:
     """Populate row payloads from rendered HTML.
 
@@ -397,34 +353,29 @@ def assemble_from_html(
     # Sprint 4 — on-page hreflang cluster. Populates the long-empty
     # ``Hreflang Present`` / ``Hreflang Count`` columns alongside the
     # new ``Hreflang Signals`` workbook field. No extra network fetch.
-    hreflang_signals, hreflang_count, hreflang_self, x_default_present = (
-        _extract_hreflang_signals(soup, resolved_url)
+    hreflang = extract_hreflang_from_soup(soup, resolved_url)
+    extra_values["Hreflang Signals"] = hreflang.signals
+    extra_values["Hreflang Present"] = hreflang.count > 0
+    extra_values["Hreflang Count"] = hreflang.count
+    extra_values["Hreflang Self Reference"] = hreflang.self_referenced
+    extra_values["x-default Present"] = hreflang.x_default_present
+    extra_values["Hreflang Declared Languages"] = hreflang.declared_languages
+    extra_values["Hreflang Alternate URLs"] = hreflang.alternate_urls
+    extra_values["Hreflang Code Valid"] = hreflang.codes_valid
+    extra_values["Hreflang Invalid Codes"] = hreflang.invalid_codes
+    extra_values["Hreflang Reciprocal Status"] = (
+        "Not Declared" if hreflang.count == 0 else "Pending Cluster Check"
     )
-    extra_values["Hreflang Signals"] = hreflang_signals
-    extra_values["Hreflang Present"] = hreflang_count > 0
-    extra_values["Hreflang Count"] = hreflang_count
-    extra_values["Hreflang Self Reference"] = hreflang_self
-    extra_values["x-default Present"] = x_default_present
 
-    og_title_meta = soup.find("meta", attrs={"property": "og:title"})
-    og_desc_meta = soup.find("meta", attrs={"property": "og:description"})
-    twitter_card_meta = soup.find("meta", attrs={"name": "twitter:card"})
-    extra_values["OG Title"] = (
-        (og_title_meta.get("content") or "").strip() if og_title_meta else None
+    og_image_url = resolve_best_og_image_url(soup, resolved_url)
+    og_social = extract_og_social_fields(
+        soup,
+        resolved_url=resolved_url,
+        canonical_url=extra_values.get("Canonical URL"),
+        og_image_url=og_image_url,
     )
-    extra_values["OG Description"] = (
-        (og_desc_meta.get("content") or "").strip() if og_desc_meta else None
-    )
-    extra_values["Twitter Card Type"] = (
-        (twitter_card_meta.get("content") or "").strip() if twitter_card_meta else None
-    )
-    og_image_url = resolve_best_og_image_url(soup, resolved_url) or ""
-    if og_image_url:
-        extra_values["OG Image"] = og_image_url
-        main_values["OG-Image"] = og_image_url
-    extra_values["Open Graph Complete"] = bool(
-        extra_values["OG Title"] and extra_values["OG Description"] and extra_values["OG Image"]
-    )
+    extra_values.update(og_social["extra"])
+    main_values.update(og_social["main"])
 
     heading_outline = extract_heading_outline(html)
     h1_texts = list(heading_outline.headings_by_level.get(1, ()))
@@ -459,6 +410,7 @@ def assemble_from_html(
         extra_values["Current Page Copy Snippet"] = (
             (body_text[:250] + "...") if len(body_text) > 250 else body_text
         )
+        extra_values["Body Text Excerpt"] = body_text[:2000]
         words = body_text.split()
         word_count = len(words)
         main_values["Word Count (Body)"] = word_count
@@ -590,13 +542,23 @@ def assemble_from_html(
     images = soup.find_all("img")
     extra_values["Image Count"] = len(images)
     image_urls: list[str] = []
+    content_images: list[dict[str, str]] = []
     missing_alt = 0
     for img in images:
         src = (img.get("src") or "").strip()
         if src:
             image_urls.append(src)
+            resolved_src = urljoin(resolved_url, src)
+            content_images.append(
+                {
+                    "url": resolved_src,
+                    "alt": str(img.get("alt") or "").strip(),
+                }
+            )
         if not (img.get("alt") or "").strip():
             missing_alt += 1
+    extra_values["Content Images"] = content_images
+    extra_values["Has HTML Table"] = bool(soup.find("table"))
     unique_images = sorted(set(image_urls))
     extra_values["Images"] = " | ".join(unique_images) if unique_images else None
     extra_values["Images Missing Alt"] = missing_alt
@@ -620,19 +582,33 @@ def assemble_from_html(
 
     schema_summary = parse_jsonld_summary(html)
     schema_types = schema_summary.get("schema_types") or []
-    extra_values["Schema Types Found"] = " | ".join(schema_types) if schema_types else None
-    extra_values["Schema Types Count"] = int(schema_summary.get("schema_types_count") or 0)
-    extra_values["Schema Parse Errors"] = int(schema_summary.get("schema_parse_errors") or 0)
-    main_values["Has Valid JSON-LD"] = (
-        extra_values["Schema Types Count"] > 0 and extra_values["Schema Parse Errors"] == 0
+    json_ld_blocks = extract_json_ld_blocks(html)
+    schema_result = validate_schemas_from_html(resolved_url, json_ld_blocks)
+    schema_flat = flatten_to_row(schema_result)
+    extra_values.update(schema_flat)
+    parse_error_count = max(
+        int(schema_summary.get("schema_parse_errors") or 0),
+        len(schema_result.parse_errors),
     )
+    extra_values["Schema Parse Errors"] = parse_error_count
+    if schema_result.types_found:
+        extra_values["Schema Types Found"] = ", ".join(schema_result.types_found)
+    elif schema_types:
+        extra_values["Schema Types Found"] = " | ".join(schema_types)
+    extra_values["Schema Types Count"] = len(schema_result.types_found) or int(
+        schema_summary.get("schema_types_count") or 0
+    )
+    main_values["Has Valid JSON-LD"] = (
+        schema_result.has_any_schema and schema_result.is_fully_valid
+    )
+    all_schema_types = schema_result.types_found or schema_types
     extra_values["QAPage/FAQ Schema Present"] = any(
-        t.lower() in {"faqpage", "qapage"} for t in schema_types
+        t.lower() in {"faqpage", "qapage"} for t in all_schema_types
     )
     extra_values["Speakable Schema Present"] = any(
-        "speakable" in t.lower() for t in schema_types
+        "speakable" in t.lower() for t in all_schema_types
     )
-    extra_values["HowTo Signal"] = any(t.lower() == "howto" for t in schema_types)
+    extra_values["HowTo Signal"] = any(t.lower() == "howto" for t in all_schema_types)
     extra_values["List/Table Answer Signal"] = bool(has_list or has_table)
     extra_values["Definition Signal"] = bool(
         extra_values.get("Answer Block Detected (First 60 Words)")
@@ -712,6 +688,13 @@ def assemble_from_html(
         )
     else:
         extra_values["Anchor Text Diversity"] = "0 unique / 0 total"
+
+    page_text = soup.get_text(" ", strip=True) or ""
+    extra_values.update(
+        extract_eeat_signals(soup=soup, page_url=resolved_url, page_text=page_text)
+    )
+    extract_freshness_signals(response_headers or {}, soup, extra_values)
+
 
 def finalize_row_state(
     main_data: MainRowPayload,

@@ -7,7 +7,7 @@ from .page import (
     parse_html_signals,
 )
 from .robots import resolve_indexability_directive
-from .schema import parse_jsonld_summary
+from .schema import extract_json_ld_blocks, parse_jsonld_summary
 
 __all__ = [
     "HeadingOutline",
@@ -17,5 +17,6 @@ __all__ = [
     "has_valid_hreflang_reciprocity",
     "extract_aeo_snippets",
     "resolve_indexability_directive",
+    "extract_json_ld_blocks",
     "parse_jsonld_summary",
 ]

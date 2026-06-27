@@ -699,24 +699,27 @@ When scheduling Cursor sessions beyond the Top 8, this is the recommended order:
 | 6 | B1 — Canonical chain tracing | Directly related to redirect chains |
 | 7 | B4 — GSC Coverage API | Makes indexability data authoritative |
 | 8 | D1 — Memory management | Required before using on enterprise sites |
-| 9 | A2 — Third-party script inventory | Performance narrative for clients |
-| 10 | B2 — Internal link equity | Strategic SEO value |
-| 11 | C2 — PDF export | Client-facing deliverable format |
-| 12 | A4 — Broken image detection | WordPress client cleanup |
-| 13 | D2 — LLM as post-crawl pass | Cost and reliability improvement |
 | 14 | A5 — robots.txt per-URL mapping | Diagnostic completeness |
-| 15 | D3 — PSI jitter | Production robustness |
-| 16 | C1 — Issue Register improvements | Ongoing client relationship management |
-| 17 | D6 — Config centralisation | Developer experience |
 | 18 | D7 — Crawl log | Diagnostic capability |
-| 19 | B3 — Snippet opportunities | Strategic content value |
-| 20 | B5 — Competitor benchmarking | Pitch and retention value |
+| 15 | D3 — PSI jitter | Production robustness |
 | 21 | D8 — Dependency pinning | Production reliability |
-| 22 | A6 — Hreflang | International clients only |
+| 17 | D6 — Config centralisation | Developer experience |
+| 10 | B2 — Internal link equity | Strategic SEO value |
+| 19 | B3 — Snippet opportunities | Strategic content value |
+| 12 | A4 — Broken, wrong, and large image detection, validation, propery extraction and inventory with analysis | WordPress client cleanup |
+| 9 | A2 — Third-party script inventory | Performance narrative for clients |
+| 16 | C1 — Issue Register improvements | Ongoing client relationship management |
 | 23 | B6 — Topical authority | Advanced SEO |
 | 24 | C5 — Sitemap QA enhancement | Polish |
-| 25 | C6 — Playbook enrichment | Client education |
 | 26 | C3 — Content Hub recommendations | Nice to have |
+| 11 | C2 — PDF export | Client-facing deliverable format |
+| 22 | A6 — Hreflang | International clients only |
+| 25 | C6 — Playbook enrichment | Client education |
+| 20 | B5 — Competitor benchmarking | Pitch and retention value |
+
+
+| 13 | D2 — LLM as post-crawl pass | Cost and reliability improvement |
+
 
 ---
 

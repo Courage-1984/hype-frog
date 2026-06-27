@@ -805,6 +805,8 @@ _MERGED_TAB_NAMES: frozenset[str] = frozenset(
         "Content & AI Readiness",
         "Link Intelligence",
         "Link Inventory",
+        "Broken Link Impact",
+        "Quick Wins",
         "Issue Register",
         "Template & Duplication Risks",
     }
@@ -829,6 +831,8 @@ _DATA_BAR_HEADERS: tuple[str, ...] = (
     "Internal PageRank",
     "Internal Links Count",
     "Redirect Chain Length",
+    "Priority Score",
+    "Inbound Link Count",
 )
 
 
@@ -1000,6 +1004,31 @@ def apply_merged_tabs_conditional_formatting(
             end_row,
         )
     elif sheet_name == "Issue Register":
+        days_col = headers.get("Days Open")
+        if days_col:
+            days_letter = get_column_letter(days_col)
+            days_range = f"{days_letter}{start_row}:{days_letter}{end_row}"
+            worksheet.conditional_formatting.add(
+                days_range,
+                CellIsRule(
+                    operator="greaterThan",
+                    formula=["60"],
+                    fill=PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+                    font=Font(bold=True, color="9C0006"),
+                ),
+            )
+            worksheet.conditional_formatting.add(
+                days_range,
+                CellIsRule(
+                    operator="between",
+                    formula=["31", "60"],
+                    fill=PatternFill(start_color="FFEB84", end_color="FFEB84", fill_type="solid"),
+                ),
+            )
+        status_col = headers.get("Status")
+        if status_col and worksheet.max_row >= 2:
+            last_col = get_column_letter(worksheet.max_column)
+            worksheet.auto_filter.ref = f"A1:{last_col}{worksheet.max_row}"
         _add_text_semantic_highlights(
             worksheet,
             headers,
@@ -1015,14 +1044,52 @@ def apply_merged_tabs_conditional_formatting(
             start_row,
             end_row,
         )
+    elif sheet_name == "Quick Wins":
+        effort_col = headers.get("Effort (hrs)")
+        if effort_col:
+            effort_letter = get_column_letter(effort_col)
+            effort_range = f"{effort_letter}{start_row}:{effort_letter}{end_row}"
+            worksheet.conditional_formatting.add(
+                effort_range,
+                CellIsRule(
+                    operator="lessThanOrEqual",
+                    formula=["2"],
+                    fill=PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
+                ),
+            )
+            worksheet.conditional_formatting.add(
+                effort_range,
+                CellIsRule(
+                    operator="between",
+                    formula=["2.01", "4"],
+                    fill=PatternFill(start_color="FFEB84", end_color="FFEB84", fill_type="solid"),
+                ),
+            )
+        _add_text_semantic_highlights(
+            worksheet,
+            headers,
+            ("Severity",),
+            start_row,
+            end_row,
+        )
+    elif sheet_name == "Broken Link Impact":
+        status_col = headers.get("Status Code")
+        if status_col:
+            status_letter = get_column_letter(status_col)
+            status_range = f"{status_letter}{start_row}:{status_letter}{end_row}"
+            worksheet.conditional_formatting.add(
+                status_range,
+                CellIsRule(
+                    operator="greaterThanOrEqual",
+                    formula=["400"],
+                    fill=PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+                    font=Font(bold=True, color="9C0006"),
+                ),
+            )
 
 
 def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
-    """Apply main-sheet heatmaps for key SEO and content quality metrics.
-
-    Args:
-        worksheet: Main worksheet where heatmaps should be added.
-    """
+    """Apply traffic-light and data-bar formatting to Main sheet key columns."""
     if DISABLE_CONDITIONAL_FORMATTING:
         return
     if worksheet.max_row <= 1:
@@ -1035,41 +1102,194 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
 
     headers = header_index(worksheet)
 
-    seo_health_col = headers.get("SEO Health Score")
-    if seo_health_col:
-        seo_col_letter = get_column_letter(seo_health_col)
-        seo_range = f"{seo_col_letter}{start_row}:{seo_col_letter}{end_row}"
+    def col_range(col_name: str) -> str | None:
+        col_idx = headers.get(col_name)
+        if not col_idx:
+            return None
+        letter = get_column_letter(col_idx)
+        return f"{letter}{start_row}:{letter}{end_row}"
+
+    red_green_scale = ColorScaleRule(
+        start_type="num",
+        start_value=0,
+        start_color="FFC7CE",
+        mid_type="num",
+        mid_value=50,
+        mid_color="FFCC99",
+        end_type="num",
+        end_value=100,
+        end_color="C6EFCE",
+    )
+
+    for col_name in (
+        "SEO Health Score",
+        "Mobile PSI Score",
+        "Desktop PSI Score",
+        "Lighthouse Performance (Mobile)",
+        "Lighthouse Accessibility (Mobile)",
+        "Lighthouse Best Practices (Mobile)",
+        "Lighthouse SEO Score (Mobile)",
+        "AEO Readiness Score",
+    ):
+        rng = col_range(col_name)
+        if rng:
+            worksheet.conditional_formatting.add(rng, red_green_scale)
+
+    lcp_rng = col_range("Lab LCP (Mobile) (s)")
+    if lcp_rng:
         worksheet.conditional_formatting.add(
-            seo_range,
+            lcp_rng,
             ColorScaleRule(
                 start_type="num",
                 start_value=0,
-                start_color="F8696B",
+                start_color="C6EFCE",
                 mid_type="num",
-                mid_value=50,
-                mid_color="FFEB84",
+                mid_value=2.5,
+                mid_color="FFCC99",
                 end_type="num",
-                end_value=100,
-                end_color="63BE7B",
+                end_value=10.0,
+                end_color="FFC7CE",
             ),
         )
 
-    word_count_col = headers.get("Word Count (Body)")
-    if word_count_col:
-        wc_col_letter = get_column_letter(word_count_col)
-        wc_range = f"{wc_col_letter}{start_row}:{wc_col_letter}{end_row}"
+    status_rng = col_range("Status Code")
+    if status_rng:
         worksheet.conditional_formatting.add(
-            wc_range,
+            status_rng,
+            CellIsRule(
+                operator="greaterThanOrEqual",
+                formula=["400"],
+                fill=PatternFill(start_color="FFC1C1", end_color="FFC1C1", fill_type="solid"),
+                font=Font(bold=True, color="991B1B"),
+            ),
+        )
+        worksheet.conditional_formatting.add(
+            status_rng,
+            CellIsRule(
+                operator="equal",
+                formula=['"Timeout"'],
+                fill=PatternFill(start_color="FFCC99", end_color="FFCC99", fill_type="solid"),
+                font=Font(bold=True, color="924012"),
+            ),
+        )
+
+    word_rng = col_range("Word Count (Body)")
+    if word_rng:
+        worksheet.conditional_formatting.add(
+            word_rng,
+            DataBarRule(
+                start_type="num",
+                start_value=0,
+                end_type="num",
+                end_value=2000,
+                color="4472C4",
+            ),
+        )
+
+    eeat_rng = col_range("E-E-A-T Signal Score")
+    if eeat_rng:
+        worksheet.conditional_formatting.add(
+            eeat_rng,
             ColorScaleRule(
                 start_type="num",
                 start_value=0,
-                start_color="F8696B",
+                start_color="FFC7CE",
                 mid_type="num",
-                mid_value=150,
-                mid_color="FFEB84",
+                mid_value=5,
+                mid_color="FFCC99",
                 end_type="num",
-                end_value=300,
-                end_color="63BE7B",
+                end_value=10,
+                end_color="C6EFCE",
+            ),
+        )
+
+    schema_err_rng = col_range("Schema Error Count")
+    if schema_err_rng:
+        worksheet.conditional_formatting.add(
+            schema_err_rng,
+            CellIsRule(
+                operator="greaterThan",
+                formula=["0"],
+                fill=PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+            ),
+        )
+        worksheet.conditional_formatting.add(
+            schema_err_rng,
+            CellIsRule(
+                operator="equal",
+                formula=["0"],
+                fill=PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
+            ),
+        )
+
+    depth_rng = col_range("Click Depth")
+    if depth_rng:
+        worksheet.conditional_formatting.add(
+            depth_rng,
+            CellIsRule(
+                operator="equal",
+                formula=["-1"],
+                fill=PatternFill(start_color="FFCC99", end_color="FFCC99", fill_type="solid"),
+                font=Font(italic=True),
+            ),
+        )
+
+    page_size_rng = col_range("Page Size (KB)")
+    if page_size_rng:
+        worksheet.conditional_formatting.add(
+            page_size_rng,
+            CellIsRule(
+                operator="greaterThan",
+                formula=["1024"],
+                fill=PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+            ),
+        )
+
+    badge_rng = col_range("Severity Badge")
+    if badge_rng:
+        for val, colour in (
+            ("Critical", "FFC1C1"),
+            ("Warning", "FFCC99"),
+            ("Observation", "DBEAFE"),
+            ("Unmeasured", "E5E7EB"),
+        ):
+            worksheet.conditional_formatting.add(
+                badge_rng,
+                CellIsRule(
+                    operator="equal",
+                    formula=[f'"{val}"'],
+                    fill=PatternFill(start_color=colour, end_color=colour, fill_type="solid"),
+                ),
+            )
+
+    for col_name in ("Is Thin Content", "Is Near Duplicate", "Is Draft or Test Page"):
+        flag_rng = col_range(col_name)
+        if flag_rng:
+            worksheet.conditional_formatting.add(
+                flag_rng,
+                CellIsRule(
+                    operator="equal",
+                    formula=["TRUE"],
+                    fill=PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+                ),
+            )
+
+    age_rng = col_range("Content Age (days)")
+    if age_rng:
+        worksheet.conditional_formatting.add(
+            age_rng,
+            CellIsRule(
+                operator="greaterThan",
+                formula=["730"],
+                fill=PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+            ),
+        )
+        worksheet.conditional_formatting.add(
+            age_rng,
+            CellIsRule(
+                operator="greaterThan",
+                formula=["365"],
+                fill=PatternFill(start_color="FFCC99", end_color="FFCC99", fill_type="solid"),
             ),
         )
 
