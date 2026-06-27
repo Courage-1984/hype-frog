@@ -7,8 +7,10 @@ import asyncio
 import os
 
 from hype_frog.config import apply_runtime_override, load_environment
+from hype_frog.core.run_config import FULL_SMOKE_SYNTHETIC_URL_COUNT
 from hype_frog.core.integration_validator import run_validation_cli
 from hype_frog.core.quick_test import QuickTestOptions, run_quick_test_gate
+from hype_frog.core.full_smoke_test import FullSmokeOptions, run_full_smoke_gate
 from hype_frog.app_orchestrator import main as _async_main
 from hype_frog.crawler.gsc_engine import ensure_gsc_oauth_token
 from hype_frog.extractors.semantic_setup import install_semantic_model
@@ -16,6 +18,35 @@ from hype_frog.extractors.semantic_setup import install_semantic_model
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="hype-frog technical SEO auditor")
+    parser.add_argument(
+        "--full-smoke-test",
+        action="store_true",
+        help=(
+            "Pre-export integration gate: OAuth + live PSI preflight, pytest, "
+            f"~{FULL_SMOKE_SYNTHETIC_URL_COUNT}-URL uncapped sitemap simulation "
+            "(mocked crawl; real enrichment + export + workbook audit)"
+        ),
+    )
+    parser.add_argument(
+        "--full-smoke-test-fast",
+        action="store_true",
+        help="Same as --full-smoke-test but skip preflight and pytest",
+    )
+    parser.add_argument(
+        "--full-smoke-test-skip-preflight",
+        action="store_true",
+        help="With --full-smoke-test: skip GSC/PSI preflight checks",
+    )
+    parser.add_argument(
+        "--full-smoke-test-skip-pytest",
+        action="store_true",
+        help="With --full-smoke-test: skip pytest regression subset",
+    )
+    parser.add_argument(
+        "--full-smoke-test-skip-audit",
+        action="store_true",
+        help="With --full-smoke-test: skip post-export workbook audit",
+    )
     parser.add_argument(
         "--quick-test",
         action="store_true",
@@ -191,6 +222,13 @@ def run(argv: list[str] | None = None) -> None:
                 "secrets/client_secrets.json exists and re-run --gsc-auth."
             )
         return
+    if args.full_smoke_test or args.full_smoke_test_fast:
+        smoke_options = FullSmokeOptions(
+            skip_preflight=args.full_smoke_test_fast or args.full_smoke_test_skip_preflight,
+            skip_pytest=args.full_smoke_test_fast or args.full_smoke_test_skip_pytest,
+            skip_workbook_audit=args.full_smoke_test_skip_audit,
+        )
+        raise SystemExit(asyncio.run(run_full_smoke_gate(smoke_options)))
     if args.quick_test or args.quick_test_fast:
         options = QuickTestOptions(
             skip_preflight=args.quick_test_fast or args.quick_test_skip_preflight,

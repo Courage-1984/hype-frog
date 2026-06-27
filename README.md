@@ -152,6 +152,29 @@ uv run hype-frog --quick-test-fast
 
 Override BFS depth for the preset: `HF_MAX_DEPTH=1 uv run hype-frog --quick-test-fast`
 
+### Pre-export full smoke (uncapped sitemap simulation)
+
+Run **before** a long production crawl to catch late export/enrichment failures (e.g. SitemapQA status coercion, workbook integrity at scale):
+
+```bash
+uv run hype-frog --full-smoke-test
+```
+
+**What it runs:**
+
+1. **Preflight (strict)** — GSC OAuth files, property match, `PSI_API_KEY`, and one **live PSI probe**.
+2. **Pytest regression** — orchestration, reporter, PSI, and pipeline tests.
+3. **Pipeline** — `max_urls=None`, **80 synthetic sitemap URLs** (representative of uncapped runs), transport edge cases (`Timeout`, 404, redirects), mocked crawl/PSI/OG/link probes, **real GSC analytics** when OAuth is ready, full enrichment + export.
+4. **Workbook audit** — same integrity checks as production.
+
+Faster variant (skip preflight + pytest):
+
+```bash
+uv run hype-frog --full-smoke-test-fast
+```
+
+Output: `reports/full_smoke_test/`. Tune synthetic sitemap volume: `HF_FULL_SMOKE_URL_COUNT=120 uv run hype-frog --full-smoke-test-fast`
+
 If Playwright is not installed, accurate mode falls back to fast HTTP with a warning; the run still completes. Output lands under `reports/latest/` unless `HF_OUTPUT_FILENAME` overrides it.
 
 **`ModuleNotFoundError: No module named 'hype_frog'`** means the editable project is not installed in the active venv. Run **`uv sync`** from the repo root (not only `uv venv` without syncing the project). Then retry `uv run …`.

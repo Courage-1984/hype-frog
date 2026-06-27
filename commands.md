@@ -61,6 +61,23 @@ uv run hype-frog --quick-test                 # preflight + pytest + 10-URL craw
 uv run hype-frog --quick-test-fast            # crawl + workbook audit only (~5 min)
 ```
 
+**Pre-export full smoke** (run before a long production crawl — catches late export failures):
+
+```powershell
+uv run hype-frog --full-smoke-test            # OAuth + live PSI probe + pytest + ~80-URL sim + audit (~8–15 min)
+uv run hype-frog --full-smoke-test-fast       # mocked crawl + export + audit only (~3–6 min)
+```
+
+Requires `PSI_API_KEY` and GSC OAuth (`secrets/token.json`) for the full gate. Crawl HTTP/PSI batch are mocked at sitemap scale with **no `max_urls` cap**; enrichment, scoring, and export run for real.
+
+| Flag | Effect |
+|------|--------|
+| `--full-smoke-test-skip-preflight` | Skip GSC/PSI preflight |
+| `--full-smoke-test-skip-pytest` | Skip pytest subset |
+| `--full-smoke-test-skip-audit` | Skip workbook audit |
+
+Tune synthetic volume: `HF_FULL_SMOKE_URL_COUNT=120 uv run hype-frog --full-smoke-test-fast`
+
 Quick-test flags (combine with `--quick-test`):
 
 | Flag | Effect |
@@ -132,3 +149,26 @@ git push -u origin main
 | # | Item | Notes |
 |---|------|--------|
 | 13 | D2 — LLM as post-crawl pass | Cost and reliability improvement |
+
+
+
+
+
+# Full gate before a long run (~8–15 min with pytest + live PSI probe)
+uv run hype-frog --full-smoke-test
+
+# Quick export path check (~1 min)
+uv run hype-frog --full-smoke-test-fast
+
+# Heavier scale (closer to your 264-URL runs)
+HF_FULL_SMOKE_URL_COUNT=120 uv run hype-frog --full-smoke-test-fast
+
+
+
+https://africanmarketingconfederation.org/page-sitemap.xml
+https://ticonafrica.org/page-sitemap.xml
+
+
+npm install -g @anthropic-ai/claude-code
+claude login
+

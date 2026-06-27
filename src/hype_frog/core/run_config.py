@@ -16,6 +16,11 @@ QUICK_TEST_MAX_URLS: int = 10
 QUICK_TEST_BFS_MAX_DEPTH: int = 2
 QUICK_TEST_MAX_PSI_URLS: int = 3
 
+# Full-smoke: production-like sitemap volume without a URL cap (network mocked in gate).
+FULL_SMOKE_SITEMAP_URL: str = QUICK_TEST_SITEMAP_URL
+FULL_SMOKE_SYNTHETIC_URL_COUNT: int = 80
+FULL_SMOKE_BFS_MAX_DEPTH: int = 1
+
 
 @dataclass(frozen=True)
 class RunConfig:
@@ -48,6 +53,40 @@ def _quick_test_max_psi_urls() -> int:
     if os.getenv("PSI_API_KEY", "").strip():
         return QUICK_TEST_MAX_PSI_URLS
     return 0
+
+
+def _full_smoke_url_count() -> int:
+    raw = os.getenv("HF_FULL_SMOKE_URL_COUNT", "").strip()
+    if raw:
+        try:
+            return max(20, int(raw))
+        except ValueError:
+            pass
+    return FULL_SMOKE_SYNTHETIC_URL_COUNT
+
+
+def full_smoke_run_config() -> RunConfig:
+    """Pre-export gate: uncapped sitemap seeds, full suite, PSI on all URLs when key is set."""
+    psi_enabled = bool(os.getenv("PSI_API_KEY", "").strip())
+    return RunConfig(
+        target_input=FULL_SMOKE_SITEMAP_URL,
+        max_urls=None,
+        max_psi_urls=None if psi_enabled else 0,
+        high_value_slugs=["about", "contact", "membership", "awards"],
+        crawl_mode="accurate",
+        render_wait_ms=2000,
+        selector_wait_ms=1500,
+        workers=6,
+        request_delay=0.0,
+        full_suite=True,
+        previous_audit_path="",
+        checkpoint_every=0,
+        resume_checkpoint="no",
+        check_external_link_status=True,
+        check_og_images=True,
+        check_content_images=False,
+        bfs_max_depth=FULL_SMOKE_BFS_MAX_DEPTH,
+    )
 
 
 def quick_test_run_config() -> RunConfig:

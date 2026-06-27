@@ -1158,7 +1158,7 @@ async def fetch_psi_metrics_batch(
 async def probe_psi_api_key(
     test_url: str = "https://example.com",
     *,
-    timeout_seconds: float = 45.0,
+    timeout_seconds: float = 90.0,
 ) -> tuple[bool, str, dict[str, Any] | None]:
     """Verify ``PSI_API_KEY`` with a single mobile Lighthouse request.
 
@@ -1250,4 +1250,7 @@ async def probe_psi_api_key(
                     details,
                 )
     except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
-        return False, f"PSI request failed: {exc}", details
+        detail = str(exc).strip() or type(exc).__name__
+        if isinstance(exc, TimeoutError):
+            detail = f"request timed out after {timeout_seconds:.0f}s"
+        return False, f"PSI request failed: {detail}", details

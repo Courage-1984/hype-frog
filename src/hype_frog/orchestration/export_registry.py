@@ -19,6 +19,7 @@ from hype_frog.analysis.delta_engine import (
     snapshot_from_current_run,
 )
 from hype_frog.core.models import ExtraRowPayload
+from hype_frog.core.status_codes import is_success_status
 from hype_frog.rules import IssueRule
 from hype_frog.core.text_utils import normalize_text_hash
 from hype_frog.core.url_normalization import normalize_url
@@ -775,7 +776,7 @@ def build_sitemapqa_rows(
                 "Found via Crawl": bool(matched),
                 "Found via Sitemap": True,
                 "Discovery Source": "Both" if matched else "Sitemap",
-                "In Sitemap but Non-200": status_code != 200,
+                "In Sitemap but Non-200": not is_success_status(status_code),
                 "Sitemap URL Redirects": (
                     matched.get("Redirect Chain Length", 0) > 0 if matched else None
                 ),
@@ -807,7 +808,7 @@ def build_sitemapqa_rows(
             continue
         if normalize_url_key(url) in sitemap_url_keys:
             continue
-        if int(float(row.get("Status Code") or 0)) != 200:
+        if not is_success_status(row.get("Status Code")):
             continue
         sitemap_rows.append(
             {
