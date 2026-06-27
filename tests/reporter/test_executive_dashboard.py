@@ -18,7 +18,12 @@ from hype_frog.reporter.excel_engine import (
     apply_workbook_export_guardrails,
 )
 from hype_frog.reporter.sheets.executive_dashboard import (
+    CHART_LABEL_COL,
     CHART_SOURCE_FIRST_ROW,
+    LAB_LCP_MOBILE_TARGET_S,
+    LIGHTHOUSE_ACCESSIBILITY_TARGET,
+    _avg_lighthouse_performance_mobile,
+    _avg_numeric_column,
     _is_low_value_priority_url,
     _meaningful_priority_rows,
     _owner_metrics,
@@ -56,6 +61,9 @@ def sample_export_context() -> dict[str, object]:
         "Observation Issues Count": 1,
         "Mobile PSI Score": 78,
         "Desktop PSI Score": 82,
+        "Lighthouse Performance (Mobile)": 71,
+        "Lab LCP (Mobile) (s)": 3.2,
+        "Lighthouse Accessibility (Mobile)": 88,
         "AEO Readiness Score": 55,
         "Missing H1 Flag": False,
         "H1 Count": 1,
@@ -93,6 +101,36 @@ def sample_export_context() -> dict[str, object]:
         ],
         "hub_metrics_rows": [{"URL": url, "Potential Traffic Lift": 120}],
     }
+
+
+def test_avg_lighthouse_performance_mobile_uses_lighthouse_not_desktop_blend() -> None:
+    rows = [
+        {
+            "Lighthouse Performance (Mobile)": 44,
+            "Mobile PSI Score": 39,
+            "Desktop PSI Score": 82,
+        },
+        {
+            "Lighthouse Performance (Mobile)": 28,
+            "Mobile PSI Score": 28,
+            "Desktop PSI Score": 90,
+        },
+    ]
+    assert _avg_lighthouse_performance_mobile(rows) == 36.0
+
+
+def test_avg_lighthouse_performance_mobile_falls_back_to_mobile_psi_score() -> None:
+    rows = [{"Mobile PSI Score": 55, "Desktop PSI Score": 99}]
+    assert _avg_lighthouse_performance_mobile(rows) == 55.0
+
+
+def test_avg_numeric_column_skips_non_positive_values() -> None:
+    rows = [
+        {"Lab LCP (Mobile) (s)": 0.0},
+        {"Lab LCP (Mobile) (s)": 4.1},
+        {"Lab LCP (Mobile) (s)": 5.9},
+    ]
+    assert _avg_numeric_column(rows, "Lab LCP (Mobile) (s)", require_positive=True) == 5.0
 
 
 def test_severity_metrics_separates_unique_urls_from_issue_instances() -> None:
@@ -178,6 +216,24 @@ def test_executive_dashboard_writes_charts_with_visible_source_rows(
     assert "High-intent pages by business risk" in titles
     assert "Key insights:" in str(exec_ws.cell(row=5, column=1).value or "")
     assert exec_ws.cell(row=CHART_SOURCE_FIRST_ROW + 2, column=2).value is not None
+    health_data_start = CHART_SOURCE_FIRST_ROW + 3
+    health_labels = [
+        str(exec_ws.cell(row=row, column=CHART_LABEL_COL).value or "")
+        for row in range(health_data_start, health_data_start + 6)
+    ]
+    assert health_labels == [
+        "SEO Health",
+        "Technical Health",
+        "Performance (PSI)",
+        "LCP (Lab Mobile avg)",
+        "Accessibility (avg)",
+        "AEO Readiness",
+    ]
+    assert exec_ws.cell(row=health_data_start + 2, column=2).value == 71
+    assert exec_ws.cell(row=health_data_start + 3, column=2).value == 3.2
+    assert exec_ws.cell(row=health_data_start + 3, column=3).value == LAB_LCP_MOBILE_TARGET_S
+    assert exec_ws.cell(row=health_data_start + 4, column=2).value == 88
+    assert exec_ws.cell(row=health_data_start + 4, column=3).value == LIGHTHOUSE_ACCESSIBILITY_TARGET
     wb.close()
 
 

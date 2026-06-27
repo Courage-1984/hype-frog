@@ -72,6 +72,65 @@ def test_unreachable_node_gets_minus_one() -> None:
     metrics = compute_internal_link_intelligence(extra_rows, "example.com")
     assert metrics["https://example.com/"]["Click Depth"] == 0
     assert metrics["https://example.com/isolated"]["Click Depth"] == CLICK_DEPTH_UNREACHABLE
+    assert metrics["https://example.com/isolated"]["Reachable from Homepage"] is False
+
+
+def test_unreachable_with_inlinks_is_not_orphan() -> None:
+    """Click Depth -1 and Orphan Pages=False can coexist (Part 8)."""
+    extra_rows = [
+        ExtraRowPayload.model_validate(
+            {
+                "URL": "https://example.com",
+                "Final URL": "https://example.com",
+                "Internal Links List": [],
+            }
+        ),
+        ExtraRowPayload.model_validate(
+            {
+                "URL": "https://example.com/checkout",
+                "Final URL": "https://example.com/checkout",
+                "Internal Links List": ["https://example.com/cart"],
+            }
+        ),
+        ExtraRowPayload.model_validate(
+            {
+                "URL": "https://example.com/cart",
+                "Final URL": "https://example.com/cart",
+                "Internal Links List": [],
+            }
+        ),
+    ]
+    metrics = compute_internal_link_intelligence(extra_rows, "example.com")
+    cart = metrics["https://example.com/cart"]
+    checkout = metrics["https://example.com/checkout"]
+    assert cart["Click Depth"] == CLICK_DEPTH_UNREACHABLE
+    assert cart["Reachable from Homepage"] is False
+    assert cart["Orphan Pages"] is False
+    assert checkout["Click Depth"] == CLICK_DEPTH_UNREACHABLE
+    assert checkout["Reachable from Homepage"] is False
+    assert checkout["Orphan Pages"] is True
+
+
+def test_reachable_from_homepage_true_when_on_homepage_path() -> None:
+    extra_rows = [
+        ExtraRowPayload.model_validate(
+            {
+                "URL": "https://example.com",
+                "Final URL": "https://example.com",
+                "Internal Links List": ["https://example.com/about"],
+            }
+        ),
+        ExtraRowPayload.model_validate(
+            {
+                "URL": "https://example.com/about",
+                "Final URL": "https://example.com/about",
+                "Internal Links List": [],
+            }
+        ),
+    ]
+    metrics = compute_internal_link_intelligence(extra_rows, "example.com")
+    assert metrics["https://example.com/"]["Reachable from Homepage"] is True
+    assert metrics["https://example.com/about"]["Reachable from Homepage"] is True
 
 
 def test_deep_url_rule_ignores_unreachable_click_depth() -> None:

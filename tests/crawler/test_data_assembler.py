@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from hype_frog.crawler.data_assembler import assemble_from_html, finalize_row_state, init_rows
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.pipeline.export import sanitize_rows
@@ -259,3 +261,28 @@ def test_finalize_row_state_http_404_sets_not_indexable() -> None:
     finalize_row_state(main_payload, extra_payload)
     assert main_payload.values["Indexability"] == "Not Indexable"
     assert extra_payload.values["Indexability Reason"] == "HTTP 404"
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_reason"),
+    [
+        ("Timeout", "Request Timeout"),
+        ("timeout", "Request timeout"),
+        ("Connection Error", "Request Connection Error"),
+        ("connection error", "Request connection error"),
+        ("DNS Error", "Request DNS Error"),
+        ("Error", "Request Error"),
+    ],
+)
+def test_finalize_row_state_request_failures_set_not_indexable(
+    status_code: str,
+    expected_reason: str,
+) -> None:
+    main_dict, extra_dict = init_rows("https://example.com/slow", None)
+    main_payload = MainRowPayload.model_validate(main_dict)
+    extra_payload = ExtraRowPayload.model_validate(extra_dict)
+    main_payload.values["Status Code"] = status_code
+    extra_payload.values["Status Code"] = status_code
+    finalize_row_state(main_payload, extra_payload)
+    assert main_payload.values["Indexability"] == "Not Indexable"
+    assert extra_payload.values["Indexability Reason"] == expected_reason

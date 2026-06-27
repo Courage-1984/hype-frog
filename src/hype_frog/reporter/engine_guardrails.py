@@ -131,6 +131,11 @@ _HEADER_TOOLTIP_MESSAGES: dict[str, str] = {
         "Pages with zero internal incoming links; difficult for search engines to "
         "discover and value."
     ),
+    "Reachable from Homepage": (
+        "True when the URL has a link path from the detected homepage within the crawl "
+        "graph. False when Click Depth is -1, even if the page has inbound links from "
+        "other unreachable pages."
+    ),
     "Canonical Type": (
         "Self: URL points to itself. Cross: URL points to another page. "
         "Missing: No canonical tag found."

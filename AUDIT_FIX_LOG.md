@@ -222,3 +222,107 @@
 | 6 | 2026-06-26 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_215138.xlsx | PASS | FixPlan/Summary counts aligned |
 | 7 | 2026-06-27 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_220041.xlsx | PASS | Click Depth nulls=0 |
 | 8 | 2026-06-27 | 10 | reports/latest/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_221411.xlsx | PASS | No Technical View_1 / BACK TO DASHBOARD_1; Main cols=61 |
+
+---
+
+## PSI/Lighthouse Expansion — LI-HF-PSI-P0
+
+### Context map (Step 0 — 2026-06-27)
+
+**`psi_engine.py` key functions:**
+- `_build_endpoint` — PSI API URL (`category=performance&category=seo` today; missing accessibility + best-practices)
+- `_lab_strategy_metrics` — reads `lighthouseResult.audits` + `categories` for lab scores/LCP/CLS/INP/TTFB
+- `_field_experience_metrics` — reads `loadingExperience` (fallback `originLoadingExperience`); sets `crux_data_level` as `"url"`/`"origin"` but does **not** check `origin_fallback` flag or URL id path
+- `_merge_url_results` — merges mobile/desktop; writes `CWV LCP (s)` from field data even when origin-level
+- `_resolve_cwv_labelling` — Phase 2 audit labels (`PSI + CrUX Field (Origin)` etc.)
+
+**PSI API category parameter (before fix):** `category=performance&category=seo` (`_build_endpoint` ~L253)
+
+**Categories requested (after fix):** performance, accessibility, best-practices, seo ✅ (Part 2, 2026-06-27)
+
+**`lighthouseResult` path:** `payload["lighthouseResult"]["audits"][audit_id]["numericValue"]`; categories at `["categories"][key]["score"]`
+
+**Columns from `lighthouseResult` (lab):** `Desktop/Mobile Score`, `Mobile LCP/CLS/TTFB`, `Lab Mobile/Desktop INP (ms)`, fallback `CWV LCP/CLS/INP` when no field data
+
+**Columns from `loadingExperience` / CrUX (field):** `Field Mobile LCP/CLS/INP`, `CWV LCP (s)`, `CWV CLS`, `CWV INP (ms)`, `Field vs Lab`, `CWV Data Source`, `PSI Data Status`
+
+**`loadingExperience` structure:** `metrics.LARGEST_CONTENTFUL_PAINT_MS.percentile` (ms), `CUMULATIVE_LAYOUT_SHIFT_SCORE.percentile` (hundredths), INP/FID keys; optional `origin_fallback: true` and `id` URL/origin identifier (to be used in Part 1)
+
+**Technical Diagnostics builder:** `merged_builders.py` → `build_technical_diagnostics_rows()`; column list `TECHNICAL_DIAGNOSTICS_COLUMNS` in `export_registry.py`
+
+**`assemble.py` residue:** ~~`row_with_psi_gsc_harden` falls back `CWV LCP (s)` → `Mobile LCP (s)`~~ fixed Part 1 (2026-06-27)
+
+**Known AMC symptom:** ~~`CWV LCP (s)` = 11.852~~ fixed — now in `Origin CrUX LCP (s)`; `CWV LCP (s)` null when `CrUX Level = Origin`
+
+**`_detect_crux_level` implemented:** 2026-06-27
+
+**Part 1 verification (AMC `SEO_AEO_Audit_africanmarketingconfederation.org_20260627_033907.xlsx`):**
+- CrUX Level: Origin=3 PSI URLs, None=7 non-PSI
+- `CWV LCP (s)`: 0 non-null on PSI rows
+- `Origin CrUX LCP (s)`: 11.852 on PSI rows
+- `Mobile LCP (s)`: per-URL lab values preserved
+- `PSI Data Status`: `PSI + CrUX Field (Origin)` on PSI rows
+- Unit tests: 19/19 pass
+
+**Part 2 verification (AMC `SEO_AEO_Audit_africanmarketingconfederation.org_20260627_034808.xlsx`):**
+- `_extract_lighthouse_data` + 4-category PSI endpoint implemented
+- Main columns: Lighthouse Performance/Lab LCP/TBT/FCP/Page Size populated on 3 PSI URLs
+- `Mobile PSI Score` / `Mobile LCP (s)` backward compat preserved (match lab values)
+- Accessibility/Best Practices **null on cached PSI responses** (24h cache from pre-Part-2 fetches; clears on next live API call)
+- Main column count: **103** (was 61 pre-PSI expansion)
+- Unit tests: 18/18 pass (`test_psi_engine`, `test_psi_assemble`)
+
+**Part 3 verification (AMC `SEO_AEO_Audit_africanmarketingconfederation.org_20260627_035636.xlsx`):**
+- `PERFORMANCE_CWV_GROUP_COLUMNS` canonical list (52 columns) drives `MAIN_COLUMN_GROUP_DEFINITIONS` and Main `reorder_columns`
+- All Part 1–2 Performance/CWV/Lighthouse columns present on Main in monotonic guide order
+- Unit tests: 2/2 pass (`test_main_performance_columns`)
+**Part 4 verification (AMC `SEO_AEO_Audit_africanmarketingconfederation.org_20260627_040317.xlsx`):**
+- Retired old CWV rules; added CrUX Level + Lighthouse lab rules
+- `CWV LCP Above 4.0s (Field Data)` IssueInventory: **0** rows
+- `Origin CrUX LCP Above 4.0s…` site row: **1** (Affected URL Count=3)
+- `Lab LCP Above 4.0s (Mobile)` + `Lab TBT Above 300ms` + `Low Lighthouse Performance Mobile (<50)` present on PSI URLs
+- Unit tests: 7/7 pass (`tests/rules/`)
+
+**Part 5 verification (AMC `SEO_AEO_Audit_africanmarketingconfederation.org_20260627_041028.xlsx`):**
+- `TECHNICAL_DIAGNOSTICS_LIGHTHOUSE_COLUMNS` (18 cols) appended after `Mobile TTFB (s)`
+- Technical Diagnostics: all lighthouse columns present; Origin PSI rows show Lab LCP + Origin CrUX LCP
+- Unit tests: 13/13 pass (`test_merged_sheet_builders`, `test_help_layer_tooltips`)
+- `--quick-test-fast`: PASS
+
+**Part 6 verification (2026-06-27):**
+- `Performance (PSI)` Health row + KPI card now average `Lighthouse Performance (Mobile)` (fallback `Mobile PSI Score`); Desktop excluded
+- Health comparison adds `LCP (Lab Mobile avg)` (projected target **2.5 s**) and `Accessibility (avg)` (projected target **90**)
+- Chart row count driven by `layout.health_rows` (6 metrics)
+- Unit tests: 10/10 pass (`test_executive_dashboard`)
+
+**Part 7 verification (2026-06-27):**
+- `finalize_row_state`: string request failures (`Timeout`, `Connection Error`, `DNS Error`, `Error`) now set `Indexability = Not Indexable` and `Indexability Reason = Request {status}`
+- Case-insensitive match on string status codes; runs before HTTP `>= 400` branch
+- Unit tests: 16/16 pass (`test_data_assembler`, includes 6 parametrized request-failure cases)
+
+**Part 8 verification (2026-06-27):**
+- `compute_internal_link_intelligence`: `Reachable from Homepage = (Click Depth != -1)`; `Orphan Pages` in-degree logic unchanged
+- Main: column in `PERFORMANCE_CWV_GROUP_COLUMNS` (after `Uses Modern Image Formats`)
+- Technical Diagnostics: `Reachable from Homepage` column populated from Main/Extra merge
+- Unit tests: graph engine + merged builders + performance column contract pass
+
+### Part status
+| Part | Description | Status | Test Passed |
+|------|-------------|--------|-------------|
+| 1 | CrUX origin detection | ✅ Done | ✅ 2026-06-27 |
+| 2 | Lighthouse full extraction | ✅ Done | ✅ 2026-06-27 |
+| 3 | New columns in Main | ✅ Done | ✅ 2026-06-27 |
+| 4 | Registry rules update | ✅ Done | ✅ 2026-06-27 |
+| 5 | Technical Diagnostics update | ✅ Done | ✅ 2026-06-27 |
+| 6 | Exec Dashboard source data | ✅ Done | ✅ 2026-06-27 |
+| 7 | Timeout indexability fix | ✅ Done | ✅ 2026-06-27 |
+| 8 | Orphan/depth distinction | ✅ Done | ✅ 2026-06-27 |
+
+### AMC test results (after all parts)
+- CrUX Level distribution: Origin=3, None=7 (Part 1; 3-URL PSI cap)
+- Lab LCP (Mobile) on PSI URLs: 7.351, 9.112, 14.257
+- Lighthouse Performance (Mobile): 28, 44, 39
+- Severity Badge distribution: Critical=10 (Broken Internal Links site-wide; not CWV-driven)
+- CWV LCP Above 4.0s (Field Data) rows: **0**
+- Lab LCP Above 4.0s (Mobile) rows: **3** PSI URLs in IssueInventory
+

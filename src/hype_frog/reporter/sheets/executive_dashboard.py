@@ -101,7 +101,7 @@ class ChartDataLayout:
     """1-based row anchors for chart source tables (columns A–C)."""
 
     health_start: int = CHART_SOURCE_FIRST_ROW + 1
-    health_rows: int = 4
+    health_rows: int = 6
     severity_start: int = CHART_SOURCE_FIRST_ROW + 9
     severity_rows: int = 3
     owner_start: int = CHART_SOURCE_FIRST_ROW + 16
@@ -175,13 +175,37 @@ def _short_url_label(url: object, *, max_len: int = 36) -> str:
     return _sanitize_excel_value(label) or "(url)"
 
 
-def _avg_psi_score(extra_rows: list[dict[str, Any]]) -> float | None:
+LAB_LCP_MOBILE_TARGET_S = 2.5
+LIGHTHOUSE_ACCESSIBILITY_TARGET = 90.0
+
+
+def _avg_numeric_column(
+    extra_rows: list[dict[str, Any]],
+    key: str,
+    *,
+    require_positive: bool = False,
+) -> float | None:
+    values: list[float] = []
+    for row in extra_rows:
+        val = _optional_float(row.get(key))
+        if val is None:
+            continue
+        if require_positive and val <= 0:
+            continue
+        values.append(val)
+    if not values:
+        return None
+    return round(sum(values) / len(values), 1)
+
+
+def _avg_lighthouse_performance_mobile(extra_rows: list[dict[str, Any]]) -> float | None:
     scores: list[float] = []
     for row in extra_rows:
-        for key in ("Mobile PSI Score", "Desktop PSI Score"):
-            val = _optional_float(row.get(key))
-            if val is not None and val > 0:
-                scores.append(val)
+        val = _optional_float(row.get("Lighthouse Performance (Mobile)"))
+        if val is None:
+            val = _optional_float(row.get("Mobile PSI Score"))
+        if val is not None and val > 0:
+            scores.append(val)
     if not scores:
         return None
     return round(sum(scores) / len(scores), 1)
@@ -529,7 +553,13 @@ def populate_chart_data_sheet(
 ) -> ChartDataLayout:
     """Write chart source tables in visible columns A–C (no merged cells in data)."""
     layout = ChartDataLayout()
-    psi = _avg_psi_score(extra_rows)
+    psi = _avg_lighthouse_performance_mobile(extra_rows)
+    lab_lcp = _avg_numeric_column(extra_rows, "Lab LCP (Mobile) (s)", require_positive=True)
+    accessibility = _avg_numeric_column(
+        extra_rows,
+        "Lighthouse Accessibility (Mobile)",
+        require_positive=True,
+    )
     aeo = round(dashboard_metrics.aeo_readiness, 1)
     current_health = round(summary_metrics.health_score_pct, 1)
     projected_health = round(summary_metrics.projected_health_score_pct, 1)
@@ -561,6 +591,8 @@ def populate_chart_data_sheet(
         ("SEO Health", current_health, projected_health),
         ("Technical Health", technical_health, projected_technical),
         ("Performance (PSI)", psi or 0.0, projected_psi),
+        ("LCP (Lab Mobile avg)", lab_lcp or 0.0, LAB_LCP_MOBILE_TARGET_S),
+        ("Accessibility (avg)", accessibility or 0.0, LIGHTHOUSE_ACCESSIBILITY_TARGET),
         ("AEO Readiness", aeo, projected_aeo),
     ]
     data_row = hr + 1
@@ -979,7 +1011,7 @@ def write_executive_dashboard(
         hub_metrics_rows=hub_metrics_rows,
     )
 
-    psi = _avg_psi_score(extra_rows)
+    psi = _avg_lighthouse_performance_mobile(extra_rows)
     traffic_lift = _traffic_lift_total(hub_metrics_rows)
     _write_kpi_cards(
         exec_ws,

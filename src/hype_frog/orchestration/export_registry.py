@@ -65,7 +65,7 @@ STANDARD_SHEET_COLUMNS: dict[str, list[str]] = {
         "Mobile TTFB (s)", "CWV LCP (s)", "CWV CLS", "CWV Data Source",
         "Field vs Lab", "GSC Clicks", "GSC Impressions", "GSC CTR",
         "GSC Avg Position", "GSC Data Freshness", "GSC Coverage Note",
-        "Click Depth", "Internal Inlinks", "Orphan Pages",
+        "Click Depth", "Internal Inlinks", "Orphan Pages", "Reachable from Homepage",
         "Internal PageRank", "Discovered On URL", "Regional Authority Score", "Regional Entity Hits",
         "Answer Block Detected (First 60 Words)", "AEO Extractability Score",
         "Critical Issues Count", "Warning Issues Count", "Observation Issues Count",

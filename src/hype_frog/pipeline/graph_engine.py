@@ -108,7 +108,8 @@ def compute_internal_link_intelligence(
 
     return {
         node: {
-            "Click Depth": click_depth.get(node, CLICK_DEPTH_UNREACHABLE),
+            "Click Depth": (depth := click_depth.get(node, CLICK_DEPTH_UNREACHABLE)),
+            "Reachable from Homepage": depth != CLICK_DEPTH_UNREACHABLE,
             "Orphan Pages": orphan_map.get(node, False),
             "Internal PageRank": round(float(pagerank_map.get(node, 0.0)), 6),
             "Internal Inlinks": int(graph.in_degree(node)),

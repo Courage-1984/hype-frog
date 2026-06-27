@@ -3,6 +3,27 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+TECHNICAL_DIAGNOSTICS_LIGHTHOUSE_COLUMNS: tuple[str, ...] = (
+    "CrUX Level",
+    "Lab LCP (Mobile) (s)",
+    "Lab TBT (Mobile) (ms)",
+    "Lab FCP (Mobile) (s)",
+    "Lab CLS (Mobile)",
+    "Lab TTFB (Mobile) (ms)",
+    "Lighthouse Accessibility (Mobile)",
+    "Lighthouse Best Practices (Mobile)",
+    "Lighthouse SEO Score (Mobile)",
+    "Lab LCP (Desktop) (s)",
+    "Lab TBT (Desktop) (ms)",
+    "Lighthouse Performance (Desktop)",
+    "Page Size (KB)",
+    "DOM Size (nodes)",
+    "JS Execution (ms)",
+    "Network Request Count",
+    "Origin CrUX LCP (s)",
+    "Origin CrUX INP (ms)",
+)
+
 TECHNICAL_DIAGNOSTICS_COLUMNS: tuple[str, ...] = (
     "URL",  # A
     "Diagnostic Category",  # B
@@ -26,6 +47,7 @@ TECHNICAL_DIAGNOSTICS_COLUMNS: tuple[str, ...] = (
     "Mobile LCP (s)",
     "Mobile CLS",
     "Mobile TTFB (s)",
+    *TECHNICAL_DIAGNOSTICS_LIGHTHOUSE_COLUMNS,
     "Final URL",
     "Canonical URL",
     "Meta Robots Raw",
@@ -35,6 +57,7 @@ TECHNICAL_DIAGNOSTICS_COLUMNS: tuple[str, ...] = (
     "GSC Coverage Category",
     "Discovered On URL",
     "Discovery Rank",
+    "Reachable from Homepage",
     "Source Legacy Tab",
     # Sprint 5 — structural / security / i18n diagnostics migrated from
     # the Content Optimisation Hub. Appended at the END so existing
@@ -215,6 +238,20 @@ def _export_number(value: object) -> float | int | str:
     return numeric
 
 
+def _technical_diagnostics_lighthouse_fields(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Project PSI / Lighthouse / CrUX columns onto Technical Diagnostics rows."""
+    out: dict[str, Any] = {}
+    for key in TECHNICAL_DIAGNOSTICS_LIGHTHOUSE_COLUMNS:
+        raw = row.get(key)
+        if key == "CrUX Level":
+            out[key] = _to_str(raw) if raw not in (None, "") else ""
+        elif key in {"DOM Size (nodes)", "Network Request Count"}:
+            out[key] = _export_number(raw)
+        else:
+            out[key] = _export_number(raw)
+    return out
+
+
 def _pair_main_extra_rows(
     main_rows: list[dict[str, Any]] | None,
     extra_rows: list[dict[str, Any]],
@@ -277,11 +314,13 @@ def _merged_export_row(
         "CWV CLS",
         "CWV INP (ms)",
         "PSI Data Status",
+        *TECHNICAL_DIAGNOSTICS_LIGHTHOUSE_COLUMNS,
         "SEO Health Score",
         "Severity Badge",
         "Status Code",
         "Final URL",
         "Discovery Rank",
+        "Reachable from Homepage",
     ):
         if (e.get(field) in (None, "") and m.get(field) not in (None, "")):
             row[field] = m.get(field)
@@ -333,7 +372,14 @@ def build_technical_diagnostics_rows(
         psi_status = str(row.get("PSI Data Status") or "").strip().lower()
         if psi_status not in {"", "not measured", "unavailable"} and any(
             row.get(key) not in (None, "", False)
-            for key in ("Desktop PSI Score", "Mobile PSI Score", "Mobile LCP (s)")
+            for key in (
+                "Desktop PSI Score",
+                "Mobile PSI Score",
+                "Mobile LCP (s)",
+                "CrUX Level",
+                "Lab LCP (Mobile) (s)",
+                "Lighthouse Performance (Mobile)",
+            )
         ):
             categories.append("Performance")
             sources.append("PSI Performance")
@@ -377,6 +423,7 @@ def build_technical_diagnostics_rows(
                 "Mobile LCP (s)": _export_number(row.get("Mobile LCP (s)")),
                 "Mobile CLS": _export_number(row.get("Mobile CLS")),
                 "Mobile TTFB (s)": _export_number(row.get("Mobile TTFB (s)")),
+                **_technical_diagnostics_lighthouse_fields(row),
                 "Final URL": row.get("Final URL"),
                 "Canonical URL": row.get("Canonical URL"),
                 "Meta Robots Raw": row.get("Meta Robots Raw"),
@@ -386,6 +433,7 @@ def build_technical_diagnostics_rows(
                 "GSC Coverage Category": _to_str(row.get("GSC Inspection Coverage State")),
                 "Discovered On URL": _to_str(row.get("Discovered On URL")),
                 "Discovery Rank": row.get("Discovery Rank"),
+                "Reachable from Homepage": _to_bool(row.get("Reachable from Homepage")),
                 "Source Legacy Tab": _joined(sources),
                 "Crawl Depth": _to_int(row.get("Crawl Depth"), 0),
                 "Security: HSTS": _to_bool(row.get("Security: HSTS")),
@@ -808,6 +856,7 @@ def build_template_duplication_risks_rows(
 
 __all__ = [
     "TECHNICAL_DIAGNOSTICS_COLUMNS",
+    "TECHNICAL_DIAGNOSTICS_LIGHTHOUSE_COLUMNS",
     "CONTENT_AI_READINESS_COLUMNS",
     "ISSUE_REGISTER_COLUMNS",
     "LINK_INTELLIGENCE_COLUMNS",

@@ -725,11 +725,19 @@ def finalize_row_state(
     status_val = extra_values["Status Code"]
     status_int = status_val if isinstance(status_val, int) else None
     indexability_reasons: list[str] = []
+    if isinstance(status_val, str):
+        status_normalized = status_val.strip().lower()
+        if status_normalized in (
+            "timeout",
+            "error",
+            "connection error",
+            "dns error",
+        ):
+            indexability_reasons.append(f"Request {status_val}")
+            main_values["Indexability"] = "Not Indexable"
     if status_int is not None and status_int >= 400:
         indexability_reasons.append(f"HTTP {status_int}")
         main_values["Indexability"] = "Not Indexable"
-    if isinstance(status_val, str) and status_val in {"Timeout", "Connection Error"}:
-        indexability_reasons.append(status_val)
     if not indexability_reasons:
         directive_state = resolve_indexability_directive(
             extra_values.get("Meta Robots Raw"), extra_values.get("X-Robots-Tag")

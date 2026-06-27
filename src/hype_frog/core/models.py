@@ -207,6 +207,16 @@ MAIN_ROW_DEFAULTS: dict[str, Any] = {
     "Health Icon": None,
     "CWV LCP (s)": None,
     "CWV CLS": None,
+    "CWV INP (ms)": None,
+    "CWV FCP (ms)": None,
+    "CWV TTFB (ms)": None,
+    "CrUX Level": None,
+    "CrUX LCP Category": None,
+    "CrUX CLS Category": None,
+    "CrUX INP Category": None,
+    "Origin CrUX LCP (s)": None,
+    "Origin CrUX CLS": None,
+    "Origin CrUX INP (ms)": None,
     "Field vs Lab": "Lab",
     "CWV Data Source": "None",
     "Regional Authority Score": 0,
@@ -224,6 +234,7 @@ MAIN_ROW_DEFAULTS: dict[str, Any] = {
     "GSC Coverage Note": None,
     "Click Depth": None,
     "Orphan Pages": False,
+    "Reachable from Homepage": False,
     "Internal PageRank": 0.0,
     "Found via Sitemap": False,
     "Found via Crawl": False,
@@ -367,10 +378,19 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "Regional Authority Score": 0,
     "Regional Entity Hits": 0,
     "CWV LCP (s)": None,
-    "CWV INP (ms)": None,
     "CWV CLS": None,
-    "CWV Data Source": "None",
+    "CWV INP (ms)": None,
+    "CWV FCP (ms)": None,
+    "CWV TTFB (ms)": None,
+    "CrUX Level": None,
+    "CrUX LCP Category": None,
+    "CrUX CLS Category": None,
+    "CrUX INP Category": None,
+    "Origin CrUX LCP (s)": None,
+    "Origin CrUX CLS": None,
+    "Origin CrUX INP (ms)": None,
     "Field vs Lab": "Lab",
+    "CWV Data Source": "None",
     "Speakable Schema Present": False,
     "QAPage/FAQ Schema Present": False,
     "AEO Readiness Score": 0,
@@ -404,6 +424,7 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "GSC Inspection Last Crawl": None,
     "Click Depth": None,
     "Orphan Pages": False,
+    "Reachable from Homepage": False,
     "Internal PageRank": 0.0,
     "Internal Inlinks": 0,
     "Found via Sitemap": False,
@@ -457,6 +478,50 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "Anchor Text Diversity": None,
     "Hreflang Signals": None,
 }
+
+EXTRA_ROW_DEFAULTS.update(
+    {
+        key: None
+        for key in (
+            "Lighthouse Performance (Mobile)",
+            "Lighthouse Accessibility (Mobile)",
+            "Lighthouse Best Practices (Mobile)",
+            "Lighthouse SEO Score (Mobile)",
+            "Lab LCP (Mobile) (s)",
+            "Lab CLS (Mobile)",
+            "Lab TBT (Mobile) (ms)",
+            "Lab INP (Mobile) (ms)",
+            "Lab FCP (Mobile) (s)",
+            "Lab Speed Index (Mobile) (s)",
+            "Lab TTI (Mobile) (s)",
+            "Lab TTFB (Mobile) (ms)",
+            "Lighthouse Performance (Desktop)",
+            "Lighthouse Accessibility (Desktop)",
+            "Lighthouse Best Practices (Desktop)",
+            "Lighthouse SEO Score (Desktop)",
+            "Lab LCP (Desktop) (s)",
+            "Lab CLS (Desktop)",
+            "Lab TBT (Desktop) (ms)",
+            "Lab INP (Desktop) (ms)",
+            "Lab FCP (Desktop) (s)",
+            "Lab Speed Index (Desktop) (s)",
+            "Lab TTI (Desktop) (s)",
+            "Lab TTFB (Desktop) (ms)",
+            "Page Size (KB)",
+            "DOM Size (nodes)",
+            "JS Execution (ms)",
+            "Network Request Count",
+            "Has Text Compression",
+            "Has Long Cache TTL Issues",
+            "Has Render Blocking Resources",
+            "Uses Modern Image Formats",
+        )
+    }
+)
+
+MAIN_ROW_DEFAULTS.update(
+    {key: EXTRA_ROW_DEFAULTS[key] for key in EXTRA_ROW_DEFAULTS if key.startswith(("Lighthouse ", "Lab ", "Page Size", "DOM Size", "JS Execution", "Network Request", "Has ", "Uses Modern"))}
+)
 
 
 class MainRowPayload(BaseModel):

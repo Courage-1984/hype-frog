@@ -49,11 +49,16 @@ def get_summary_rules() -> list[IssueRule]:
         ),
         IssueRule(
             "Critical",
-            "CWV LCP Above 4.0s",
+            "CWV LCP Above 4.0s (Field Data)",
             lambda r: (
-                (r.get("CWV LCP (s)") or 0) > 4.0
-                and "Origin" not in (r.get("CWV Data Source") or "")
+                r.get("CrUX Level") == "URL"
+                and (r.get("CWV LCP (s)") or 0) > 4.0
             ),
+        ),
+        IssueRule(
+            "Critical",
+            "Lab LCP Above 4.0s (Mobile)",
+            lambda r: (r.get("Lab LCP (Mobile) (s)") or 0) > 4.0,
         ),
         IssueRule(
             "Critical",
@@ -74,8 +79,49 @@ def get_summary_rules() -> list[IssueRule]:
         IssueRule("Warning", "Multiple H1", lambda r: to_bool(r.get("Multiple H1 Flag"))),
         IssueRule(
             "Warning",
-            "CWV LCP Needs Improvement (2.5-4.0s)",
-            lambda r: 2.5 <= float(r.get("CWV LCP (s)") or 0) <= 4.0,
+            "CWV CLS Above 0.1 (Field Data)",
+            lambda r: (
+                r.get("CrUX Level") == "URL"
+                and (r.get("CWV CLS") or 0) > 0.1
+            ),
+        ),
+        IssueRule(
+            "Warning",
+            "CWV INP Above 200ms (Field Data)",
+            lambda r: (
+                r.get("CrUX Level") == "URL"
+                and (r.get("CWV INP (ms)") or 0) > 200
+            ),
+        ),
+        IssueRule(
+            "Warning",
+            "Lab LCP 2.5s–4.0s (Mobile)",
+            lambda r: 2.5 < (r.get("Lab LCP (Mobile) (s)") or 0) <= 4.0,
+        ),
+        IssueRule(
+            "Warning",
+            "Lab TBT Above 300ms (Mobile)",
+            lambda r: (r.get("Lab TBT (Mobile) (ms)") or 0) > 300,
+        ),
+        IssueRule(
+            "Warning",
+            "Lab CLS Above 0.1 (Mobile)",
+            lambda r: (r.get("Lab CLS (Mobile)") or 0) > 0.1,
+        ),
+        IssueRule(
+            "Warning",
+            "Low Lighthouse Performance Mobile (<50)",
+            lambda r: 0 < (r.get("Lighthouse Performance (Mobile)") or 0) < 50,
+        ),
+        IssueRule(
+            "Warning",
+            "Low Lighthouse Accessibility (<80)",
+            lambda r: 0 < (r.get("Lighthouse Accessibility (Mobile)") or 0) < 80,
+        ),
+        IssueRule(
+            "Warning",
+            "Lab TTFB Above 600ms",
+            lambda r: (r.get("Lab TTFB (Mobile) (ms)") or 0) > 600,
         ),
         IssueRule(
             "Warning",
@@ -177,44 +223,54 @@ def get_summary_rules() -> list[IssueRule]:
         ),
         IssueRule(
             "Observation",
-            "INP Above 100ms",
-            lambda r: (
-                (r.get("CWV INP (ms)") or 0) > 100
-                and "Origin" not in (r.get("CWV Data Source") or "")
-            ),
+            "Lab TBT 150ms–300ms (Mobile)",
+            lambda r: 150 < (r.get("Lab TBT (Mobile) (ms)") or 0) <= 300,
         ),
         IssueRule(
             "Observation",
-            "CLS Above 0.1",
-            lambda r: (
-                (r.get("CWV CLS") or 0) > 0.1
-                and "Origin" not in (r.get("CWV Data Source") or "")
-            ),
+            "Moderate Lighthouse Performance Mobile (50–89)",
+            lambda r: 50 <= (r.get("Lighthouse Performance (Mobile)") or 0) < 90,
         ),
         IssueRule(
             "Observation",
-            "CWV LCP Above 4.0s (Origin CrUX — Run PSI Pass for Per-URL Data)",
+            "Low Lighthouse Best Practices (<80)",
+            lambda r: 0 < (r.get("Lighthouse Best Practices (Mobile)") or 0) < 80,
+        ),
+        IssueRule(
+            "Observation",
+            "Large Page Size (>1MB)",
+            lambda r: (r.get("Page Size (KB)") or 0) > 1024,
+        ),
+        IssueRule(
+            "Observation",
+            "Large DOM Size (>1500 nodes)",
+            lambda r: (r.get("DOM Size (nodes)") or 0) > 1500,
+        ),
+        IssueRule(
+            "Observation",
+            "High JS Execution Time (>2000ms)",
+            lambda r: (r.get("JS Execution (ms)") or 0) > 2000,
+        ),
+        IssueRule(
+            "Observation",
+            "Render Blocking Resources",
+            lambda r: r.get("Has Render Blocking Resources") is True,
+        ),
+        IssueRule(
+            "Observation",
+            "Origin CrUX LCP Above 4.0s (per-URL data unavailable — re-run with PSI key for URL-level data)",
             lambda r: (
-                (r.get("CWV LCP (s)") or 0) > 4.0
-                and "Origin" in (r.get("CWV Data Source") or "")
+                r.get("CrUX Level") == "Origin"
+                and (r.get("Origin CrUX LCP (s)") or 0) > 4.0
             ),
             scope="site",
         ),
         IssueRule(
             "Observation",
-            "CLS Above 0.1 (Origin CrUX — Run PSI Pass for Per-URL Data)",
+            "Origin CrUX INP Above 200ms (per-URL data unavailable)",
             lambda r: (
-                (r.get("CWV CLS") or 0) > 0.1
-                and "Origin" in (r.get("CWV Data Source") or "")
-            ),
-            scope="site",
-        ),
-        IssueRule(
-            "Observation",
-            "INP Above 100ms (Origin CrUX — Run PSI Pass for Per-URL Data)",
-            lambda r: (
-                (r.get("CWV INP (ms)") or 0) > 100
-                and "Origin" in (r.get("CWV Data Source") or "")
+                r.get("CrUX Level") == "Origin"
+                and (r.get("Origin CrUX INP (ms)") or 0) > 200
             ),
             scope="site",
         ),

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from hype_frog.reporter.sheets.merged_builders import (
+    TECHNICAL_DIAGNOSTICS_COLUMNS,
+    TECHNICAL_DIAGNOSTICS_LIGHTHOUSE_COLUMNS,
     build_content_ai_readiness_rows,
     build_issue_register_rows,
     build_link_intelligence_rows,
@@ -66,6 +68,76 @@ def test_technical_diagnostics_uses_main_fallbacks() -> None:
     assert row["Mobile PSI Score"] == 88
     assert row["SEO Health Score"] == 72
     assert "Performance" in str(row["Diagnostic Category"])
+
+
+def test_technical_diagnostics_includes_lighthouse_columns_from_main() -> None:
+    url = "https://example.com/slow"
+    main_rows = [
+        {
+            "URL": url,
+            "CrUX Level": "Origin",
+            "Lab LCP (Mobile) (s)": 7.351,
+            "Lab TBT (Mobile) (ms)": 3359,
+            "Lab FCP (Mobile) (s)": 2.1,
+            "Lab CLS (Mobile)": 0.12,
+            "Lab TTFB (Mobile) (ms)": 450,
+            "Lighthouse Accessibility (Mobile)": 85,
+            "Lighthouse Best Practices (Mobile)": 78,
+            "Lighthouse SEO Score (Mobile)": 92,
+            "Lab LCP (Desktop) (s)": 3.2,
+            "Lab TBT (Desktop) (ms)": 180,
+            "Lighthouse Performance (Desktop)": 55,
+            "Page Size (KB)": 6618.3,
+            "DOM Size (nodes)": 842,
+            "JS Execution (ms)": 1250,
+            "Network Request Count": 42,
+            "Origin CrUX LCP (s)": 11.852,
+            "Origin CrUX INP (ms)": 210,
+        }
+    ]
+    extra_rows = [
+        {
+            "URL": url,
+            "Status Code": 200,
+            "Severity Badge": "Critical",
+            "SEO Health Score": 40.0,
+            "PSI Data Status": "PSI + CrUX Field (Origin)",
+            "Mobile PSI Score": 28,
+        }
+    ]
+    rows = build_technical_diagnostics_rows(extra_rows, main_rows=main_rows)
+    assert len(rows) == 1
+    row = rows[0]
+    for key in TECHNICAL_DIAGNOSTICS_LIGHTHOUSE_COLUMNS:
+        assert key in row
+    assert row["CrUX Level"] == "Origin"
+    assert row["Lab LCP (Mobile) (s)"] == 7.351
+    assert row["Origin CrUX LCP (s)"] == 11.852
+    assert row["Page Size (KB)"] == 6618.3
+    assert "Performance" in str(row["Diagnostic Category"])
+
+
+def test_technical_diagnostics_includes_reachable_from_homepage() -> None:
+    url = "https://example.com/cart"
+    main_rows = [
+        {
+            "URL": url,
+            "Reachable from Homepage": False,
+            "Click Depth": -1,
+        }
+    ]
+    extra_rows = [
+        {
+            "URL": url,
+            "Status Code": 200,
+            "Severity Badge": "Pass",
+            "SEO Health Score": 80.0,
+            "Orphan Pages": False,
+        }
+    ]
+    rows = build_technical_diagnostics_rows(extra_rows, main_rows=main_rows)
+    assert "Reachable from Homepage" in TECHNICAL_DIAGNOSTICS_COLUMNS
+    assert rows[0]["Reachable from Homepage"] is False
 
 
 def test_content_ai_readiness_backfills_word_count_and_title() -> None:

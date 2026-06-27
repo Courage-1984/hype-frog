@@ -11,12 +11,12 @@ from hype_frog.core.models import (
     MainRowPayload,
     harden_page_row_metrics,
 )
-from hype_frog.crawler.psi_engine import psi_index_key
+from hype_frog.crawler.psi_engine import PSI_LIGHTHOUSE_EXPORT_KEYS, psi_index_key
 from hype_frog.pipeline.gsc_coverage import apply_gsc_coverage_fields
 from hype_frog.pipeline.broken_links import count_broken_internal_from_link_details
 from hype_frog.pipeline.content_cluster import compute_content_cluster_id
 from hype_frog.pipeline.enrich import value_or_default
-from hype_frog.pipeline.graph_engine import build_inlinks_map
+from hype_frog.pipeline.graph_engine import CLICK_DEPTH_UNREACHABLE, build_inlinks_map
 from hype_frog.rules import (
     get_summary_rules,
     owner_for_issue,
@@ -29,6 +29,10 @@ from hype_frog.core.url_normalization import normalize_url
 
 def normalize_url_key(url: object, keep_query: bool = True) -> str:
     return normalize_url(url, keep_query=keep_query)
+
+
+def _psi_lighthouse_projection(psi: Mapping[str, Any]) -> dict[str, object]:
+    return {key: psi.get(key) for key in PSI_LIGHTHOUSE_EXPORT_KEYS}
 
 
 _AEO_SCORABLE_EXTRACTION: frozenset[str] = frozenset({"complete", "partial"})
@@ -208,6 +212,16 @@ def assemble_enriched_row(
         or main_values.get("Extraction Source", "raw_http"),
         "CWV LCP (s)": extra_values.get("CWV LCP (s)"),
         "CWV CLS": extra_values.get("CWV CLS"),
+        "CWV INP (ms)": extra_values.get("CWV INP (ms)"),
+        "CWV FCP (ms)": extra_values.get("CWV FCP (ms)"),
+        "CWV TTFB (ms)": extra_values.get("CWV TTFB (ms)"),
+        "CrUX Level": extra_values.get("CrUX Level"),
+        "CrUX LCP Category": extra_values.get("CrUX LCP Category"),
+        "CrUX CLS Category": extra_values.get("CrUX CLS Category"),
+        "CrUX INP Category": extra_values.get("CrUX INP Category"),
+        "Origin CrUX LCP (s)": extra_values.get("Origin CrUX LCP (s)"),
+        "Origin CrUX CLS": extra_values.get("Origin CrUX CLS"),
+        "Origin CrUX INP (ms)": extra_values.get("Origin CrUX INP (ms)"),
         "Field vs Lab": extra_values.get("Field vs Lab"),
         "CWV Data Source": extra_values.get("CWV Data Source"),
         "PSI Data Status": extra_values.get("PSI Data Status"),
@@ -217,6 +231,7 @@ def assemble_enriched_row(
         "Mobile LCP (s)": extra_values.get("Mobile LCP (s)"),
         "Mobile CLS": extra_values.get("Mobile CLS"),
         "Mobile TTFB (s)": extra_values.get("Mobile TTFB (s)"),
+        **{key: extra_values.get(key) for key in PSI_LIGHTHOUSE_EXPORT_KEYS},
         "GSC Clicks": extra_values.get("GSC Clicks"),
         "GSC Impressions": extra_values.get("GSC Impressions"),
         "GSC CTR": extra_values.get("GSC CTR"),
@@ -225,6 +240,7 @@ def assemble_enriched_row(
         "GSC Coverage Note": extra_values.get("GSC Coverage Note"),
         "Click Depth": extra_values.get("Click Depth"),
         "Orphan Pages": extra_values.get("Orphan Pages", False),
+        "Reachable from Homepage": extra_values.get("Reachable from Homepage", False),
         "Internal PageRank": extra_values.get("Internal PageRank", 0.0),
         "Found via Sitemap": found_via_sitemap,
         "Found via Crawl": found_via_crawl,
@@ -308,11 +324,21 @@ def row_with_psi_gsc_harden(
             "Mobile LCP (s)": mobile_lcp,
             "Mobile CLS": mobile_cls,
             "Mobile TTFB (s)": _psi_numeric(psi.get("Mobile TTFB")),
-            "CWV LCP (s)": cwv_lcp if cwv_lcp is not None else mobile_lcp,
-            "CWV CLS": cwv_cls if cwv_cls is not None else mobile_cls,
+            "CrUX Level": psi.get("CrUX Level"),
+            "CWV LCP (s)": cwv_lcp,
+            "CWV CLS": cwv_cls,
             "CWV INP (ms)": cwv_inp,
+            "CWV FCP (ms)": _psi_numeric(psi.get("CWV FCP (ms)")),
+            "CWV TTFB (ms)": _psi_numeric(psi.get("CWV TTFB (ms)")),
+            "CrUX LCP Category": psi.get("CrUX LCP Category"),
+            "CrUX CLS Category": psi.get("CrUX CLS Category"),
+            "CrUX INP Category": psi.get("CrUX INP Category"),
+            "Origin CrUX LCP (s)": _psi_numeric(psi.get("Origin CrUX LCP (s)")),
+            "Origin CrUX CLS": _psi_numeric(psi.get("Origin CrUX CLS")),
+            "Origin CrUX INP (ms)": _psi_numeric(psi.get("Origin CrUX INP (ms)")),
             "CWV Data Source": psi.get("CWV Data Source", "None"),
             "Field vs Lab": psi.get("Field vs Lab", "N/A"),
+            **_psi_lighthouse_projection(psi),
         }
     elif psi_map:
         merged = {
@@ -456,8 +482,14 @@ def row_with_seo_health_enrichment(
     final_norm = norm(row_values.get("Final URL") or row_values.get("URL") or "")
     inlinks_count = len(inlinks_map.get(final_norm, set()))
     graph_row = graph_metrics.get(final_norm, {})
-    base["Click Depth"] = graph_row.get("Click Depth")
+    click_depth = graph_row.get("Click Depth")
+    base["Click Depth"] = click_depth
     base["Orphan Pages"] = bool(graph_row.get("Orphan Pages", inlinks_count == 0))
+    base["Reachable from Homepage"] = bool(
+        graph_row.get("Reachable from Homepage")
+        if "Reachable from Homepage" in graph_row
+        else click_depth is not None and click_depth != CLICK_DEPTH_UNREACHABLE
+    )
     base["Internal PageRank"] = graph_row.get("Internal PageRank", 0.0)
     base["Internal Inlinks"] = graph_row.get("Internal Inlinks", inlinks_count)
     base["Inlinks Bucket"] = (
