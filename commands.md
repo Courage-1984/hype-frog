@@ -206,3 +206,12 @@ git filter-repo --path build/ --path .cache/ --invert-paths --force
 
 git remote add origin https://github.com/Courage-1984/hype-frog.git
 
+
+
+git fetch origin
+
+git push --force-with-lease origin main
+
+
+git push --force origin main
+
