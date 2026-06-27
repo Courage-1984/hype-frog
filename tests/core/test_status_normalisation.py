@@ -31,6 +31,14 @@ def test_http_500_is_error() -> None:
     assert is_error_status(200) is False
 
 
+def test_float_whole_number_normalises_to_int() -> None:
+    assert normalise_status_code(200.0) == 200
+
+
+def test_float_fractional_status_returns_none() -> None:
+    assert normalise_status_code(200.5) is None
+
+
 def test_non_200_rule_covers_timeout() -> None:
     from hype_frog.rules.registry import get_summary_rules
 

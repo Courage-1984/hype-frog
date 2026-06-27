@@ -5,6 +5,8 @@ alwaysApply: true
 
 # Architecture and engineering guardrails
 
+# NB | CRITICAL ALWAYS APPLY RULE: YOU ARE NEVER TO TOUCH GIT NOR COMMIT AND OR PUSH!
+
 ## Module boundaries
 
 Preserve separation. All paths below are relative to `src/hype_frog/`. Dependency direction: **core** and **config** are foundations; **crawler** and **extractors** consume them; **validators** and **analysis** enrich row dicts; **orchestration** drives the crawl loop and export sequence; **pipeline** assembles rows and scoring glue; **rules** encodes scoring and issue logic; **reporter** builds workbook/HTML/PDF output; **checkpoint** persists resume state.

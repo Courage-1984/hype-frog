@@ -180,11 +180,36 @@ def test_baseline_resolved_placeholder() -> None:
     assert resolved.iloc[0]["Issue"] == BASELINE_DELTA_NOTE
 
 
-def test_load_legacy_xlsx_snapshot_handles_nan_counts() -> None:
-    path = Path("reports.old/SEO_AEO_Audit_africanmarketingconfederation.org_20260626_160647.xlsx")
-    if not path.exists():
-        pytest.skip("AMC reference workbook not available locally")
-    snapshot = load_run_snapshot(str(path))
+def test_load_legacy_xlsx_snapshot_handles_nan_counts(tmp_path: Path) -> None:
+    """_safe_int must coerce NaN/pd.NA summary counts to 0 when loading from xlsx.
+
+    Previously relied on a production workbook not committed to the repo. Now
+    uses an in-memory openpyxl workbook that reproduces the problematic shape:
+    a Summary sheet with an 'Issue Counts' section where Affected URL Count is
+    empty (reads back as NaN / pd.NA from pandas ExcelFile).
+    """
+    openpyxl = pytest.importorskip("openpyxl")
+    wb = openpyxl.Workbook()
+    ws_summary = wb.active
+    ws_summary.title = "Summary"
+    ws_summary.append(["Section", "Issue", "Affected URL Count"])
+    ws_summary.append(["Issue Counts", "Missing Title", None])   # NaN when read back
+    ws_summary.append(["Issue Counts", "Missing Meta Description", 3])
+
+    ws_inventory = wb.create_sheet("IssueInventory")
+    ws_inventory.append(["Stable Issue ID", "URL", "Issue", "Severity", "Status"])
+    ws_inventory.append([
+        "https://example.com/::missing-title",
+        "https://example.com/",
+        "Missing Title",
+        "Critical",
+        "Open",
+    ])
+
+    xlsx_path = str(tmp_path / "audit.xlsx")
+    wb.save(xlsx_path)
+
+    snapshot = load_run_snapshot(xlsx_path)
     assert snapshot is not None
     assert len(snapshot.issue_ids) > 0
     assert all(isinstance(v, int) for v in snapshot.issue_counts_by_name.values())

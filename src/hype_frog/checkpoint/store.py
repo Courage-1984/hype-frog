@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from hype_frog.core import get_logger
@@ -47,7 +47,7 @@ def save_checkpoint(
     completed_urls = [r.get("main", {}).get("URL") for r in results if r.get("main")]
     remaining_urls = [u for u in urls if u not in set(completed_urls)]
     checkpoint_payload: CheckpointPayload = {
-        "saved_at": datetime.utcnow().isoformat() + "Z",
+        "saved_at": datetime.now(timezone.utc).isoformat(),
         "completed": len(results),
         "total": len(urls) + len(checkpoint_completed_urls),
         "completed_urls": completed_urls,

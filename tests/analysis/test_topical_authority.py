@@ -2,7 +2,37 @@
 
 from __future__ import annotations
 
-from hype_frog.analysis.topical_authority import enrich_topical_authority_fields
+from hype_frog.analysis.topical_authority import (
+    _build_idf,
+    _tokenize,
+    _top_tfidf_terms,
+    enrich_topical_authority_fields,
+)
+
+
+def test_tokenize_strips_stopwords_and_short_tokens() -> None:
+    tokens = _tokenize("The quick brown fox and seo marketing")
+    assert "the" not in tokens
+    assert "and" not in tokens
+    assert "marketing" in tokens
+
+
+def test_build_idf_weights_rarer_terms_higher() -> None:
+    corpus = [
+        _tokenize("marketing conference summit"),
+        _tokenize("about page"),
+        _tokenize("about team"),
+    ]
+    idf = _build_idf(corpus)
+    assert idf["marketing"] > idf["about"]
+
+
+def test_top_tfidf_terms_returns_highest_scoring_terms() -> None:
+    tokens = _tokenize("marketing conference marketing summit marketing")
+    idf = {"marketing": 2.0, "conference": 1.5, "summit": 1.2}
+    terms = _top_tfidf_terms(tokens, idf, limit=2)
+    assert terms[0] == "marketing"
+    assert len(terms) == 2
 
 
 def test_enrich_topical_authority_fields_adds_keyword_signals() -> None:

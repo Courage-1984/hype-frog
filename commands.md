@@ -215,3 +215,11 @@ git push --force-with-lease origin main
 
 git push --force origin main
 
+
+
+uv run hype-frog --quick-test
+uv run hype-frog --full-smoke-test
+
+
+
+

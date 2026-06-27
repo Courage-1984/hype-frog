@@ -35,3 +35,15 @@ def test_apply_user_config_applies_known_keys(tmp_path: Path) -> None:
 def test_apply_runtime_override_rejects_unknown_key() -> None:
     with pytest.raises(ValueError, match="Unknown config key"):
         config_defaults.apply_runtime_override("NOT_A_REAL_KEY", 1)
+
+
+def test_malformed_yaml_returns_empty(tmp_path: Path) -> None:
+    config_path = tmp_path / "hype_frog.config.yaml"
+    config_path.write_text("THIN_CONTENT_WORD_THRESHOLD: [unclosed\n", encoding="utf-8")
+    assert load_user_config(tmp_path) == {}
+
+
+def test_non_dict_yaml_top_level_returns_empty(tmp_path: Path) -> None:
+    config_path = tmp_path / "hype_frog.config.yaml"
+    config_path.write_text("- item1\n- item2\n", encoding="utf-8")
+    assert load_user_config(tmp_path) == {}

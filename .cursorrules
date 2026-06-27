@@ -1,5 +1,7 @@
 # Hype Frog Governance Baseline
 
+# NB | CRITICAL ALWAYS APPLY RULE: YOU ARE NEVER TO TOUCH GIT NOR COMMIT AND OR PUSH!
+
 1. **Architecture ownership is strict.**
 
 * **Foundations:** `src/hype_frog/core/` and shared `config`.

@@ -1,5 +1,7 @@
 # hype-frog — Claude Code context
 
+# NB | CRITICAL ALWAYS APPLY RULE: YOU ARE NEVER TO TOUCH GIT NOR COMMIT AND OR PUSH!
+
 ## What this is
 Concurrent Python 3.12 SEO/AEO audit pipeline → multi-sheet Excel workbook + optional HTML/PDF executive reports.
 
