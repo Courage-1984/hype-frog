@@ -32,11 +32,10 @@ def extract_freshness_signals(
         extra_values["Published Date"] = pub_time.get("content")
 
     mod_time = soup.find("meta", property="article:modified_time")
-    extra_values["Last Modified Date"] = (
-        mod_time.get("content")
-        if mod_time and mod_time.get("content")
-        else last_modified_raw
-    )
+    if mod_time and mod_time.get("content"):
+        extra_values["Last Modified Date"] = mod_time.get("content")
+    elif last_modified_raw is not None:
+        extra_values["Last Modified Date"] = last_modified_raw
 
     if not extra_values.get("Published Date"):
         extra_values["Published Date"] = extra_values.get("Schema Published Date")

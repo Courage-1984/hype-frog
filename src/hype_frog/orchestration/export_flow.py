@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 import pandas as pd
@@ -18,8 +18,28 @@ from hype_frog.config import (
     resolve_project_relative_path,
 )
 from hype_frog.core import get_logger
+from hype_frog.core.env_vars import (
+    get_hf_export_html,
+    get_hf_export_pdf,
+    get_hf_pdf_brand_colour,
+    get_hf_pdf_client_name,
+    get_hf_pdf_logo_path,
+    get_hf_pdf_prepared_by,
+    get_hf_report_accent_colour,
+    get_hf_report_accent_colour_override,
+    get_hf_report_brand_colour,
+    get_hf_report_client_name,
+    get_hf_report_logo_path,
+    get_hf_report_prepared_by,
+    get_hf_report_theme,
+)
 from hype_frog.core.console import log_phase_banner
 from hype_frog.core.models import SummaryMetricsPayload
+from hype_frog.reporter.mocha_theme import (
+    THEME_NAME,
+    resolve_accent_colour,
+    resolve_brand_colour,
+)
 from hype_frog.core.crawl_log import CRAWL_LOG_COLUMNS, crawl_log_sheet_rows
 from hype_frog.crawler.robots_mapping import (
     ROBOTS_ANALYSIS_COLUMNS,
@@ -40,7 +60,6 @@ from hype_frog.analysis.third_party_scripts import (
     build_script_inventory_rows,
 )
 from hype_frog.rules.playbook_entries import build_issue_playbook_rows
-from hype_frog.pipeline.enrich import compute_internal_link_intelligence
 from hype_frog.pipeline.image_inventory import (
     IMAGE_INVENTORY_COLUMNS,
     build_image_inventory_rows,
@@ -284,7 +303,7 @@ def execute_export(
                 main_rows=typed_main_rows,
             )
             issue_inventory_df = pd.DataFrame(issue_inventory_rows)
-            run_timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+            run_timestamp = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             register_snapshot = snapshot_from_current_run(
                 issue_inventory_df=issue_inventory_df,
                 main_rows=main_rows,
@@ -889,7 +908,7 @@ def execute_export(
                 list(CRAWL_LOG_COLUMNS),
                 crawl_log_sheet_rows(enrichment.crawl_log_entries),
             )
-            graph_metrics = compute_internal_link_intelligence(extra_rows, crawl_result.source_label)
+            graph_metrics = enrichment.graph_metrics or {}
             write_dict_rows_sheet(
                 writer,
                 LINK_EQUITY_MAP_SHEET,
@@ -965,8 +984,8 @@ def execute_export(
 
     patch_xlsx_app_xml_for_excel_compatibility(output_filename)
 
-    export_pdf = os.getenv("HF_EXPORT_PDF", "").strip().lower() in {"1", "true", "yes"}
-    export_html = os.getenv("HF_EXPORT_HTML", "").strip().lower() in {"1", "true", "yes"}
+    export_pdf = get_hf_export_pdf()
+    export_html = get_hf_export_html()
     if export_pdf or export_html:
         # Build the shared ReportContext ONCE so the PDF and HTML executive
         # reports always present identical figures (single source of truth).
@@ -976,17 +995,25 @@ def execute_export(
         from hype_frog.reporter.html_report_writer import _load_logo_base64
 
         shared_brand_colour = (
-            os.getenv("HF_REPORT_BRAND_COLOUR", "").strip()
-            or os.getenv("HF_PDF_BRAND_COLOUR", "").strip()
-            or "#1e293b"
+            get_hf_report_brand_colour()
+            or get_hf_pdf_brand_colour()
         )
+        report_theme = get_hf_report_theme()
+        if report_theme == THEME_NAME:
+            shared_brand_colour = resolve_brand_colour(shared_brand_colour or None)
+            shared_accent_colour = resolve_accent_colour(
+                get_hf_report_accent_colour_override() or None
+            )
+        else:
+            shared_brand_colour = shared_brand_colour or "#1e293b"
+            shared_accent_colour = get_hf_report_accent_colour()
         shared_prepared_by = (
-            os.getenv("HF_REPORT_PREPARED_BY", "").strip()
-            or os.getenv("HF_PDF_PREPARED_BY", "").strip()
+            get_hf_report_prepared_by()
+            or get_hf_pdf_prepared_by()
         )
         shared_client_name = (
-            os.getenv("HF_REPORT_CLIENT_NAME", "").strip()
-            or os.getenv("HF_PDF_CLIENT_NAME", "").strip()
+            get_hf_report_client_name()
+            or get_hf_pdf_client_name()
         )
 
         report_ctx = None
@@ -1006,7 +1033,8 @@ def execute_export(
                 client_name=shared_client_name,
                 logo_base64=_load_logo_base64(),
                 brand_colour=shared_brand_colour,
-                accent_colour=os.getenv("HF_REPORT_ACCENT_COLOUR", "#2563eb").strip() or "#2563eb",
+                accent_colour=shared_accent_colour,
+                theme=report_theme,
             )
         except Exception as exc:
             logger.warning("Could not build executive report context (non-fatal): %s", exc)
@@ -1014,8 +1042,8 @@ def execute_export(
         if export_pdf and report_ctx is not None:
             try:
                 raw_logo = (
-                    os.getenv("HF_PDF_LOGO_PATH", "").strip()
-                    or os.getenv("HF_REPORT_LOGO_PATH", "").strip()
+                    get_hf_pdf_logo_path()
+                    or get_hf_report_logo_path()
                 )
                 resolved_logo = (
                     str(resolve_project_relative_path(raw_logo)) if raw_logo else None

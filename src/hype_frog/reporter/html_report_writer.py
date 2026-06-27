@@ -4,11 +4,11 @@ Write the HTML executive report to disk alongside the xlsx workbook.
 from __future__ import annotations
 
 import base64
-import os
 from pathlib import Path
 
 from hype_frog.config import resolve_project_relative_path
 from hype_frog.core import get_logger
+from hype_frog.core.env_vars import get_hf_report_logo_path
 from hype_frog.reporter.html_report_data import ReportContext
 from hype_frog.reporter.html_report_renderer import render_html_report
 
@@ -30,7 +30,7 @@ def write_html_report(
 
 def _load_logo_base64() -> str:
     """Load logo from HF_REPORT_LOGO_PATH env var. Returns data URI or empty string."""
-    logo_path = os.environ.get("HF_REPORT_LOGO_PATH", "").strip()
+    logo_path = get_hf_report_logo_path()
     if not logo_path:
         return ""
     try:

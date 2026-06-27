@@ -67,6 +67,23 @@ from hype_frog.pipeline.content_duplicates import enrich_content_duplicate_signa
 
 logger = get_logger(__name__)
 
+_PSI_SKIP_EXTENSIONS: frozenset[str] = frozenset({
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "bmp", "tiff",
+    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+    "mp3", "mp4", "avi", "mov", "wav",
+    "zip", "tar", "gz", "rar", "css", "js",
+})
+
+
+def _is_psi_eligible_url(url: str) -> bool:
+    """Return False for non-HTML resource URLs that PSI cannot audit."""
+    clean = url.split("?")[0].split("#")[0].lower()
+    dot_idx = clean.rfind(".")
+    slash_idx = clean.rfind("/")
+    if dot_idx > slash_idx:
+        return clean[dot_idx + 1:] not in _PSI_SKIP_EXTENSIONS
+    return True
+
 
 def normalize_url_key(url: object, keep_query: bool = True) -> str:
     return normalize_url(url, keep_query=keep_query)
@@ -127,6 +144,7 @@ class EnrichmentResult:
     image_probe_by_url: dict[str, dict[str, Any]] | None = None
     competitor_benchmark_rows: list[dict[str, Any]] | None = None
     competitor_benchmark_columns: tuple[str, ...] | None = None
+    graph_metrics: dict[str, dict[str, object]] | None = None
 
     @property
     def main_rows(self) -> list[dict[str, object]]:
@@ -188,6 +206,7 @@ def _sync_main_rows_seo_fields_from_extra(
 async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult:
     log_phase_banner("ENRICHMENT: Starting post-crawl data pipeline")
     image_probe_by_url: dict[str, dict[str, Any]] | None = None
+    graph_metrics: dict[str, dict[str, object]] = {}
     crawl_log = CrawlLogCollector()
     if crawl_result.crawl_log_entries is not None:
         crawl_log.entries.extend(crawl_result.crawl_log_entries)
@@ -273,6 +292,8 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                 "GSC URL Inspection enabled (%s) but no URLs qualified or GSC API unavailable.",
                 inspection_mode,
             )
+        else:
+            logger.info("ENRICHMENT PHASE 2/5: GSC URL Inspection — skipped (not configured for this run).")
 
         if crawl_result.max_psi_urls == 0:
             psi_map: dict[str, dict[str, object]] = {}
@@ -280,17 +301,18 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
         else:
             log_phase_banner("ENRICHMENT PHASE 3/5: PSI metric batch")
             with log_stage_timer("PSI fetch"):
+                _raw_psi_urls = [
+                    str(row.values.get("Final URL") or row.values.get("URL") or "").strip()
+                    for row in extra_rows
+                    if row.values.get("Final URL") or row.values.get("URL")
+                ]
+                _psi_urls = [u for u in _raw_psi_urls if _is_psi_eligible_url(u)]
+                _psi_skipped = len(_raw_psi_urls) - len(_psi_urls)
+                if _psi_skipped > 0:
+                    logger.info("PSI: skipped %d non-HTML URL(s) (images/media/assets).", _psi_skipped)
                 psi_map = await fetch_psi_metrics_batch(
                     session,
-                    [
-                        str(
-                            row.values.get("Final URL")
-                            or row.values.get("URL")
-                            or ""
-                        ).strip()
-                        for row in extra_rows
-                        if row.values.get("Final URL") or row.values.get("URL")
-                    ],
+                    _psi_urls,
                     max_urls=crawl_result.max_psi_urls,
                 )
             if crawl_result.max_psi_urls is not None:
@@ -443,9 +465,7 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             for row in extra_work
         ]
 
-        graph_metrics = compute_internal_link_intelligence(
-            extra_work, crawl_result.source_label
-        )
+        graph_metrics = compute_internal_link_intelligence(extra_work)
         title_map, meta_map, segment_by_url = build_title_meta_segment_maps(main_rows)
         summary_rules = get_summary_rules()
         main_by_url_pre = main_by_url_map(main_rows)
@@ -558,4 +578,5 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
         image_probe_by_url=image_probe_by_url,
         competitor_benchmark_rows=competitor_rows,
         competitor_benchmark_columns=competitor_columns,
+        graph_metrics=graph_metrics,
     )

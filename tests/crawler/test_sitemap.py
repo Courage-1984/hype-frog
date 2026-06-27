@@ -44,7 +44,7 @@ class _FakeSession:
     def __init__(self, mapping: dict[str, tuple[int, str]]) -> None:
         self._mapping = mapping
 
-    def get(self, url: str) -> _FakeResponse:
+    def get(self, url: str, **_kwargs: object) -> _FakeResponse:
         status, text = self._mapping.get(url, (404, ""))
         return _FakeResponse(status, text)
 

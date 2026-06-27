@@ -9,12 +9,14 @@ from typing import Any
 import aiohttp
 
 from hype_frog.config import CONNECT_TIMEOUT_SECONDS, READ_TIMEOUT_SECONDS, TIMEOUT_SECONDS
+from hype_frog.core import get_logger
 from hype_frog.core.models import ExtraRowPayload
 from hype_frog.core.status_codes import is_success_status
 from hype_frog.extractors.og_social import og_image_dimensions_ok
 from hype_frog.pipeline.og_image_consistency import resolve_og_image_url
 
 _MAX_IMAGE_BYTES = 65_536
+logger = get_logger(__name__)
 
 
 def read_image_dimensions(data: bytes) -> tuple[int, int] | None:
@@ -73,7 +75,8 @@ async def _fetch_og_image_probe(
                 if dims:
                     return status, dims[0], dims[1]
                 return status, None, None
-        except Exception:
+        except Exception as exc:
+            logger.debug("OG image probe failed %r: %s", url, exc)
             return None, None, None
 
 

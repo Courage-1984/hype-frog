@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from hype_frog.config import load_environment  # noqa: E402
 from hype_frog.core import configure_logging, get_logger  # noqa: E402
-from hype_frog.core.quick_test import _run_pipeline  # noqa: E402
+from hype_frog.diagnostics.quick_test import _run_pipeline  # noqa: E402
 from hype_frog.core.run_config import RunConfig  # noqa: E402
 from hype_frog.reporter.workbook_audit import audit_workbook, count_main_rows  # noqa: E402
 

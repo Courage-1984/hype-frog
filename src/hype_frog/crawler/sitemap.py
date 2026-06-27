@@ -15,7 +15,8 @@ MAX_SITEMAP_RECURSION_DEPTH = 3
 
 
 async def _fetch_sitemap_xml(url: str, session: aiohttp.ClientSession) -> str:
-    async with session.get(url) as response:
+    timeout = aiohttp.ClientTimeout(total=10)
+    async with session.get(url, timeout=timeout) as response:
         if response.status != 200:
             raise RuntimeError(f"HTTP {response.status}")
         return await response.text()

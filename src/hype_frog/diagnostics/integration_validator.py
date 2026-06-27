@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import sys
 from dataclasses import dataclass, field
 from enum import Enum
@@ -17,6 +16,7 @@ from typing import Any
 
 from hype_frog.config import PROJECT_ROOT, load_environment
 from hype_frog.core.api_clients import parse_psi_response
+from hype_frog.core.env_vars import get_anthropic_api_key, get_openai_api_key
 from hype_frog.crawler.gsc_engine import (
     load_gsc_credentials_readonly,
     probe_gsc_api_access,
@@ -329,9 +329,13 @@ def check_semantic_engine() -> IntegrationCheck:
 
 
 def check_optional_llm_keys() -> list[IntegrationCheck]:
+    _llm_accessors = {
+        "OPENAI_API_KEY": get_openai_api_key,
+        "ANTHROPIC_API_KEY": get_anthropic_api_key,
+    }
     checks: list[IntegrationCheck] = []
     for env_name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
-        value = str(os.getenv(env_name) or "").strip()
+        value = str(_llm_accessors[env_name]() or "").strip()
         if not value:
             checks.append(
                 IntegrationCheck(

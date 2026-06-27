@@ -141,7 +141,8 @@ async def _sample_urls_for_domain(
     for sitemap_url in sitemap_candidates:
         try:
             urls, _meta, _files = await parse_sitemap(sitemap_url, session)
-        except Exception:
+        except Exception as exc:
+            logger.debug("Sitemap parse failed %r: %s", sitemap_url, exc)
             continue
         if urls:
             candidates.extend(urls[:_SAMPLE_PAGE_LIMIT])

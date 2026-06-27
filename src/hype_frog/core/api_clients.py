@@ -14,12 +14,12 @@ their existing dictionaries.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import aiohttp
 from pydantic import BaseModel, ValidationError
 
+from hype_frog.core.env_vars import get_openai_api_key, get_openai_model
 from hype_frog.core.logger import get_logger
 from hype_frog.core.models import (
     GSCMetricsModel,
@@ -203,7 +203,7 @@ async def classify_search_intent_with_llm(
     snippet = " ".join(str(text or "").split())
     if not snippet:
         return "Unknown"
-    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    api_key = get_openai_api_key() or ""
     if not api_key:
         return "Unknown"
 
@@ -214,7 +214,7 @@ async def classify_search_intent_with_llm(
         f"Text: {snippet[:4000]}"
     )
     payload = {
-        "model": model or os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+        "model": model or get_openai_model(),
         "messages": [
             {
                 "role": "system",

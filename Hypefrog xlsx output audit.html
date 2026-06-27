@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hype Frog — XLSX Output Quality Audit · 2026-06-27</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 14mm 12mm;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            background: #f8fafc;
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 28px 20px;
+        }
+
+        /* ── HEADER ── */
+        .report-header {
+            background: #0f172a;
+            color: #fff;
+            border-radius: 8px;
+            padding: 28px 32px 24px;
+            margin-bottom: 24px;
+        }
+
+        .report-header .logo {
+            font-size: 0.75em;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #94a3b8;
+            margin-bottom: 6px;
+        }
+
+        .report-header h1 {
+            font-size: 1.55em;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .report-header .subtitle {
+            font-size: 0.9em;
+            color: #94a3b8;
+        }
+
+        .report-header .meta {
+            display: flex;
+            gap: 24px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        .report-header .meta-item {
+            font-size: 0.8em;
+        }
+
+        .report-header .meta-item strong {
+            display: block;
+            color: #64748b;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .report-header .meta-item span {
+            color: #e2e8f0;
+        }
+
+        /* ── EXECUTIVE SUMMARY ── */
+        .exec-summary {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px 24px;
+            margin-bottom: 24px;
+        }
+
+        .exec-summary p {
+            font-size: 0.92em;
+            color: #475569;
+        }
+
+        /* ── KPI STRIP ── */
+        .kpi-strip {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+        }
+
+        .kpi-card {
+            flex: 1 1 120px;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 14px 12px;
+            text-align: center;
+            min-width: 100px;
+        }
+
+        .kpi-card.sev-critical {
+            border-top: 3px solid #ef4444;
+        }
+
+        .kpi-card.sev-high {
+            border-top: 3px solid #f97316;
+        }
+
+        .kpi-card.sev-medium {
+            border-top: 3px solid #eab308;
+        }
+
+        .kpi-card.sev-low {
+            border-top: 3px solid #3b82f6;
+        }
+
+        .kpi-card.sev-good {
+            border-top: 3px solid #22c55e;
+        }
+
+        .kpi-value {
+            font-size: 2em;
+            font-weight: 800;
+            color: #1e293b;
+            line-height: 1;
+        }
+
+        .kpi-label {
+            font-size: 0.7em;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            margin-top: 4px;
+        }
+
+        /* ── SECTION HEADINGS ── */
+        h2 {
+            font-size: 1.05em;
+            font-weight: 700;
+            background: #0f172a;
+            color: #fff;
+            padding: 8px 14px;
+            border-radius: 5px;
+            margin: 32px 0 12px;
+            letter-spacing: 0.3px;
+        }
+
+        h3 {
+            font-size: 0.95em;
+            color: #1e293b;
+            margin: 18px 0 6px;
+        }
+
+        /* ── FINDING CARDS ── */
+        .finding {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-left: 4px solid #e2e8f0;
+            border-radius: 0 6px 6px 0;
+            margin-bottom: 14px;
+            overflow: hidden;
+        }
+
+        .finding.critical {
+            border-left-color: #ef4444;
+        }
+
+        .finding.high {
+            border-left-color: #f97316;
+        }
+
+        .finding.medium {
+            border-left-color: #eab308;
+        }
+
+        .finding.low {
+            border-left-color: #3b82f6;
+        }
+
+        .finding.pass {
+            border-left-color: #22c55e;
+        }
+
+        .finding-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px 16px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.72em;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .badge.critical {
+            background: #fecaca;
+            color: #991b1b;
+        }
+
+        .badge.high {
+            background: #fed7aa;
+            color: #9a3412;
+        }
+
+        .badge.medium {
+            background: #fef08a;
+            color: #713f12;
+        }
+
+        .badge.low {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge.pass {
+            background: #dcfce7;
+            color: #14532d;
+        }
+
+        .badge.sheet {
+            background: #f1f5f9;
+            color: #475569;
+            font-weight: 600;
+        }
+
+        .finding-id {
+            font-size: 0.72em;
+            font-weight: 700;
+            color: #94a3b8;
+            flex-shrink: 0;
+            padding-top: 3px;
+        }
+
+        .finding-title {
+            font-size: 0.92em;
+            font-weight: 700;
+            color: #1e293b;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .finding-body {
+            padding: 12px 16px;
+        }
+
+        .finding-body p {
+            font-size: 0.87em;
+            color: #475569;
+            margin-bottom: 8px;
+        }
+
+        .finding-body p:last-child {
+            margin-bottom: 0;
+        }
+
+        .evidence {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin: 8px 0;
+            font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+            font-size: 0.8em;
+            color: #374151;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .fix-box {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin-top: 8px;
+            font-size: 0.85em;
+            color: #14532d;
+        }
+
+        .fix-box strong {
+            display: block;
+            margin-bottom: 3px;
+            color: #166534;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        /* ── TABLE ── */
+        table.summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.83em;
+            margin: 10px 0 20px;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        table.summary-table th {
+            background: #0f172a;
+            color: #fff;
+            padding: 7px 10px;
+            text-align: left;
+            font-size: 0.8em;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        table.summary-table td {
+            padding: 7px 10px;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: top;
+        }
+
+        table.summary-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        table.summary-table tr:hover td {
+            background: #f8fafc;
+        }
+
+        .col-id {
+            font-weight: 700;
+            color: #94a3b8;
+            font-size: 0.85em;
+        }
+
+        .col-sev {
+            text-align: center;
+        }
+
+        .col-sheet {
+            font-family: monospace;
+            color: #475569;
+        }
+
+        /* ── PASS SECTION ── */
+        .pass-list {
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 8px 0 16px;
+        }
+
+        .pass-list li {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 0.82em;
+            color: #14532d;
+        }
+
+        .pass-list li::before {
+            content: '✓ ';
+            font-weight: 700;
+        }
+
+        /* ── FOOTER ── */
+        footer {
+            margin-top: 40px;
+            padding-top: 14px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 0.72em;
+            color: #94a3b8;
+            text-align: center;
+        }
+
+        /* ── PRINT ── */
+        @media print {
+            body {
+                background: #fff;
+                padding: 0;
+            }
+
+            .finding {
+                break-inside: avoid;
+            }
+
+            h2 {
+                break-after: avoid;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ══════════ HEADER ══════════ -->
+    <div class="report-header">
+        <div class="logo">Logi-Ink Internal · Quality Assurance</div>
+        <h1>Hype Frog — XLSX Output Quality Audit</h1>
+        <div class="subtitle">africanmarketingconfederation.org run · 2026-06-27 · openpyxl static analysis</div>
+        <div class="meta">
+            <div class="meta-item"><strong>File
+                    audited</strong><span>SEO_AEO_Audit_africanmarketingconfederation_org_20260627_183140.xlsx</span>
+            </div>
+            <div class="meta-item"><strong>File size</strong><span>47.7 MB</span></div>
+            <div class="meta-item"><strong>Sheets</strong><span>34</span></div>
+            <div class="meta-item"><strong>Audit method</strong><span>openpyxl read_only · static inspection · no site
+                    re-crawl</span></div>
+            <div class="meta-item"><strong>Prepared by</strong><span>Dennis (Admin) · Logi-Ink</span></div>
+        </div>
+    </div>
+
+    <!-- ══════════ EXECUTIVE SUMMARY ══════════ -->
+    <div class="exec-summary">
+        <p>This audit inspects the <em>quality of the output workbook itself</em> — not the client's site. The workbook
+            was opened with openpyxl in read-only mode and every sheet was interrogated for structural integrity, data
+            accuracy, cross-sheet consistency, owner attribution, and formula correctness. <strong>2 critical bugs, 6
+                high-severity issues, 6 medium issues, and 4 low-severity observations</strong> were identified. The
+            most impactful finding is a redirect loop mis-classification engine that incorrectly flags 245 normal
+            trailing-slash 301 redirects as loops, poisoning the Redirect Map, Main sheet, and Redirects tab
+            simultaneously. A secondary critical issue is a duplicate header row in DeltaFromPreviousRun that will
+            corrupt delta comparisons across runs. All other findings are correctible before the next client release.
+        </p>
+    </div>
+
+    <!-- ══════════ KPI STRIP ══════════ -->
+    <div class="kpi-strip">
+        <div class="kpi-card sev-critical">
+            <div class="kpi-value">2</div>
+            <div class="kpi-label">Critical Bugs</div>
+        </div>
+        <div class="kpi-card sev-high">
+            <div class="kpi-value">6</div>
+            <div class="kpi-label">High Severity</div>
+        </div>
+        <div class="kpi-card sev-medium">
+            <div class="kpi-value">6</div>
+            <div class="kpi-label">Medium Severity</div>
+        </div>
+        <div class="kpi-card sev-low">
+            <div class="kpi-value">4</div>
+            <div class="kpi-label">Low / Observation</div>
+        </div>
+        <div class="kpi-card sev-good">
+            <div class="kpi-value">34</div>
+            <div class="kpi-label">Sheets Inspected</div>
+        </div>
+        <div class="kpi-card sev-good">
+            <div class="kpi-value">94.6%</div>
+            <div class="kpi-label">False Loop Rate</div>
+        </div>
+    </div>
+
+    <!-- ══════════ FINDING SUMMARY TABLE ══════════ -->
+    <h2>Finding Summary</h2>
+    <table class="summary-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Sev.</th>
+                <th>Sheet(s)</th>
+                <th>Issue</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="col-id">BUG-01</td>
+                <td class="col-sev"><span class="badge critical">Critical</span></td>
+                <td class="col-sheet">Redirect Map · Main · Redirects</td>
+                <td>245 trailing-slash 301s falsely flagged as "Redirect loop" — Final URL/Hop 1 URL store normalised
+                    source, not destination</td>
+            </tr>
+            <tr>
+                <td class="col-id">BUG-02</td>
+                <td class="col-sev"><span class="badge critical">Critical</span></td>
+                <td class="col-sheet">DeltaFromPreviousRun</td>
+                <td>Duplicate header row written as row 2 data — corrupts all multi-run delta comparisons</td>
+            </tr>
+            <tr>
+                <td class="col-id">BUG-03</td>
+                <td class="col-sev"><span class="badge high">High</span></td>
+                <td class="col-sheet">SitemapQA</td>
+                <td>257/259 sitemap URLs flagged "Sitemap URL Redirects" — cascade of BUG-01 normalisation bug</td>
+            </tr>
+            <tr>
+                <td class="col-id">BUG-04</td>
+                <td class="col-sev"><span class="badge high">High</span></td>
+                <td class="col-sheet">Quick Wins</td>
+                <td>All 15 Priority Scores = 0 — ranking is meaningless, sort order arbitrary</td>
+            </tr>
+            <tr>
+                <td class="col-id">BUG-05</td>
+                <td class="col-sev"><span class="badge high">High</span></td>
+                <td class="col-sheet">FixPlan · Quick Wins</td>
+                <td>12+ technical/performance issues assigned to "Copy Writer" instead of Dev (TBT, LCP, CLS, page size,
+                    redirects, JS execution, Lighthouse)</td>
+            </tr>
+            <tr>
+                <td class="col-id">BUG-06</td>
+                <td class="col-sev"><span class="badge high">High</span></td>
+                <td class="col-sheet">Quick Wins</td>
+                <td>"Jump to FixPlan" column contains plain text "Open in Main Tab" — points to wrong sheet, is not a
+                    hyperlink</td>
+            </tr>
+            <tr>
+                <td class="col-id">BUG-07</td>
+                <td class="col-sev"><span class="badge high">High</span></td>
+                <td class="col-sheet">Image Inventory</td>
+                <td>252 Facebook tracking pixel URLs included as images (20.2% of inventory) — pollutes alt text
+                    coverage metrics</td>
+            </tr>
+            <tr>
+                <td class="col-id">BUG-08</td>
+                <td class="col-sev"><span class="badge high">High</span></td>
+                <td class="col-sheet">Image Inventory</td>
+                <td>490/983 real-format images have no alt text — 49.8% null rate may be partly inflated by tracking
+                    pixel inclusion</td>
+            </tr>
+            <tr>
+                <td class="col-id">BUG-09</td>
+                <td class="col-sev"><span class="badge medium">Medium</span></td>
+                <td class="col-sheet">FixPlan</td>
+                <td>Flat-rate hour estimates: every Immediate issue = 10h, every Next Sprint and Backlog issue = 4h
+                    regardless of complexity</td>
+            </tr>
+            <tr>
+                <td class="col-id">BUG-10</td>
+                <td class="col-sev"><span class="badge medium">Medium</span></td>
+                <td class="col-sheet">FixPlan</td>
+                <td>"Agency Owner" column is always identical to "Owner" — adds zero information</td>
+            </tr>
+            <tr>
+                <td class="col-id">BUG-11</td>
+                <td class="col-sev"><span class="badge medium">Medium</span></td>
+                <td class="col-sheet">Content Optimisation Hub · Content Hub Metrics</td>
+                <td>8 fewer URLs than Main (256 vs 264) — excluded pages not documented</td>
+            </tr>
+            <tr>
+                <td class="col-id">BUG-12</td>
+                <td class="col-sev"><span class="badge medium">Medium</span></td>
+                <td class="col-sheet">IssueInventory · Issue Register</td>
+                <td>97-row gap between sheets (4440 vs 4537) — site-level null-URL summary rows in Register not
+                    documented</td>
+            </tr>
+            <tr>
+                <td class="col-id">BUG-13</td>
+                <td class="col-sev"><span class="badge medium">Medium</span></td>
+                <td class="col-sheet">Snippet Opportunities</td>
+                <td>All 109 effort values = 'S' — uniform Small effort applied regardless of content complexity</td>
+            </tr>
+            <tr>
+                <td class="col-id">BUG-14</td>
+                <td class="col-sev"><span class="badge medium">Medium</span></td>
+                <td class="col-sheet">Robots.txt Analysis</td>
+                <td>Raw _x000D_ XML carriage-return escapes in Detail column — robots.txt content is unreadable as
+                    displayed</td>
+            </tr>
+            <tr>
+                <td class="col-id">OBS-01</td>
+                <td class="col-sev"><span class="badge low">Low</span></td>
+                <td class="col-sheet">Link Intelligence</td>
+                <td>"Broken Internal Links Count" column stores SUMPRODUCT formula strings, not numeric values — fails
+                    Python cross-referencing</td>
+            </tr>
+            <tr>
+                <td class="col-id">OBS-02</td>
+                <td class="col-sev"><span class="badge low">Low</span></td>
+                <td class="col-sheet">Content Hub Metrics</td>
+                <td>URL column stores =HYPERLINK() formula strings — MATCH lookups against this column may behave
+                    unexpectedly</td>
+            </tr>
+            <tr>
+                <td class="col-id">OBS-03</td>
+                <td class="col-sev"><span class="badge low">Low</span></td>
+                <td class="col-sheet">AIOSEO Recommendations</td>
+                <td>11% null WordPress Post IDs (257/2338) — no direct edit links available for those entries</td>
+            </tr>
+            <tr>
+                <td class="col-id">OBS-04</td>
+                <td class="col-sev"><span class="badge low">Low</span></td>
+                <td class="col-sheet">DeltaFromPreviousRun</td>
+                <td>Trend Run 2 and Trend Run 3 columns are entirely empty with no note indicating baseline status</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- ══════════ CRITICAL ══════════ -->
+    <h2>🔴 Critical Bugs</h2>
+
+    <div class="finding critical">
+        <div class="finding-header">
+            <span class="finding-id">BUG-01</span>
+            <span class="badge critical">Critical</span>
+            <span class="badge sheet">Redirect Map</span>
+            <span class="badge sheet">Main</span>
+            <span class="badge sheet">Redirects</span>
+            <div class="finding-title">245 trailing-slash 301 redirects falsely classified as "Redirect loop"</div>
+        </div>
+        <div class="finding-body">
+            <p><strong>What is wrong:</strong> The crawler normalises URLs by stripping trailing slashes before storing
+                them. When it follows a WordPress trailing-slash redirect (e.g.
+                <code>/awards-2026 → /awards-2026/</code>), it records both <em>Hop 1 URL</em> and <em>Final URL</em> as
+                <code>/awards-2026</code> — the normalised source — rather than <code>/awards-2026/</code> (the actual
+                destination). The loop-detection logic then compares the normalised source URL against the normalised
+                final URL, finds them equal, and writes <code>SEO Risk = "Redirect loop"</code>. This fires for 245 of
+                259 total redirect-map entries (94.6%).</p>
+            <p><strong>Evidence from data:</strong></p>
+            <div class="evidence">Redirect Map row 1:
+                Source URL : https://africanmarketingconfederation.org/awards-2026
+                Hop 1 URL : https://africanmarketingconfederation.org/awards-2026 ← WRONG (should be /awards-2026/)
+                Final URL : https://africanmarketingconfederation.org/awards-2026 ← WRONG (same as source)
+                SEO Risk : "Redirect loop" ← FALSE POSITIVE
+                Chain Detail: ...awards-2026 → [301] → ...awards-2026/ ← Correctly shows trailing slash
+
+                Counts:
+                Source URL == Final URL (normalisation mismatch): 245 / 259
+                Redirect Loop Flag = True in Main sheet: 245 / 264</div>
+            <p><strong>Downstream impact:</strong> Main sheet <code>Redirect Loop Flag</code> column is True for 245
+                URLs. Any dashboard metric, conditional format, or external report that reads "Redirect Loop" is
+                completely poisoned. SitemapQA <code>Sitemap URL Redirects</code> flag is also inflated as a direct
+                cascade (see BUG-03).</p>
+            <div class="fix-box">
+                <strong>Fix required (crawler code)</strong>
+                1. Store Hop N URLs and Final URL as the <em>raw resolved URL</em> (with trailing slash as returned by
+                the server), not the normalised input URL.<br>
+                2. Redirect loop detection must compare the <em>raw hop chain</em>: a true loop requires the final
+                resolved URL (after following all hops) to equal the original source URL. A single hop A→B where A≠B is
+                never a loop.<br>
+                3. Trailing-slash redirects should be classified as <code>"Single 301 (trailing slash)"</code> or
+                <code>null</code> SEO risk, not "Redirect loop".
+            </div>
+        </div>
+    </div>
+
+    <div class="finding critical">
+        <div class="finding-header">
+            <span class="finding-id">BUG-02</span>
+            <span class="badge critical">Critical</span>
+            <span class="badge sheet">DeltaFromPreviousRun</span>
+            <div class="finding-title">Duplicate header row written as first data row — corrupts multi-run delta
+                comparison</div>
+        </div>
+        <div class="finding-body">
+            <p><strong>What is wrong:</strong> The DeltaFromPreviousRun sheet has three logical rows at the top: row 0
+                (the column header), row 1 (an exact copy of the column header written as data), and row 2 (the first
+                real data row). The data-writing loop emits the header tuple a second time before beginning to write
+                records.</p>
+            <div class="evidence">Row 0 (header): ('Section','URL','Issue','Severity','Previous Value','Current
+                Value','Change','Direction','First Seen','Last Seen','Days Open','Trend Run 1','Trend Run 2','Trend Run
+                3','Notes','Open in Main','BACK TO DASHBOARD')
+                Row 1 (BUG): ('Section','URL','Issue','Severity','Previous Value','Current
+                Value','Change','Direction','First Seen','Last Seen','Days Open','Trend Run 1','Trend Run 2','Trend Run
+                3','Notes', &lt;HYPERLINK formula&gt;, None)
+                Row 2 (data): ('Summary', None, None, ..., 'Summary')</div>
+            <p><strong>Downstream impact:</strong> Any code that reads DeltaFromPreviousRun with <code>skiprows=1</code>
+                will treat the duplicate header as a data record. When a previous run is eventually supplied, the delta
+                comparison engine will attempt to match the header string "Section" as a URL and miscount changes. The
+                <code>Open in Main</code> hyperlink formula in the duplicate row points to <code>B2</code>, which is the
+                string "URL" — it will produce a broken link in Excel.</p>
+            <div class="fix-box">
+                <strong>Fix required (XLSX writer)</strong>
+                Remove the second call to write the header row. The delta sheet writer appears to call
+                <code>ws.append(header_row)</code> or similar once during initialisation and once again at the start of
+                the data loop. Trace the write sequence and ensure the header is written exactly once.
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════ HIGH ══════════ -->
+    <h2>🟠 High Severity Issues</h2>
+
+    <div class="finding high">
+        <div class="finding-header">
+            <span class="finding-id">BUG-03</span>
+            <span class="badge high">High</span>
+            <span class="badge sheet">SitemapQA</span>
+            <div class="finding-title">257 of 259 sitemap URLs falsely flagged as redirecting — cascade of BUG-01</div>
+        </div>
+        <div class="finding-body">
+            <p><strong>What is wrong:</strong> SitemapQA's <em>Sitemap URL Redirects</em> column is True for 257 of 259
+                crawlable sitemap entries. The sitemaps contain bare URLs without trailing slashes; the crawler resolves
+                them to their trailing-slash equivalents and then compares the normalised sitemap URL against the
+                normalised final URL. Because the normalisation strips the slash from both, they appear to differ at the
+                raw level, triggering the redirect flag for the entire sitemap population.</p>
+            <div class="evidence">SitemapQA:
+                Total sitemap URL rows: 87
+                Total crawled URL rows: 171
+                Sitemap URL Redirects = True: 257 ← 99% flagged
+                Non-200 in sitemap: 2
+                Missing &lt;lastmod&gt;: 0
+                Missing &lt;changefreq&gt;: 0</div>
+            <p>Fixing BUG-01 will resolve this automatically. Separately, the <code>Sitemap URL Redirects</code> flag
+                should distinguish between trailing-slash 301s (cosmetic, expected on WordPress) and actual destination
+                changes.</p>
+            <div class="fix-box">
+                <strong>Fix required</strong> Resolved by fixing BUG-01. Additionally, add a <code>Redirect Type</code>
+                sub-column classifying each redirect as "Trailing Slash", "HTTPS Upgrade", "URL Change", or "Loop" to
+                give clients actionable context.
+            </div>
+        </div>
+    </div>
+
+    <div class="finding high">
+        <div class="finding-header">
+            <span class="finding-id">BUG-04</span>
+            <span class="badge high">High</span>
+            <span class="badge sheet">Quick Wins</span>
+            <div class="finding-title">All 15 Quick Win Priority Scores = 0 — ranking is meaningless</div>
+        </div>
+        <div class="finding-body">
+            <p><strong>What is wrong:</strong> The <em>Priority Score</em> column (column A) in Quick Wins contains 0
+                for every one of the 15 rows. The column is the primary sort key intended to rank fixes by impact, so a
+                uniform zero means the current row order is arbitrary rather than prioritised.</p>
+            <div class="evidence">Quick Wins Priority Score values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                All 15 rows: Priority Score = 0, Effort = 4h, Sprint = "Next Sprint"</div>
+            <p>The priority score formula (or calculation step) that should incorporate GSC clicks, affected URL count,
+                and severity is either not executing, outputting zero, or not being written to the column. GSC Clicks
+                <em>are</em> populated correctly in column G (values range from 1 to 53), so the input data exists but
+                is not flowing into the score.</p>
+            <div class="fix-box">
+                <strong>Fix required (Quick Wins generator)</strong>
+                Debug and restore the priority score calculation. Suggested formula (for reference):
+                <code>Priority Score = (Severity weight × Effort inverse) + (GSC Clicks normalised) + (Business Risk Score / 100)</code>.
+                Verify the score is written to the correct column before the data rows are appended.
+            </div>
+        </div>
+    </div>
+
+    <div class="finding high">
+        <div class="finding-header">
+            <span class="finding-id">BUG-05</span>
+            <span class="badge high">High</span>
+            <span class="badge sheet">FixPlan</span>
+            <span class="badge sheet">Quick Wins</span>
+            <div class="finding-title">12+ technical performance issues mis-assigned to "Copy Writer" instead of "Dev"
+            </div>
+        </div>
+        <div class="finding-body">
+            <p><strong>What is wrong:</strong> The owner-assignment logic in both FixPlan and Quick Wins defaults to
+                "Copy Writer" for a large class of issues that are purely technical or server-side. A copy writer cannot
+                reduce Total Blocking Time, fix Lighthouse Performance scores, optimise JavaScript execution, resolve
+                redirect chains, or reduce page weight.</p>
+            <div class="evidence">Issues with Owner = "Copy Writer" that should be "Dev" or "Server/Host":
+                FixPlan:
+                - High Third-Party Script Count (>10) → Copy Writer (should: Dev)
+                - Lab TBT Above 300ms (Mobile) → Copy Writer (should: Dev)
+                - Low Lighthouse Performance Mobile (<50) → Copy Writer (should: Dev) - Lab CLS Above 0.1 (Mobile) →
+                    Copy Writer (should: Dev) - 302 Redirect (Temporary) → Copy Writer (should: Dev) - Mixed 301/302
+                    Chain → Copy Writer (should: Dev) - CWV INP Above 200ms (Field Data) → Copy Writer (should: Dev) -
+                    Low Lighthouse Best Practices (<80) → Copy Writer (should: Dev) - Large Page Size (>1MB) → Copy
+                    Writer (should: Dev/Server)
+                    - Origin CrUX LCP Above 4.0s (...) → Copy Writer (should: Dev)
+                    - Origin CrUX INP Above 200ms (...) → Copy Writer (should: Dev)
+                    - High JS Execution Time (>2000ms) → Copy Writer (should: Dev)
+                    Quick Wins:
+                    - CWV INP Above 200ms (Field Data) → Copy Writer (should: Dev)
+                    - Lab TBT Above 300ms (Mobile) → Copy Writer (should: Dev)</div>
+            <p>The root cause appears to be a blanket owner-assignment fallback that assigns "Copy Writer" to any issue
+                not in the explicitly Dev or Server/Host whitelist. The whitelist appears to be incomplete.</p>
+            <div class="fix-box">
+                <strong>Fix required (issue-to-owner mapping)</strong>
+                Extend the owner assignment lookup table to cover all performance, Core Web Vitals, Lighthouse,
+                redirect, and script-related issue types. Suggested mapping additions:<br><br>
+                <code>Dev:</code> All CWV, Lab LCP/CLS/TBT/INP, Lighthouse Performance/Best Practices, JS Execution,
+                Page Size, Redirect Chains, 302/Mixed Redirects, Third-Party Scripts, High DOM, Render Blocking
+                Resources<br>
+                <code>Server/Host:</code> ETag, Cache TTL, TTFB, Server Errors<br>
+                <code>Copy Writer:</code> Meta description, H1, OG tags, Answer paragraphs, Alt text, Content freshness,
+                Schema content fields
+            </div>
+        </div>
+    </div>
+
+    <div class="finding high">
+        <div class="finding-header">
+            <span class="finding-id">BUG-06</span>
+            <span class="badge high">High</span>
+            <span class="badge sheet">Quick Wins</span>
+            <div class="finding-title">"Jump to FixPlan" column is literal text "Open in Main Tab" — wrong sheet, no
+                hyperlink</div>
+        </div>
+        <div class="finding-body">
+            <p><strong>What is wrong:</strong> The column header in Quick Wins column L reads "Jump to FixPlan". Every
+                data value in this column is the plain string <code>"Open in Main Tab"</code>. This is wrong on two
+                counts: it navigates to the Main tab (not FixPlan), and it is plain text rather than a navigable
+                hyperlink formula.</p>
+            <div class="evidence">Column header : "Jump to FixPlan"
+                All data values: "Open in Main Tab" ← plain string, not a HYPERLINK() formula
+                Expected : =IFERROR(HYPERLINK("#'FixPlan'!A"&MATCH(C2,FixPlan!A:A,0),"Open in FixPlan"),
+                HYPERLINK("#'FixPlan'!A1","Open in FixPlan"))</div>
+            <p>The Open in Main column (L+1) already provides a Main link; the FixPlan jump is a distinct navigation
+                path that is currently non-functional.</p>
+            <div class="fix-box">
+                <strong>Fix required (Quick Wins writer)</strong>
+                Replace the static string with a proper HYPERLINK formula targeting the FixPlan sheet, matching on the
+                Issue column (C) against FixPlan column A (Issue Type). Alternatively write the formula as a cell
+                formula string prefixed with <code>=</code> so Excel evaluates it on open.
+            </div>
+        </div>
+    </div>
+
+    <div class="finding high">
+        <div class="finding-header">
+            <span class="finding-id">BUG-07</span>
+            <span class="badge high">High</span>
+            <span class="badge sheet">Image Inventory</span>
+            <div class="finding-title">252 Facebook tracking pixel URLs included in Image Inventory (20.2% of all rows)
+            </div>
+        </div>
+        <div class="finding-body">
+            <p><strong>What is wrong:</strong> The Image Inventory contains 252 rows for the URL pattern
+                <code>https://www.facebook.com/tr?id=...&ev=PageView&noscript=1</code>. These are 1×1 pixel tracking
+                beacons injected via <code>&lt;noscript&gt;&lt;img&gt;</code> tags by the Meta Pixel. They are not
+                content images and have no SEO relevance. Their inclusion inflates the image count on every page that
+                loads them (essentially all 263 indexable pages) and skews all image-related metrics.</p>
+            <div class="evidence">Image Inventory breakdown:
+                Total rows: 1250
+                Extension "other" (non-image): 260 (includes tracking pixels + Gravatars)
+                of which facebook.com/tr?: 252 ← tracking beacons, not images
+                Extension png: 493
+                Extension jpg: 414
+                Extension webp: 49
+                Extension jpeg: 25
+
+                facebook.com rows:
+                Status code: None (not fetched)
+                Is Broken: False
+                Is Oversized: False
+                Alt text: None</div>
+            <div class="fix-box">
+                <strong>Fix required (image extractor)</strong>
+                Filter out <code>&lt;noscript&gt;&lt;img&gt;</code> tracking pixels before writing to Image Inventory. A
+                domain blocklist covering known tracker origins (facebook.com/tr, google-analytics.com, doubleclick.net,
+                etc.) is the most robust approach. Optionally, add a <code>Image Category</code> column (Content /
+                Avatar / Tracking / Icon) to preserve the data for script audits without polluting image quality
+                metrics.
+            </div>
+        </div>
+    </div>
+
+    <div class="finding high">
+        <div class="finding-header">
+            <span class="finding-id">BUG-08</span>
+            <span class="badge high">High</span>
+            <span class="badge sheet">Image Inventory</span>
+            <div class="finding-title">490 of 983 real-format images have null alt text — 49.8% coverage gap</div>
+        </div>
+        <div class="finding-body">
+            <p><strong>What is wrong:</strong> Among images with recognised content extensions (png, jpg, jpeg, webp,
+                gif, avif), 490 of 983 have <code>Alt Text = None</code>. This 49.8% null rate is a significant data
+                quality concern. Part of the rate may be artificially inflated because tracking pixel rows (BUG-07) are
+                counted in denominators before extension filtering, but the underlying null alt coverage on real images
+                remains high regardless.</p>
+            <div class="evidence">Real-format images (png/jpg/jpeg/webp/gif/avif): 983
+                With alt text populated: 493
+                With null alt text: 490 (49.8%)
+
+                Note: the Content & AI Readiness sheet reports "Image Alt Coverage ≥ 80%" at 22.0% of pages
+                — suggesting the low-alt-coverage reading is accurate at the page level too.</div>
+            <p>This appears to be a genuine site-side deficiency rather than a crawl error, but confirming the null rate
+                is not inflated by extraction failures (e.g., lazy-loaded images not rendered in time) is important
+                before reporting the 49.8% figure to the client.</p>
+            <div class="fix-box">
+                <strong>Fix required (image extractor)</strong>
+                After resolving BUG-07, re-verify the null alt rate against content images only. Add a column
+                <code>Alt Source</code> (HTML attribute / aria-label / title fallback / none) so the client can
+                distinguish completely missing alt text from images that use accessible alternatives. Add a
+                <code>Lazy Loaded</code> flag to identify images that may not have been rendered during extraction.
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════ MEDIUM ══════════ -->
+    <h2>🟡 Medium Severity Issues</h2>
+
+    <div class="finding medium">
+        <div class="finding-header">
+            <span class="finding-id">BUG-09</span>
+            <span class="badge medium">Medium</span>
+            <span class="badge sheet">FixPlan</span>
+            <div class="finding-title">Flat-rate hour estimates: all Next Sprint = 4h, all Backlog = 4h — sprint tier
+                defaults, not real scoping</div>
+        </div>
+        <div class="finding-body">
+            <p><strong>What is wrong:</strong> Every "Immediate" issue in FixPlan carries exactly 10 hours. Every "Next
+                Sprint" and "Backlog" issue carries exactly 4 hours. This uniformity across 54 issues strongly indicates
+                the hour values are being assigned from a sprint-tier lookup (<em>Immediate → 10h, else → 4h</em>)
+                rather than from per-issue complexity logic.</p>
+            <div class="evidence">FixPlan hour distribution:
+                Sprint = Immediate (7 issues): all 10h → total: 70h
+                Sprint = Next Sprint (23 issues): all 4h → total: 92h
+                Sprint = Backlog (24 issues): all 4h → total: 96h
+                Total: 258h (as reported in HTML executive summary)
+
+                Examples of 4h estimates that are not comparable:
+                "No 40-60 Word Answer Paragraphs" (264 pages affected) = 4h
+                "302 Redirect (Temporary)" (small change) = 4h
+                "Stale Content (>2 years)" (copy rewrite) = 4h</div>
+            <div class="fix-box">
+                <strong>Improvement required (FixPlan hour calculator)</strong>
+                Implement issue-class effort bands: e.g. global template fixes (1–2h Dev), per-page copy tasks (0.25h ×
+                affected count, capped), server config (1–4h), schema additions (2–8h depending on type count). The
+                total will be far more defensible and useful for client sprint planning.
+            </div>
+        </div>
+    </div>
+
+    <div class="finding medium">
+        <div class="finding-header">
+            <span class="finding-id">BUG-10</span>
+            <span class="badge medium">Medium</span>
+            <span class="badge sheet">FixPlan</span>
+            <div class="finding-title">"Agency Owner" column is always identical to "Owner" — redundant column</div>
+        </div>
+        <div class="finding-body">
+            <p><strong>What is wrong:</strong> FixPlan column M (Agency Owner) is always the same value as column L
+                (Owner). In a client-facing workbook, the intent of "Agency Owner" is presumably to designate which
+                party at Logi-Ink is responsible, whereas "Owner" designates the client-side team. Currently both are
+                identical.</p>
+            <div class="evidence">Owner = "Dev" → Agency Owner = "Dev"
+                Owner = "Copy Writer" → Agency Owner = "Copy Writer"
+                Owner = "Server/Host" → Agency Owner = "Server/Host"
+                (Consistent for all 54 FixPlan rows)</div>
+            <div class="fix-box">
+                <strong>Improvement required</strong>
+                Either: (a) populate Agency Owner with the Logi-Ink team member or role (e.g. "Dieter / Logi-Ink Dev")
+                distinct from the client's Owner designation; or (b) remove the Agency Owner column and add a single
+                <code>Responsibility</code> column with values like "Client Dev · Agency Dev · Client Copy · Agency
+                SEO".
+            </div>
+        </div>
+    </div>
+
+    <div class="finding medium">
+        <div class="finding-header">
+            <span class="finding-id">BUG-11</span>
+            <span class="badge medium">Medium</span>
+            <span class="badge sheet">Content Optimisation Hub · Content Hub Metrics</span>
+            <div class="finding-title">8 URLs in Main are absent from the Content Hub — exclusion not documented</div>
+        </div>
+        <div class="finding-body">
+            <p><strong>What is wrong:</strong> The Main sheet contains 264 URLs. The Content Optimisation Hub and
+                Content Hub Metrics each contain 256 — a gap of 8 URLs. These 8 pages are silently excluded with no note
+                or filter explaining which pages were dropped or why.</p>
+            <div class="evidence">Main: 264 data rows
+                Content Optimisation Hub: 256 data rows (2 header rows)
+                Content Hub Metrics: 256 data rows
+                Gap: 8 URLs absent from Content Hub sheets</div>
+            <p>Likely candidates for exclusion: the 8 pages returning 4xx status codes. However, the exclusion logic is
+                not visible in the sheet itself, meaning a client reviewing the Content Hub would not know 8 pages are
+                missing.</p>
+            <div class="fix-box">
+                <strong>Fix required</strong>
+                Append a note to the Content Hub header row (row 0) documenting the exclusion criteria: e.g. "This hub
+                covers all 200 OK + indexable pages. 4xx/noindex pages are excluded (see Technical Diagnostics for full
+                inventory)." Optionally, add a greyed-out section at the bottom of the hub with the excluded URLs for
+                completeness.
+            </div>
+        </div>
+    </div>
+
+    <div class="finding medium">
+        <div class="finding-header">
+            <span class="finding-id">BUG-12</span>
+            <span class="badge medium">Medium</span>
+            <span class="badge sheet">IssueInventory · Issue Register</span>
+            <div class="finding-title">97-row gap between IssueInventory (4440) and Issue Register (4537) — undocumented
+            </div>
+        </div>
+        <div class="finding-body">
+            <p><strong>What is wrong:</strong> IssueInventory has 4440 data rows while Issue Register has 4537 data rows
+                — a difference of 97. Manual inspection confirms the extra 97 rows in Issue Register are site-level
+                summary records with <code>URL = None</code>, drawn from the Summary tab. These represent issues that
+                affect the site globally rather than specific URLs.</p>
+            <div class="evidence">IssueInventory: 4440 rows (URL-level only)
+                Issue Register: 4537 rows (URL-level + 97 site-level null-URL rows)
+                Gap: 97 rows
+                Null URL rows in Issue Register sample:
+                (None, 'AEO Opportunities', 'Low AEO Readiness Score', 'Warning', 255, ...)
+                (None, 'AEO Opportunities', 'Missing FAQ/QA Schema', 'Warning', 15, ...)
+                (None, 'AEO Opportunities', 'No 40-60 Word Answer Paragraphs', 'Observation', 264, ...)</div>
+            <div class="fix-box">
+                <strong>Fix required</strong>
+                Add a note to the Issue Register header or a pinned top row documenting: "This register includes both
+                URL-level issues (from IssueInventory) and 97 site-wide issues with no single URL (from Summary). Sort
+                by URL to separate the two sets."
+            </div>
+        </div>
+    </div>
+
+    <div class="finding medium">
+        <div class="finding-header">
+            <span class="finding-id">BUG-13</span>
+            <span class="badge medium">Medium</span>
+            <span class="badge sheet">Snippet Opportunities</span>
+            <div class="finding-title">All 109 Snippet Opportunities have effort = 'S' — uniform Small applied
+                regardless of complexity</div>
+        </div>
+        <div class="finding-body">
+            <p><strong>What is wrong:</strong> The <em>Effort</em> column (column H) in Snippet Opportunities contains
+                <code>'S'</code> (Small) for every one of the 109 rows. Restructuring content for featured snippets and
+                AI answer extraction varies considerably in effort: some pages need a single list reformatted, others
+                need entire sections rewritten. A blanket 'S' rating is not credible.</p>
+            <div class="evidence">Effort distribution: {'S': 109} ← uniform, no 'M' or 'L' entries
+                Featured Snippet Readiness distribution: {6: 103, 7: 6} ← only two values on an apparent 10-point scale
+            </div>
+            <div class="fix-box">
+                <strong>Improvement required</strong>
+                Derive effort from readiness score and content length: Readiness ≥ 7 + Short page = S; Readiness 5–6 +
+                Medium page = M; Readiness < 5 or Long page needing restructure=L. This aligns with the Featured Snippet
+                    Readiness score already being calculated and stored. </div>
+            </div>
+        </div>
+
+        <div class="finding medium">
+            <div class="finding-header">
+                <span class="finding-id">BUG-14</span>
+                <span class="badge medium">Medium</span>
+                <span class="badge sheet">Robots.txt Analysis</span>
+                <div class="finding-title">Raw _x000D_ XML carriage-return escapes in Detail column — robots.txt is
+                    unreadable as displayed</div>
+            </div>
+            <div class="finding-body">
+                <p><strong>What is wrong:</strong> The <em>Detail</em> column in Robots.txt Analysis contains the full
+                    robots.txt content as a single cell value, but line breaks are encoded as the literal string
+                    <code>_x000D_</code> (an XML character reference for carriage return) interleaved with
+                    <code>\n</code>. The result is that the robots.txt content displays as a dense, unpunctuated block
+                    when a user views the cell.</p>
+                <div class="evidence">Detail column preview (first 120 chars):
+                    "User-agent: *_x000D_\nDisallow: /wp-content/uploads/wc-logs/_x000D_\nDisallow:
+                    /wp-content/uploads/woocommerce_transient..."
+
+                    Count of _x000D_ sequences in the cell: 12</div>
+                <p>This is caused by openpyxl receiving a string that contains both Windows-style <code>\r\n</code> line
+                    endings (where <code>\r</code> gets XML-escaped to <code>_x000D_</code> during XLSX serialisation)
+                    and Unix-style <code>\n</code> endings in the same value.</p>
+                <div class="fix-box">
+                    <strong>Fix required (robots.txt writer)</strong>
+                    Normalise the robots.txt string before writing:
+                    <code>robots_content.replace('\r\n', '\n').replace('\r', '\n')</code>. openpyxl will then serialise
+                    <code>\n</code> as a proper XML line break (<code>&amp;#10;</code>) and the cell will render with
+                    visible line breaks in Excel.
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════ LOW ══════════ -->
+        <h2>🔵 Low Severity / Observations</h2>
+
+        <div class="finding low">
+            <div class="finding-header">
+                <span class="finding-id">OBS-01</span>
+                <span class="badge low">Low</span>
+                <span class="badge sheet">Link Intelligence</span>
+                <div class="finding-title">"Broken Internal Links Count" column stores live SUMPRODUCT formula strings —
+                    Python unreadable</div>
+            </div>
+            <div class="finding-body">
+                <p>Column H (<em>Broken Internal Links Count</em>) in Link Intelligence contains
+                    <code>=SUMPRODUCT(...)</code> formula strings rather than pre-computed integer values. This is by
+                    design for live Excel recalculation against Link Inventory. However, any downstream Python pipeline
+                    that reads this column (e.g. for delta comparison, JSON export, or dashboard data) will receive the
+                    formula string rather than the integer count, and will need to handle that explicitly.</p>
+                <div class="evidence">Row 1, col H: '=SUMPRODUCT(('Link Inventory'!$A$2:$A$100000=$A2)*('Link
+                    Inventory'!$E$2:$E$100000="Internal")*('Link Inventory'!$F$2:$F$100000>=400)*('Link
+                    Inventory'!$F$2:$F$100000<600))'< /div>
+                        <div class="fix-box">
+                            <strong>Recommendation</strong>
+                            Write both: a pre-computed integer value in a hidden column (for Python reading) and a live
+                            SUMPRODUCT formula in the visible column (for Excel interactivity). Alternatively, ensure
+                            that the delta/export pipeline evaluates formula cells via xlcalculator or a similar library
+                            before reading.
+                        </div>
+                </div>
+            </div>
+
+            <div class="finding low">
+                <div class="finding-header">
+                    <span class="finding-id">OBS-02</span>
+                    <span class="badge low">Low</span>
+                    <span class="badge sheet">Content Hub Metrics</span>
+                    <div class="finding-title">URL column stores =HYPERLINK() formula strings — MATCH lookups may behave
+                        unexpectedly</div>
+                </div>
+                <div class="finding-body">
+                    <p>The URL column (column A) in Content Hub Metrics contains values like
+                        <code>=HYPERLINK("https://...", "https://...")</code> rather than plain URL strings. In Excel,
+                        MATCH functions comparing against this column will match against the hyperlink display text (the
+                        second argument), which is the URL — so they should work correctly in Excel. However, openpyxl
+                        returns these as formula strings, meaning Python-based cross-referencing against this column
+                        will fail unless formula evaluation is added.</p>
+                    <div class="fix-box">
+                        <strong>Recommendation</strong>
+                        Write the plain URL string as the cell value and use <code>ws.cell().hyperlink</code> to apply
+                        the hyperlink separately. This preserves the clickable link while ensuring the cell value is
+                        always a clean URL string readable by both Excel formulas and Python.
+                    </div>
+                </div>
+            </div>
+
+            <div class="finding low">
+                <div class="finding-header">
+                    <span class="finding-id">OBS-03</span>
+                    <span class="badge low">Low</span>
+                    <span class="badge sheet">AIOSEO Recommendations</span>
+                    <div class="finding-title">11% null WordPress Post IDs (257 of 2338) — no direct edit links
+                        available</div>
+                </div>
+                <div class="finding-body">
+                    <p>257 rows in AIOSEO Recommendations lack a WordPress Post ID and a Direct Edit Link. These are
+                        most likely taxonomy pages (category/author/tag archives), which do not have a standard
+                        <code>post_id</code> in WordPress. For these pages, the AIOSEO panel link cannot be generated,
+                        making the "How to Fix in AIOSEO" guidance harder to follow.</p>
+                    <div class="evidence">WordPress Post ID null: 257 / 2338 (11.0%)
+                        Direct Edit Link null: 257 / 2338 (11.0%) ← exactly matching set</div>
+                    <div class="fix-box">
+                        <strong>Recommendation</strong>
+                        For taxonomy/archive pages, populate the <em>How to Fix</em> column with the taxonomy-specific
+                        AIOSEO navigation path (e.g. "AIOSEO → Search Appearance → Taxonomies → Category"). Add a
+                        <code>Page Type</code> column (Post / Page / Taxonomy / Author / WooCommerce) to help the client
+                        understand why some rows lack Post IDs.
+                    </div>
+                </div>
+            </div>
+
+            <div class="finding low">
+                <div class="finding-header">
+                    <span class="finding-id">OBS-04</span>
+                    <span class="badge low">Low</span>
+                    <span class="badge sheet">DeltaFromPreviousRun</span>
+                    <div class="finding-title">Trend Run 2 and Trend Run 3 columns are entirely empty with no
+                        documentation</div>
+                </div>
+                <div class="finding-body">
+                    <p>The DeltaFromPreviousRun sheet includes columns <em>Trend Run 2</em> and <em>Trend Run 3</em>
+                        (intended for historical trend sparklines across three audit runs). On a first run, these are
+                        correctly empty. However, there is no cell note, header comment, or documentation within the
+                        sheet explaining that these columns populate on run 2 and run 3 respectively. A client opening
+                        the sheet would simply see blank columns.</p>
+                    <div class="evidence">Trend Run 1: populated (e.g., "0.0 (2026-06-27 23:28:24)")
+                        Trend Run 2: empty for all 264 URL rows
+                        Trend Run 3: empty for all 264 URL rows
+                        No "first run baseline" label is visible in the trend columns themselves</div>
+                    <div class="fix-box">
+                        <strong>Recommendation</strong>
+                        Add placeholder text to the Trend Run 2 and Trend Run 3 header cells indicating when they will
+                        populate: e.g. "Trend Run 2 (populated on run 2+)" or grey the columns out with a "Baseline run
+                        — awaiting next audit" watermark using conditional formatting.
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══════════ WHAT IS WORKING WELL ══════════ -->
+            <h2>✅ What Is Working Well</h2>
+            <ul class="pass-list">
+                <li>All 6 URL-level sheets contain exactly 264 data rows — cross-sheet URL count is consistent</li>
+                <li>Main sheet 218-column schema is fully populated with a rich range of SEO, CWV, AEO, schema, and link
+                    signals</li>
+                <li>AIOSEO Recommendations (2338 rows) is a genuinely valuable differentiator — panel-level guidance
+                    with stable issue IDs</li>
+                <li>Broken Link Impact is correctly ranked by inbound link count × GSC clicks — high-value
+                    prioritisation</li>
+                <li>Link Inventory (11,025 rows) with rel attributes and generic anchor flags is comprehensive</li>
+                <li>SitemapQA lastmod/changefreq/priority coverage is thorough — all three flagged correctly at 0
+                    missing</li>
+                <li>Crawl Log (9 error rows) clearly documents fetch failures with recovery actions taken</li>
+                <li>Anchor Text Audit (1110 rows) correctly calculates generic anchor dominance per destination</li>
+                <li>Schema validation (Schema Error Count, Schema Types With Errors, Schema Parse Error Detail) is
+                    well-structured</li>
+                <li>Content Optimisation Hub live-formula architecture (Action Required, On-Page Score recalculate on
+                    edit) is excellent UX</li>
+                <li>Issue Register first-seen dates are populated for all 4537 rows — enables accurate days-open
+                    tracking</li>
+                <li>Table of Contents hyperlink structure covers all 34 sheets with descriptive copy</li>
+                <li>Audit Run Details sheet provides complete run configuration provenance</li>
+                <li>HTML and PDF executive summary outputs match key metrics in the XLSX — cross-format consistency
+                    confirmed</li>
+            </ul>
+
+            <!-- ══════════ REMEDIATION PRIORITY ══════════ -->
+            <h2>Remediation Priority Order</h2>
+            <table class="summary-table">
+                <thead>
+                    <tr>
+                        <th>Priority</th>
+                        <th>ID</th>
+                        <th>Action</th>
+                        <th>Effort est.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td class="col-id">BUG-01</td>
+                        <td>Fix trailing-slash URL normalisation in redirect resolver — store raw hop URLs, fix loop
+                            detection logic</td>
+                        <td>3–5h Dev</td>
+                    </tr>
+                    <tr>
+                        <td>2</td>
+                        <td class="col-id">BUG-02</td>
+                        <td>Remove duplicate header row in DeltaFromPreviousRun writer — trace double-append call</td>
+                        <td>0.5h Dev</td>
+                    </tr>
+                    <tr>
+                        <td>3</td>
+                        <td class="col-id">BUG-03</td>
+                        <td>Resolved by BUG-01 fix; add Redirect Type sub-column to SitemapQA</td>
+                        <td>1h Dev</td>
+                    </tr>
+                    <tr>
+                        <td>4</td>
+                        <td class="col-id">BUG-05</td>
+                        <td>Extend issue→owner mapping table for all CWV, Lighthouse, redirect, and script issue types
+                        </td>
+                        <td>2h Dev</td>
+                    </tr>
+                    <tr>
+                        <td>5</td>
+                        <td class="col-id">BUG-07</td>
+                        <td>Filter tracking pixels from Image Inventory; add Image Category column</td>
+                        <td>1h Dev</td>
+                    </tr>
+                    <tr>
+                        <td>6</td>
+                        <td class="col-id">BUG-04</td>
+                        <td>Restore Quick Wins priority score calculation — debug why score outputs 0</td>
+                        <td>1–2h Dev</td>
+                    </tr>
+                    <tr>
+                        <td>7</td>
+                        <td class="col-id">BUG-06</td>
+                        <td>Replace "Open in Main Tab" string with correct FixPlan HYPERLINK formula in Quick Wins col L
+                        </td>
+                        <td>0.5h Dev</td>
+                    </tr>
+                    <tr>
+                        <td>8</td>
+                        <td class="col-id">BUG-14</td>
+                        <td>Normalise robots.txt to \n before writing — strip \r from content string</td>
+                        <td>0.5h Dev</td>
+                    </tr>
+                    <tr>
+                        <td>9</td>
+                        <td class="col-id">BUG-09</td>
+                        <td>Implement per-issue-class effort bands in FixPlan hour calculator</td>
+                        <td>2–3h Dev</td>
+                    </tr>
+                    <tr>
+                        <td>10</td>
+                        <td class="col-id">BUG-08</td>
+                        <td>After BUG-07 fix, re-verify alt-text null rate; add Alt Source + Lazy Loaded columns</td>
+                        <td>1h Dev</td>
+                    </tr>
+                    <tr>
+                        <td>11</td>
+                        <td class="col-id">BUG-11 / BUG-12</td>
+                        <td>Document Content Hub exclusion criteria; document null-URL rows in Issue Register</td>
+                        <td>0.5h Dev</td>
+                    </tr>
+                    <tr>
+                        <td>12</td>
+                        <td class="col-id">BUG-10 / BUG-13</td>
+                        <td>Differentiate Agency Owner from Owner; implement dynamic effort scoring for Snippet
+                            Opportunities</td>
+                        <td>2h Dev</td>
+                    </tr>
+                    <tr>
+                        <td>13</td>
+                        <td class="col-id">OBS-01 / OBS-02</td>
+                        <td>Write pre-computed values alongside formula cells; switch Content Hub Metrics URL to plain
+                            string + hyperlink attribute</td>
+                        <td>1h Dev</td>
+                    </tr>
+                    <tr>
+                        <td>14</td>
+                        <td class="col-id">OBS-03 / OBS-04</td>
+                        <td>Add taxonomy fix guidance to AIOSEO; add baseline labels to Trend Run 2/3 columns</td>
+                        <td>1h Dev</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <footer>
+                Hype Frog XLSX Output Quality Audit · africanmarketingconfederation.org run 2026-06-27 ·
+                Audited via openpyxl (read_only, static analysis) · Prepared by Dennis (Admin) · Logi-Ink (Pty) Ltd ·
+                Internal document — not for client distribution · &copy; 2026 Logi-Ink (Pty) Ltd
+            </footer>
+
+</body>
+
+</html>

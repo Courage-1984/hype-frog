@@ -11,6 +11,10 @@ from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 
+from hype_frog.core import get_logger
+
+logger = get_logger(__name__)
+
 
 def extract_eeat_signals(
     soup: BeautifulSoup,
@@ -61,8 +65,8 @@ def extract_eeat_signals(
                         out["Schema Author Name"] = author.get("name")
                     elif isinstance(author, str):
                         out["Schema Author Name"] = author
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Malformed JSON-LD: %s", exc)
 
     time_el = soup.find("time", attrs={"datetime": True})
     out["Has Time Element"] = time_el is not None
@@ -71,7 +75,13 @@ def extract_eeat_signals(
     about_links = soup.find_all("a", href=re.compile(r"/about", re.I))
     out["Links to About Page"] = len(about_links) > 0
 
-    phone_pattern = re.compile(r"\+?[\d\s\-\(\)]{7,15}(?:ext|x)?[\d\s]{0,5}")
+    phone_pattern = re.compile(
+        r"(?<!\d)"
+        r"(\+\d{1,3}[\s\-]?)?"
+        r"(\(?\d{2,4}\)?[\s\-]?)"
+        r"\d{3,4}[\s\-]?\d{3,4}"
+        r"(?!\d)"
+    )
     out["Has Phone Number"] = bool(phone_pattern.search(page_text))
 
     email_pattern = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")

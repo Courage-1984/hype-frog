@@ -124,7 +124,6 @@ def test_build_delta_sheet_rows_compare_run() -> None:
         current=current,
         previous=previous,
         baseline_report=False,
-        typed_extra_rows=[],
         summary_rules=[],
     )
     summary_issues = [row.get("Issue") for row in rows if row.get("Section") == "Summary"]

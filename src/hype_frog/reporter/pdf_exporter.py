@@ -9,7 +9,7 @@ identical figures. Do not re-aggregate pipeline rows here.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from hype_frog.core import get_logger
@@ -85,7 +85,7 @@ def _format_audit_date(ctx_date: str, override: str) -> str:
     try:
         return datetime.strptime(raw, "%Y-%m-%d").strftime("%d %B %Y")
     except ValueError:
-        return datetime.now().astimezone().strftime("%d %B %Y")
+        return datetime.now(tz=timezone.utc).strftime("%d %B %Y")
 
 
 def export_executive_summary_pdf(

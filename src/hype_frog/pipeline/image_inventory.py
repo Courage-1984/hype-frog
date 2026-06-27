@@ -11,12 +11,14 @@ import aiohttp
 
 from hype_frog.config import CONNECT_TIMEOUT_SECONDS, READ_TIMEOUT_SECONDS, TIMEOUT_SECONDS
 from hype_frog.config_defaults import get_large_image_size_kb
+from hype_frog.core import get_logger
 from hype_frog.core.models import ExtraRowPayload
 from hype_frog.core.status_codes import is_success_status
 from hype_frog.core.text_utils import image_extension
 from hype_frog.pipeline.og_image_validation import read_image_dimensions
 
 _MAX_IMAGE_BYTES = 65_536
+logger = get_logger(__name__)
 
 IMAGE_INVENTORY_COLUMNS: tuple[str, ...] = (
     "Image URL",
@@ -95,7 +97,8 @@ async def _probe_image(
                         pass
                 if not is_success_status(status):
                     return result
-        except Exception:
+        except Exception as exc:
+            logger.debug("Image probe HEAD failed %r: %s", url, exc)
             return result
 
         try:
@@ -111,7 +114,8 @@ async def _probe_image(
                 else:
                     result["broken"] = True
                     return result
-        except Exception:
+        except Exception as exc:
+            logger.debug("Image probe GET failed %r: %s", url, exc)
             return result
 
     large_kb = get_large_image_size_kb()

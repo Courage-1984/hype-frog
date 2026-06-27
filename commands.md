@@ -96,6 +96,41 @@ Output defaults to `reports/latest/` unless `HF_OUTPUT_FILENAME` is set.
 
 ---
 
+## HTML / Excel theming (Catppuccin Mocha)
+
+Optional **Hype Frog × Catppuccin Mocha** palette. Canonical reference: [`docs/excel_reporting_standards.md`](docs/excel_reporting_standards.md) (*Catppuccin Mocha theme*).
+
+**Dark HTML executive report + JetBrains Mono:**
+
+```powershell
+$env:HF_EXPORT_HTML = "1"
+$env:HF_REPORT_THEME = "mocha"
+uv run hype-frog --quick-test-fast
+```
+
+**Mocha RAG colours in the xlsx workbook** (set before export — resolved at import):
+
+```powershell
+$env:HF_EXCEL_THEME = "mocha"
+```
+
+**Full mocha stack** (add to `.env`):
+
+```env
+HF_EXPORT_HTML=1
+HF_REPORT_THEME=mocha
+HF_EXCEL_THEME=mocha
+# HF_REPORT_BRAND_COLOUR=#1e1e2e      # optional
+# HF_REPORT_ACCENT_COLOUR=#94e2d5     # optional (teal pond accent)
+# HF_REPORT_PREPARED_BY=Your Name
+# HF_REPORT_CLIENT_NAME=Client Corp
+# HF_REPORT_LOGO_PATH=./assets/client_logo.png
+```
+
+**Signature colours:** frog green `#a6e3a1`, brand base `#1e1e2e`, accent teal `#94e2d5`. Font CDN (mocha HTML only): Google Fonts JetBrains Mono — see `src/hype_frog/reporter/mocha_theme.py`.
+
+---
+
 ## Test sitemap seeds
 
 ```
@@ -219,7 +254,5 @@ git push --force origin main
 
 uv run hype-frog --quick-test
 uv run hype-frog --full-smoke-test
-
-
 
 

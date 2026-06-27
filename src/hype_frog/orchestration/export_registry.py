@@ -534,7 +534,6 @@ def build_delta_and_trend_rows(
                 current=current_snapshot,
                 previous=None,
                 baseline_report=True,
-                typed_extra_rows=typed_extra_rows,
                 summary_rules=summary_rules,
             ),
             build_resolved_issues_dataframe(
@@ -583,7 +582,6 @@ def build_delta_and_trend_rows(
             current=current_snapshot,
             previous=previous,
             baseline_report=False,
-            typed_extra_rows=typed_extra_rows,
             summary_rules=summary_rules,
         ),
         build_resolved_issues_dataframe(

@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from hype_frog.checkpoint import AuditCache, delete_checkpoint, load_checkpoint, save_checkpoint
+from hype_frog.core.env_vars import get_hf_max_depth, get_hf_output_filename, get_hf_previous_audit_path
 from hype_frog.config import (
     EXCLUDED_CMS_ACTION_QUERY_PARAMS,
     MAX_RETRIES,
@@ -189,14 +190,77 @@ def _candidate_internal_links(
 
 
 def _max_depth_from_env(default: int = 3) -> int:
-    raw = os.getenv("HF_MAX_DEPTH", "").strip()
-    if not raw:
+    depth = get_hf_max_depth()
+    if depth is None:
         return default
+    return max(0, depth)
+
+
+@dataclass(frozen=True)
+class _InteractiveOptions:
+    workers: int
+    request_delay: float
+    full_suite: bool
+    previous_audit_path: str
+    checkpoint_every: int
+
+
+def _prompt_crawl_options(setup: "RunSetup") -> _InteractiveOptions:  # type: ignore[name-defined]
+    """Synchronous interactive configuration prompts — runs in a thread via asyncio.to_thread."""
+    console.print("\n[bold]Crawl Safety Profile[/bold]")
+    console.print("  [cyan]1[/cyan]  Gentle   — fewer workers, longer delay")
+    console.print("  [cyan]2[/cyan]  Balanced — default")
+    console.print("  [cyan]3[/cyan]  Faster   — more workers, shorter delay")
+    profile_choice = input(
+        "Select Crawl Safety Profile [1:Gentle | 2:Balanced | 3:Faster]: "
+    ).strip()
+    if profile_choice == "1":
+        workers = 2
+        request_delay = 4.0
+    elif profile_choice == "3":
+        workers = 4
+        request_delay = 1.5
+    elif profile_choice == "2" or profile_choice == "":
+        workers = MAX_WORKERS
+        request_delay = get_delay_between_requests()
+    else:
+        logger.warning("Invalid input; defaulting to Balanced.")
+        workers = MAX_WORKERS
+        request_delay = get_delay_between_requests()
+
+    suite_choice = input(
+        "Audit Depth: [1] Main Inventory Only | [2] Full AEO/SEO Suite: "
+    ).strip()
+    if suite_choice == "1":
+        full_suite = False
+    elif suite_choice == "2":
+        full_suite = True
+    elif suite_choice == "":
+        full_suite = False
+    else:
+        logger.warning("Invalid input; defaulting to Full AEO/SEO Suite.")
+        full_suite = True
+
+    previous_audit_path = input(
+        "Previous Audit Path (.xlsx or _delta_summary.json) [leave blank to skip]: "
+    ).strip()
+    if not previous_audit_path:
+        previous_audit_path = get_hf_previous_audit_path()
+    checkpoint_raw = input(
+        "Auto-Save Checkpoint Frequency (N URLs) [0 to disable]: "
+    ).strip()
     try:
-        return max(0, int(raw))
+        checkpoint_every = int(checkpoint_raw or "0")
     except ValueError:
-        logger.warning("Invalid HF_MAX_DEPTH=%r; using default %s.", raw, default)
-        return default
+        checkpoint_every = 0
+
+    return _InteractiveOptions(
+        workers=workers,
+        request_delay=request_delay,
+        full_suite=full_suite,
+        previous_audit_path=previous_audit_path,
+        checkpoint_every=checkpoint_every,
+    )
 
 
 async def _apply_search_intent(
@@ -332,7 +396,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             full_suite = bool(setup.full_suite_preset)
             previous_audit_path = (setup.previous_audit_path_preset or "").strip()
             if not previous_audit_path:
-                previous_audit_path = os.getenv("HF_PREVIOUS_AUDIT_PATH", "").strip()
+                previous_audit_path = get_hf_previous_audit_path()
             checkpoint_every = int(setup.checkpoint_every_preset or 0)
             logger.info(
                 "Crawl safety profile: preset (%s workers, %ss delay)",
@@ -342,54 +406,14 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             logger.debug("Run mode: Full SEO suite (preset)")
             logger.debug("Checkpoint save: disabled (preset)")
         else:
-            console.print("\n[bold]Crawl Safety Profile[/bold]")
-            console.print("  [cyan]1[/cyan]  Gentle   — fewer workers, longer delay")
-            console.print("  [cyan]2[/cyan]  Balanced — default")
-            console.print("  [cyan]3[/cyan]  Faster   — more workers, shorter delay")
-            profile_choice = input(
-                "Select Crawl Safety Profile [1:Gentle | 2:Balanced | 3:Faster]: "
-            ).strip()
-            if profile_choice == "1":
-                workers = 2
-                request_delay = 4.0
-            elif profile_choice == "3":
-                workers = 4
-                request_delay = 1.5
-            elif profile_choice == "2" or profile_choice == "":
-                workers = MAX_WORKERS
-                request_delay = get_delay_between_requests()
-            else:
-                logger.warning("Invalid input; defaulting to Balanced.")
-                workers = MAX_WORKERS
-                request_delay = get_delay_between_requests()
+            _opts = await asyncio.to_thread(_prompt_crawl_options, setup)
+            workers = _opts.workers
+            request_delay = _opts.request_delay
+            full_suite = _opts.full_suite
+            previous_audit_path = _opts.previous_audit_path
+            checkpoint_every = _opts.checkpoint_every
 
-            suite_choice = input(
-                "Audit Depth: [1] Main Inventory Only | [2] Full AEO/SEO Suite: "
-            ).strip()
-            if suite_choice == "1":
-                full_suite = False
-            elif suite_choice == "2":
-                full_suite = True
-            elif suite_choice == "":
-                full_suite = False
-            else:
-                logger.warning("Invalid input; defaulting to Full AEO/SEO Suite.")
-                full_suite = True
-
-            previous_audit_path = input(
-                "Previous Audit Path (.xlsx or _delta_summary.json) [leave blank to skip]: "
-            ).strip()
-            if not previous_audit_path:
-                previous_audit_path = os.getenv("HF_PREVIOUS_AUDIT_PATH", "").strip()
-            checkpoint_raw = input(
-                "Auto-Save Checkpoint Frequency (N URLs) [0 to disable]: "
-            ).strip()
-            try:
-                checkpoint_every = int(checkpoint_raw or "0")
-            except ValueError:
-                checkpoint_every = 0
-
-        output_filename = os.getenv("HF_OUTPUT_FILENAME") or build_output_filename(
+        output_filename = get_hf_output_filename() or build_output_filename(
             source_label, full_suite
         )
         checkpoint_file = output_filename.replace(".xlsx", "_checkpoint.json")
@@ -439,12 +463,11 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
         if os.path.exists(checkpoint_file):
             if setup.resume_checkpoint_mode == "prompt":
                 resume_choice = (
-                    input(
-                        "Checkpoint found for this source. Resume from checkpoint? (y/N): "
+                    await asyncio.to_thread(
+                        input,
+                        "Checkpoint found for this source. Resume from checkpoint? (y/N): ",
                     )
-                    .strip()
-                    .lower()
-                )
+                ).strip().lower()
                 want_resume = resume_choice in {"y", "yes"}
             elif setup.resume_checkpoint_mode == "yes":
                 want_resume = True
@@ -562,7 +585,6 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                         next_url,
                         session,
                         semaphore,
-                        full_suite,
                         robots_cache,
                         request_delay,
                         sitemap_meta,

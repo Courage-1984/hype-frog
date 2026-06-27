@@ -5,6 +5,10 @@ from typing import Any
 
 from bs4 import BeautifulSoup
 
+from hype_frog.core import get_logger
+
+logger = get_logger(__name__)
+
 
 def extract_json_ld_blocks(html: str) -> list[str]:
     """Return raw JSON string content from ``application/ld+json`` script tags."""
@@ -37,7 +41,8 @@ def parse_jsonld_summary(html: str) -> dict[str, Any]:
                     schema_types.extend([str(t) for t in atype])
                 elif atype:
                     schema_types.append(str(atype))
-        except Exception:
+        except Exception as exc:
+            logger.debug("JSON-LD parse error: %s", exc)
             parse_errors += 1
     uniq = sorted(set(schema_types))
     return {

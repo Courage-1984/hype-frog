@@ -89,16 +89,23 @@ Modules under `reporter/` for the white-label HTML executive report:
 - `html_report_data.py` — HTML report data aggregation; read-only consumer of pipeline row dicts. Produces a `ReportContext` dataclass.
 - `html_report_renderer.py` — HTML template rendering; pure string transformation, no I/O.
 - `html_report_writer.py` — HTML file I/O; writes rendered HTML to disk.
+- `mocha_theme.py` — Catppuccin Mocha palette, HTML CSS helpers, Excel palette overrides (`HF_REPORT_THEME` / `HF_EXCEL_THEME`).
 
 Triggered by `HF_EXPORT_HTML=1`. Generation is **non-fatal** — failures log at `WARNING` and do not block xlsx delivery.
 
 **HTML report env vars** (all optional):
 - `HF_EXPORT_HTML=1` — enable HTML report generation.
+- `HF_REPORT_THEME=mocha` — dark Catppuccin Mocha layout + JetBrains Mono (Google Fonts). Default theme is light/self-contained (no CDN).
 - `HF_REPORT_PREPARED_BY` — preparer name shown in report header.
 - `HF_REPORT_CLIENT_NAME` — client name shown in report header and footer.
 - `HF_REPORT_LOGO_PATH` — path to logo image embedded as base64 in the HTML.
-- `HF_REPORT_BRAND_COLOUR` — hex colour for primary brand elements (default `#1e293b`).
-- `HF_REPORT_ACCENT_COLOUR` — hex colour for accent/CTA elements (default `#2563eb`).
+- `HF_REPORT_BRAND_COLOUR` — hex colour for primary brand elements (default `#1e293b`; mocha default `#1e1e2e`).
+- `HF_REPORT_ACCENT_COLOUR` — hex colour for accent/CTA elements (default `#2563eb`; mocha default `#94e2d5`).
+
+**Excel theme env var:**
+- `HF_EXCEL_THEME=mocha` — swap canonical RAG/heatmap constants in `sheets/config.py` to mocha-inspired values at import time.
+
+Canonical palette tables: [`docs/excel_reporting_standards.md`](../../docs/excel_reporting_standards.md).
 
 ## PDF executive report
 

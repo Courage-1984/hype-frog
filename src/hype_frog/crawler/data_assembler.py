@@ -39,6 +39,14 @@ from hype_frog.validators.schema_validator import flatten_to_row, validate_schem
 
 logger = get_logger(__name__)
 
+_AFRICAN_REGIONAL_TERMS: frozenset[str] = frozenset({
+    "africa", "african", "pan-african", "sadc", "ecowas",
+    "east africa", "west africa", "southern africa", "north africa",
+    "kenya", "south africa", "nigeria", "ghana", "zambia",
+    "botswana", "namibia", "uganda", "tanzania", "ethiopia",
+    "rwanda", "angola", "mozambique",
+})
+
 
 def normalize_url_key(url: object, keep_query: bool = True) -> str:
     return normalize_url(url, keep_query=keep_query)
@@ -397,15 +405,18 @@ def assemble_from_html(
     has_list = False
     has_table = False
     if soup.body:
-        content_soup = BeautifulSoup(html, "lxml")
-        for tag in content_soup.select("nav, header, footer, aside, script"):
-            tag.decompose()
         primary = (
-            content_soup.find("main")
-            or content_soup.find("article")
-            or content_soup.find("div", attrs={"role": "main"})
-            or content_soup.body
+            soup.find("main")
+            or soup.find("article")
+            or soup.find("div", attrs={"role": "main"})
         )
+        if primary is None:
+            # Only re-parse when no semantic content root is present; the
+            # destructive decompose must not mutate the shared soup object.
+            content_soup = BeautifulSoup(html, "lxml")
+            for tag in content_soup.select("nav, header, footer, aside, script"):
+                tag.decompose()
+            primary = content_soup.body
         body_text = primary.get_text(separator=" ", strip=True) if primary else ""
         extra_values["Current Page Copy Snippet"] = (
             (body_text[:250] + "...") if len(body_text) > 250 else body_text
@@ -489,30 +500,7 @@ def assemble_from_html(
     else:
         extra_values["AEO Extractability Score"] = "Low"
 
-    regional_terms = [
-        "africa",
-        "african",
-        "pan-african",
-        "sadc",
-        "ecowas",
-        "east africa",
-        "west africa",
-        "southern africa",
-        "north africa",
-        "kenya",
-        "south africa",
-        "nigeria",
-        "ghana",
-        "zambia",
-        "botswana",
-        "namibia",
-        "uganda",
-        "tanzania",
-        "ethiopia",
-        "rwanda",
-        "angola",
-        "mozambique",
-    ]
+    regional_terms = _AFRICAN_REGIONAL_TERMS
     h_text = " ".join(
         text
         for level in range(1, 7)

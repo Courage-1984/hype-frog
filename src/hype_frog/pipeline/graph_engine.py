@@ -59,11 +59,9 @@ def build_inlinks_map(
 
 def compute_internal_link_intelligence(
     extra_rows: list[ExtraRowPayload] | list[Mapping[str, object]],
-    source_label: str,
     *,
     main_rows: list[MainRowPayload] | None = None,
 ) -> dict[str, dict[str, object]]:
-    del source_label
     graph = nx.DiGraph()
     crawled_urls = set()
     if main_rows:

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from hype_frog.core.env_vars import get_hf_gsc_url_inspection
 from hype_frog.core.run_config import RunConfig, quick_test_run_config
 from hype_frog.orchestration import run_setup
 from hype_frog.orchestration.run_setup import (
     _parse_competitor_domains,
-    _resolve_gsc_url_inspection_env,
-    _resolve_max_memory_mb_env,
+    _resolve_max_memory_mb,
     resolve_run_setup,
 )
 
@@ -20,24 +20,24 @@ def test_parse_competitor_domains_strips_scheme_and_blanks() -> None:
 
 def test_resolve_gsc_url_inspection_env(monkeypatch) -> None:
     monkeypatch.setenv("GSC_URL_INSPECTION", "limited")
-    assert _resolve_gsc_url_inspection_env() == "limited"
+    assert get_hf_gsc_url_inspection() == "limited"
     monkeypatch.setenv("GSC_URL_INSPECTION", "full")
-    assert _resolve_gsc_url_inspection_env() == "full"
+    assert get_hf_gsc_url_inspection() == "full"
     monkeypatch.setenv("GSC_URL_INSPECTION", "off")
-    assert _resolve_gsc_url_inspection_env() is None
+    assert get_hf_gsc_url_inspection() is None
     monkeypatch.delenv("GSC_URL_INSPECTION", raising=False)
-    assert _resolve_gsc_url_inspection_env() is None
+    assert get_hf_gsc_url_inspection() is None
 
 
 def test_resolve_max_memory_mb_env(monkeypatch) -> None:
     monkeypatch.setenv("HF_MAX_MEMORY_MB", "2048")
-    assert _resolve_max_memory_mb_env() == 2048
+    assert _resolve_max_memory_mb() == 2048
     monkeypatch.setenv("HF_MAX_MEMORY_MB", "0")
-    assert _resolve_max_memory_mb_env() is None
+    assert _resolve_max_memory_mb() is None
     monkeypatch.setenv("HF_MAX_MEMORY_MB", "not-a-number")
-    assert _resolve_max_memory_mb_env() is None
+    assert _resolve_max_memory_mb() is None
     monkeypatch.delenv("HF_MAX_MEMORY_MB", raising=False)
-    assert _resolve_max_memory_mb_env() is None
+    assert _resolve_max_memory_mb() is None
 
 
 def test_resolve_run_setup_maps_preset_fields() -> None:

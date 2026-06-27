@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
 from hype_frog.core import configure_logging, get_logger, get_user_config
+from hype_frog.core.env_vars import (
+    get_check_content_images,
+    get_check_og_images,
+    get_hf_competitors,
+    get_hf_gsc_url_inspection,
+    get_hf_max_memory_mb,
+    get_hf_streaming,
+)
 from hype_frog.core.run_config import ResumeCheckpointMode, RunConfig
 
 logger = get_logger(__name__)
@@ -22,11 +29,7 @@ def _parse_competitor_domains(raw: str) -> tuple[str, ...]:
 
 
 def _resolve_competitor_domains_env() -> tuple[str, ...]:
-    return _parse_competitor_domains(os.getenv("HF_COMPETITORS", ""))
-
-
-def _env_flag(name: str) -> bool:
-    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "y"}
+    return _parse_competitor_domains(get_hf_competitors())
 
 
 @dataclass(frozen=True)
@@ -97,8 +100,8 @@ def resolve_run_setup(run: RunConfig | None) -> RunSetup:
         check_og_images,
     ) = get_user_config()
     if not check_og_images:
-        check_og_images = _env_flag("CHECK_OG_IMAGES")
-    check_content_images = _env_flag("CHECK_CONTENT_IMAGES")
+        check_og_images = get_check_og_images()
+    check_content_images = get_check_content_images()
     return RunSetup(
         target_input=target_input,
         max_urls=max_urls,
@@ -117,28 +120,13 @@ def resolve_run_setup(run: RunConfig | None) -> RunSetup:
         check_og_images=check_og_images,
         check_content_images=check_content_images,
         bfs_max_depth=None,
-        gsc_url_inspection=_resolve_gsc_url_inspection_env(),
-        max_memory_mb=_resolve_max_memory_mb_env(),
-        streaming=_env_flag("HF_STREAMING"),
+        gsc_url_inspection=get_hf_gsc_url_inspection(),
+        max_memory_mb=_resolve_max_memory_mb(),
+        streaming=get_hf_streaming(),
         competitor_domains=_resolve_competitor_domains_env(),
     )
 
 
-def _resolve_gsc_url_inspection_env() -> str | None:
-    mode = os.getenv("GSC_URL_INSPECTION", "").strip().lower()
-    if mode in {"1", "true", "yes", "limited"}:
-        return "limited"
-    if mode in {"full", "all"}:
-        return "full"
-    return None
-
-
-def _resolve_max_memory_mb_env() -> int | None:
-    raw = os.getenv("HF_MAX_MEMORY_MB", "").strip()
-    if not raw:
-        return None
-    try:
-        value = int(raw)
-    except ValueError:
-        return None
-    return value if value > 0 else None
+def _resolve_max_memory_mb() -> int | None:
+    value = get_hf_max_memory_mb()
+    return value if value is not None and value > 0 else None

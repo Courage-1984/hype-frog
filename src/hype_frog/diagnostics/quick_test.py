@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import subprocess
 import sys
 import time
@@ -85,11 +84,6 @@ def _crawl_property_url(target_input: str) -> str:
         return f"{parsed.scheme}://{parsed.netloc}/"
     return target_input
 
-
-def _apply_quick_test_env(config: RunConfig) -> None:
-    """Preset env overrides (user can pre-set HF_MAX_DEPTH to override)."""
-    if config.bfs_max_depth is not None:
-        os.environ.setdefault("HF_MAX_DEPTH", str(config.bfs_max_depth))
 
 
 async def run_quick_test_preflight(target_input: str) -> list[IntegrationCheck]:
@@ -291,7 +285,6 @@ async def run_quick_test_gate(options: QuickTestOptions | None = None) -> int:
     configure_logging()
     load_environment()
     config = quick_test_run_config()
-    _apply_quick_test_env(config)
 
     report = QuickTestReport(phases=[])
 

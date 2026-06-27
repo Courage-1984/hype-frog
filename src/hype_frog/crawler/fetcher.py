@@ -156,7 +156,6 @@ async def fetch_and_parse(
     url: str,
     session: aiohttp.ClientSession,
     semaphore: asyncio.Semaphore,
-    full_suite: bool = True,
     robots_cache: dict[str, Any] | None = None,
     request_delay: float | None = None,
     sitemap_meta: dict[str, dict[str, Any]] | None = None,
@@ -177,7 +176,6 @@ async def fetch_and_parse(
     exists here so a future spider entrypoint can plug in without
     further fetcher edits.
     """
-    del full_suite
     async with semaphore:
         start_time = time.time()
         main_data, extra = init_rows(url, sitemap_meta)
@@ -455,18 +453,21 @@ def configure_playwright_browsers_path() -> str | None:
     import sys
     from pathlib import Path
 
-    existing = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    from hype_frog.core.env_vars import get_local_app_data, get_playwright_browsers_path
+
+    existing = get_playwright_browsers_path()
     if existing:
         return existing
     if not getattr(sys, "frozen", False):
         return None
 
-    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    base = get_local_app_data() or os.path.expanduser("~")
     target = Path(base) / "hype-frog" / "ms-playwright"
     try:
         target.mkdir(parents=True, exist_ok=True)
     except OSError:
         return None
+    # Intentional write: Playwright requires this env var to locate its browser binaries.
     os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(target)
     return str(target)
 

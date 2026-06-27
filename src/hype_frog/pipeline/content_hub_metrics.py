@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -36,7 +37,7 @@ def _to_positive_float(value: object) -> float | None:
         out = float(value)
     except (TypeError, ValueError):
         return None
-    if out != out or out <= 0:
+    if math.isnan(out) or out <= 0:
         return None
     return out
 

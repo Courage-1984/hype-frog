@@ -153,6 +153,51 @@ the plain `Severity` column (FixPlan/issue sheets), plus `Action Needed` (Yes/No
 Anchor Text Audit, Snippet Opportunities, Competitor Benchmarks, Script Inventory, Image
 Inventory) use `TAB_COLOR_ADVANCED`.
 
+### Catppuccin Mocha theme (`HF_EXCEL_THEME=mocha`)
+
+Hype Frog ships an optional **Catppuccin Mocha** palette — a dark, frog-pond-inspired take on the [official Catppuccin Mocha](https://github.com/catppuccin/catppuccin#mocha) accent set. The canonical implementation lives in `src/hype_frog/reporter/mocha_theme.py`; Excel constants are applied at import time in `reporter/sheets/config.py` when `HF_EXCEL_THEME=mocha`.
+
+**Enable for workbooks** (add to `.env` before the crawl/export process starts — palette is resolved at module import):
+
+```env
+HF_EXCEL_THEME=mocha
+```
+
+**Default vs mocha — brand constants**
+
+| Constant | Default | Mocha |
+|----------|---------|-------|
+| `STD_NAVY` | `2F3A4A` | `1E1E2E` (base) |
+| `STD_WHITE` | `FFFFFF` | `CDD6F4` (text) |
+| `STD_BLUE` | `2F6FA3` | `74C7EC` (sapphire) |
+| `STD_FROG_GREEN` | `92D050` | `A6E3A1` (Catppuccin green) |
+
+**RAG fills (mocha)** — light tints derived from Mocha accents so cells stay legible on white Excel backgrounds:
+
+| Constant | Hex | Role |
+|----------|-----|------|
+| `RAG_RED` / `RAG_RED_FONT` | `F5DCE3` / `8B2942` | Critical / fail |
+| `RAG_AMBER` / `RAG_AMBER_FONT` | `FEF3D4` / `7A5C00` | Warning |
+| `RAG_GREEN` / `RAG_GREEN_FONT` | `DFF5DD` / `2D6A3A` | Pass / good |
+| `RAG_RED_SOFT` / `RAG_AMBER_SOFT` | `F8E0E8` / `FFF0CC` | Softer severity striping |
+| `RAG_NEUTRAL` | `45475A` | N/A / to-do |
+| `ZEBRA_BAND` | `313244` | Alternating rows |
+
+**Heatmaps (mocha):** `HEATMAP_LOW`=`F38BA8`, `HEATMAP_MID`=`F9E2AF`, `HEATMAP_HIGH`=`A6E3A1`, `DATA_BAR_BLUE`=`74C7EC`.
+
+**Signature hype-frog green** under mocha is `#a6e3a1` (Catppuccin green), replacing the legacy Excel lime `#92D050`.
+
+**Programmatic access:**
+
+```python
+from hype_frog.reporter.mocha_theme import MOCHA, SEMANTIC, excel_palette_overrides
+
+print(SEMANTIC.frog_green)  # #a6e3a1
+print(MOCHA.base)             # #1e1e2e
+```
+
+Regression guards: `tests/reporter/test_mocha_theme.py`.
+
 ## Numeric conditional formats
 
 Columns with numeric conditional formatting must not receive arbitrary string placeholders; use blank or numeric defaults when data is missing.
@@ -233,8 +278,57 @@ Invariants:
 - **Effort is reported in hours** everywhere (the `Sprint & resource plan` uses `ReportContext.sprint_plan` hours, not T-shirt sizes).
 - **Severity headline counts are page counts** (`critical_url_count` / `warning_url_count`), matching the HTML severity bar and KPI cards.
 - The PDF audit date comes from the crawl `run_timestamp` (via `ReportContext.crawl_date`), not `datetime.now()`.
-- Branding (`brand_colour`, `prepared_by`, `client_name`) resolves once in `export_flow`, preferring `HF_REPORT_*` then `HF_PDF_*`, then a shared default (`#1e293b`).
+- Branding (`brand_colour`, `prepared_by`, `client_name`, `theme`) resolves once in `export_flow`, preferring `HF_REPORT_*` then `HF_PDF_*`, then theme-aware defaults (see *Catppuccin Mocha HTML theme* below).
 - `ReportContext.quick_wins` is an additive projection of the Quick Wins sheet rows (`name`, `effort_hours`, `owner`).
+
+### Catppuccin Mocha HTML theme (`HF_REPORT_THEME=mocha`)
+
+When `HF_REPORT_THEME=mocha`, the HTML executive report switches from the default light layout to a **dark Catppuccin Mocha** surface with hype-frog semantic colours. Implementation: `reporter/mocha_theme.py` (palette + CSS helpers) and `html_report_renderer.py` (injects theme CSS and font links).
+
+**Enable** (requires `HF_EXPORT_HTML=1`):
+
+```env
+HF_EXPORT_HTML=1
+HF_REPORT_THEME=mocha
+
+# Optional overrides (mocha defaults shown)
+# HF_REPORT_BRAND_COLOUR=#1e1e2e
+# HF_REPORT_ACCENT_COLOUR=#94e2d5
+```
+
+**Default theme behaviour:** all CSS is inline; no external network requests. **Mocha theme exception:** loads **JetBrains Mono** from Google Fonts CDN for body and monospace URL cells:
+
+```
+https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap
+```
+
+JetBrains Mono **Nerd Font** is not used in HTML output (Google Fonts does not ship Nerd patches). For terminals/IDEs, see `JETBRAINS_MONO_NERD_CDN` in `mocha_theme.py`.
+
+**Mocha semantic colours (HTML)**
+
+| Role | Hex | Catppuccin source |
+|------|-----|-------------------|
+| Page background | `#11111b` | crust |
+| Panel / card | `#181825` / `#1e1e2e` | mantle / base |
+| Body text | `#cdd6f4` | text |
+| Muted text | `#a6adc8` | subtext0 |
+| Brand / table headers | `#1e1e2e` | base |
+| Accent / CTAs | `#94e2d5` | teal |
+| H1 / KPI values (frog green) | `#a6e3a1` | green |
+| Critical | `#f38ba8` | red |
+| Warning | `#f9e2af` | yellow |
+| Good | `#a6e3a1` | green |
+| Observation | `#89b4fa` | blue |
+
+Explicit `HF_REPORT_BRAND_COLOUR` / `HF_REPORT_ACCENT_COLOUR` override mocha defaults. Legacy light-theme defaults (`#1e293b`, `#2563eb`) are treated as unset when mocha is active so the palette applies without manual hex editing.
+
+**Combine HTML + Excel mocha:**
+
+```env
+HF_EXPORT_HTML=1
+HF_REPORT_THEME=mocha
+HF_EXCEL_THEME=mocha
+```
 
 Presentation conventions shared by both deliverables:
 - **Two severity views, clearly distinguished.** The "Pages by Worst Severity" tally counts each page once by its highest-severity issue (with a visible page total); "Top Issues by Impact" counts pages affected by each individual issue (a page may appear under several). Captions in the HTML report make the distinction explicit.

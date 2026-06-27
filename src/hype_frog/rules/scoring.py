@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from hype_frog.core import get_logger
 from hype_frog.core.status_codes import (
     is_error_status,
     status_as_int_or_none,
 )
 from hype_frog.rules.registry import IssueRule
+
+logger = get_logger(__name__)
 
 # Rows with HTML-derived signals use these states (see crawler fetcher). "partial" still
 # carries the same rule inputs as Summary tab issue counts; only skip scoring when we never
@@ -43,7 +46,8 @@ def score_url_health(
         try:
             if rule.fn(row):
                 matched[rule.severity].append(rule.name)
-        except Exception:
+        except Exception as exc:
+            logger.warning("Rule %r raised: %s", rule, exc)
             continue
     observation_penalty = min(10, 3 * len(matched["Observation"]))
     score = max(

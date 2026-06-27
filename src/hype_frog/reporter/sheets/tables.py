@@ -99,13 +99,17 @@ def apply_mock_table_styling(
             horizontal="center", vertical="center", wrap_text=True
         )
 
-    band_fill = PatternFill(start_color="F7F7F7", end_color="F7F7F7", fill_type="solid")
-    for row_idx in range(min_row + 1, max_row + 1):
-        if row_idx % 2 == 0:
-            for col_idx in range(min_col, max_col + 1):
-                cell = worksheet.cell(row=row_idx, column=col_idx)
-                if cell.fill.fill_type is None:
-                    cell.fill = band_fill
+    # Per-cell zebra banding is O(rows × cols) — skip for large sheets to avoid
+    # multi-minute formatting passes. Sheets above the threshold keep the navy
+    # header and auto-filter; row striping is a cosmetic-only omission.
+    if (max_row - min_row) <= 500:
+        band_fill = PatternFill(start_color="F7F7F7", end_color="F7F7F7", fill_type="solid")
+        for row_idx in range(min_row + 1, max_row + 1):
+            if row_idx % 2 == 0:
+                for col_idx in range(min_col, max_col + 1):
+                    cell = worksheet.cell(row=row_idx, column=col_idx)
+                    if cell.fill.fill_type is None:
+                        cell.fill = band_fill
 
     if max_row >= min_row:
         if worksheet.title == CONTENT_OPTIMISATION_HUB_SHEET:

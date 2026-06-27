@@ -167,9 +167,11 @@ Lists URLs excluded from crawl because they carry CMS action query parameters (s
 
 Every crawl can produce a self-contained HTML executive report alongside the xlsx workbook, triggered by `HF_EXPORT_HTML=1`.
 
-The HTML report is **white-label**: no tool-internal naming appears in the rendered output. Branding, logo, and colours are configurable via environment variables (`HF_REPORT_PREPARED_BY`, `HF_REPORT_CLIENT_NAME`, `HF_REPORT_LOGO_PATH`, `HF_REPORT_BRAND_COLOUR`, `HF_REPORT_ACCENT_COLOUR`). All are optional; defaults produce an unbranded report.
+The HTML report is **white-label**: no tool-internal naming appears in the rendered output. Branding, logo, and colours are configurable via environment variables (`HF_REPORT_PREPARED_BY`, `HF_REPORT_CLIENT_NAME`, `HF_REPORT_LOGO_PATH`, `HF_REPORT_BRAND_COLOUR`, `HF_REPORT_ACCENT_COLOUR`, `HF_REPORT_THEME`). All are optional; defaults produce an unbranded light report.
 
-The output file is self-contained — all CSS is inline in a `<style>` block, no external stylesheets or scripts. It renders identically from disk or HTTP, and produces a clean 4–6 page PDF via Print → Save as PDF from any browser.
+**Catppuccin Mocha theme:** set `HF_REPORT_THEME=mocha` for a dark Mocha HTML layout with JetBrains Mono (Google Fonts CDN). Optional companion `HF_EXCEL_THEME=mocha` applies mocha-inspired RAG/heatmap colours to the xlsx. Full palette tables, env examples, and module references are in [`docs/excel_reporting_standards.md`](excel_reporting_standards.md) (*Catppuccin Mocha theme*).
+
+The default output file is self-contained — all CSS is inline in a `<style>` block, no external stylesheets or scripts. The **mocha** theme is the only exception (Google Fonts link for JetBrains Mono). It renders identically from disk or HTTP, and produces a clean 4–6 page PDF via Print → Save as PDF from any browser.
 
 **Module structure (under `reporter/`):**
 - `html_report_data.py` — aggregates enriched pipeline data into a `ReportContext` dataclass; read-only consumer of pipeline rows.

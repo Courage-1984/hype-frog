@@ -7,16 +7,30 @@ from __future__ import annotations
 import html as html_lib
 
 from hype_frog.reporter.html_report_data import ReportContext
+from hype_frog.reporter.mocha_theme import (
+    THEME_NAME,
+    html_font_links,
+    html_theme_css,
+    resolve_accent_colour,
+    resolve_brand_colour,
+)
 
 
 def render_html_report(ctx: ReportContext) -> str:
     """Return a complete HTML document string ready for file write."""
     crawl_mode_block = f" ({_esc(ctx.crawl_mode)} mode)" if ctx.crawl_mode else ""
+    use_mocha = (ctx.theme or "").strip().lower() == THEME_NAME
+    brand_colour = resolve_brand_colour(ctx.brand_colour) if use_mocha else ctx.brand_colour
+    accent_colour = resolve_accent_colour(ctx.accent_colour) if use_mocha else ctx.accent_colour
+    font_links = html_font_links() if use_mocha else ""
+    theme_css = html_theme_css(brand_colour, accent_colour) if use_mocha else ""
     # Replace crawl_mode_block before .format() to avoid KeyError from Python format parser
     template = _TEMPLATE.replace("{crawl_mode_block}", crawl_mode_block)
     return template.format(
-        brand_colour=ctx.brand_colour,
-        accent_colour=ctx.accent_colour,
+        font_links=font_links,
+        theme_css=theme_css,
+        brand_colour=brand_colour,
+        accent_colour=accent_colour,
         logo_block=_logo_block(ctx.logo_base64),
         client_name=_esc(ctx.client_name or ctx.domain),
         domain=_esc(ctx.domain),
@@ -268,6 +282,7 @@ _TEMPLATE = '''<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SEO &amp; AEO Audit — {client_name}</title>
+{font_links}
 <style>
   @page {{ size: A4; margin: 16mm 14mm; }}
   @media print {{
@@ -336,6 +351,7 @@ _TEMPLATE = '''<!DOCTYPE html>
   @media (max-width: 600px) {{ .two-col {{ grid-template-columns: 1fr; }} }}
 
   footer {{ margin-top: 32px; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 0.72em; color: #94a3b8; text-align: center; }}
+{theme_css}
 </style>
 </head>
 <body>

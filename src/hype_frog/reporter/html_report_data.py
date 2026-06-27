@@ -29,6 +29,7 @@ class ReportContext:
     logo_base64: str = ""
     brand_colour: str = "#1e293b"
     accent_colour: str = "#2563eb"
+    theme: str = ""  # e.g. "mocha" for Catppuccin Mocha styling
 
     # ── KPIs ──────────────────────────────────────────────────────────────────
     seo_health_mean: float = 0.0
@@ -96,6 +97,7 @@ def build_report_context(
     logo_base64: str = "",
     brand_colour: str = "#1e293b",
     accent_colour: str = "#2563eb",
+    theme: str = "",
 ) -> ReportContext:
     """Build a ReportContext from enriched crawl pipeline data. Read-only."""
     ctx = ReportContext()
@@ -104,6 +106,7 @@ def build_report_context(
     ctx.prepared_by = prepared_by
     ctx.brand_colour = brand_colour
     ctx.accent_colour = accent_colour
+    ctx.theme = theme
     ctx.logo_base64 = logo_base64
 
     # ── IDENTITY ──────────────────────────────────────────────────────────────

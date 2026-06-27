@@ -120,7 +120,7 @@ class PageRowMetricsModel(BaseModel):
             return None
         if math.isnan(numeric) or math.isinf(numeric):
             return None
-        return value
+        return numeric
 
     @field_validator("gsc_clicks", "gsc_impressions", mode="before")
     @classmethod
@@ -135,7 +135,7 @@ class PageRowMetricsModel(BaseModel):
             return None
         if math.isnan(numeric) or math.isinf(numeric):
             return None
-        return value
+        return numeric
 
 
 def harden_page_row_metrics(row: dict[str, Any]) -> dict[str, Any]:
@@ -809,7 +809,7 @@ class MainRowPayload(BaseModel):
             candidate = {}
         if not isinstance(candidate, dict):
             raise TypeError("MainRowPayload requires a dict payload")
-        merged = deepcopy(MAIN_ROW_DEFAULTS)
+        merged = MAIN_ROW_DEFAULTS.copy()
         for key, value in candidate.items():
             if key in MAIN_ROW_DEFAULTS:
                 merged[key] = value
@@ -835,7 +835,7 @@ class ExtraRowPayload(BaseModel):
             candidate = {}
         if not isinstance(candidate, dict):
             raise TypeError("ExtraRowPayload requires a dict payload")
-        merged = deepcopy(EXTRA_ROW_DEFAULTS)
+        merged = {k: list(v) if isinstance(v, list) else v for k, v in EXTRA_ROW_DEFAULTS.items()}
         for key, value in candidate.items():
             if key in EXTRA_ROW_DEFAULTS:
                 merged[key] = value

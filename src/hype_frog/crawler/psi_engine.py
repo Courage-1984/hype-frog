@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import random
 import re
 import sqlite3
@@ -21,6 +20,7 @@ from hype_frog.config import (
     get_psi_strategy_gap_seconds,
 )
 from hype_frog.core import get_logger
+from hype_frog.core.env_vars import get_psi_api_key
 from hype_frog.core.url_normalization import normalize_url
 
 logger = get_logger(__name__)
@@ -79,10 +79,6 @@ class _PsiRequestPacer:
                 if remaining > 0:
                     await asyncio.sleep(remaining)
             self._last_request_at = time.monotonic()
-
-
-def get_psi_api_key() -> str | None:
-    return os.getenv("PSI_API_KEY") or None
 
 
 def psi_index_key(url: object) -> str:

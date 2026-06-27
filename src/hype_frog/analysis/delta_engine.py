@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -187,7 +187,7 @@ def companion_summary_path(path: str) -> str:
 
 
 def _utc_now_iso() -> str:
-    return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _safe_int(value: object) -> int:
@@ -496,11 +496,9 @@ def build_delta_sheet_rows(
     current: RunSnapshot,
     previous: RunSnapshot | None,
     baseline_report: bool,
-    typed_extra_rows: list[ExtraRowPayload],
     summary_rules: list[IssueRule],
 ) -> list[dict[str, Any]]:
     """Build multi-section DeltaFromPreviousRun rows."""
-    del typed_extra_rows  # issue-count deltas use snapshot counts
     rows: list[dict[str, Any]] = [_blank_delta_row() | dict(zip(DELTA_SHEET_COLUMNS, DELTA_SHEET_COLUMNS))]
     if baseline_report or previous is None:
         rows.append(_section_title_row("Summary"))
@@ -770,7 +768,6 @@ def build_delta_workbook_output(
         current=current_snapshot,
         previous=previous_snapshot,
         baseline_report=baseline_report,
-        typed_extra_rows=typed_extra_rows,
         summary_rules=summary_rules,
     )
     resolved_df = build_resolved_issues_dataframe(

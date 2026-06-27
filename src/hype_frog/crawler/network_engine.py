@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import random
 import re
 import time
@@ -182,7 +183,7 @@ def _coerce_field_metric(value: Any) -> float | None:
     if not isinstance(value, (int, float)):
         return None
     out = float(value)
-    if out != out or out in (float("inf"), float("-inf")):
+    if math.isnan(out) or out in (float("inf"), float("-inf")):
         return None
     return out
 
@@ -617,6 +618,7 @@ async def fetch_http(
         request_start = time.time()
         try:
             async with session.get(url, timeout=timeout) as response:
+                headers_received_at = time.time()
                 headers = {str(k): str(v) for k, v in response.headers.items()}
                 status = int(response.status)
                 if status in retryable_status_codes and attempt < max_retries:
@@ -649,7 +651,7 @@ async def fetch_http(
                     "redirect_hops": [str(h.url) for h in response.history],
                     "redirect_hop_details": hop_details,
                     "html": html,
-                    "ttfb_ms": round((time.time() - request_start) * 1000, 2),
+                    "ttfb_ms": round((headers_received_at - request_start) * 1000, 2),
                     "total_request_ms": round((time.time() - request_start) * 1000, 2),
                     "error_kind": None,
                 }

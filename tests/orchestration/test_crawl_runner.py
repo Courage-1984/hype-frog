@@ -114,7 +114,6 @@ def _install_runner_mocks(
         url: str,
         _session: Any,
         _semaphore: Any,
-        _full_suite: bool,
         _robots_cache: Any,
         _delay: float,
         _sitemap_meta: Any,

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Literal
+
+from hype_frog.core.env_vars import get_hf_full_smoke_url_count, get_psi_api_key
 
 ResumeCheckpointMode = Literal["prompt", "yes", "no"]
 
@@ -50,24 +51,18 @@ class RunConfig:
 
 
 def _quick_test_max_psi_urls() -> int:
-    if os.getenv("PSI_API_KEY", "").strip():
+    if get_psi_api_key():
         return QUICK_TEST_MAX_PSI_URLS
     return 0
 
 
 def _full_smoke_url_count() -> int:
-    raw = os.getenv("HF_FULL_SMOKE_URL_COUNT", "").strip()
-    if raw:
-        try:
-            return max(20, int(raw))
-        except ValueError:
-            pass
-    return FULL_SMOKE_SYNTHETIC_URL_COUNT
+    return max(20, get_hf_full_smoke_url_count(FULL_SMOKE_SYNTHETIC_URL_COUNT))
 
 
 def full_smoke_run_config() -> RunConfig:
     """Pre-export gate: uncapped sitemap seeds, full suite, PSI on all URLs when key is set."""
-    psi_enabled = bool(os.getenv("PSI_API_KEY", "").strip())
+    psi_enabled = bool(get_psi_api_key())
     return RunConfig(
         target_input=FULL_SMOKE_SITEMAP_URL,
         max_urls=None,

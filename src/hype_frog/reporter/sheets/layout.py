@@ -767,10 +767,13 @@ def apply_column_widths(worksheet: Worksheet) -> None:
     for column in worksheet.columns:
         max_length = 0
         column_letter = column[0].column_letter
-        for cell in column:
+        for i, cell in enumerate(column):
+            if i >= 300:
+                break
             try:
-                if len(str(cell.value)) > max_length:
-                    max_length = len(str(cell.value))
+                cell_str = str(cell.value)
+                if len(cell_str) > max_length:
+                    max_length = len(cell_str)
             except Exception:
                 pass
         worksheet.column_dimensions[column_letter].width = min(max_length + 2, 60)

@@ -44,7 +44,7 @@ def test_click_depth_never_null_and_homepage_is_zero() -> None:
             }
         ),
     ]
-    metrics = compute_internal_link_intelligence(extra_rows, "example.com")
+    metrics = compute_internal_link_intelligence(extra_rows)
     home_key = "https://example.com/"
     about_key = "https://example.com/about"
     assert metrics[home_key]["Click Depth"] == 0
@@ -69,7 +69,7 @@ def test_unreachable_node_gets_minus_one() -> None:
             }
         ),
     ]
-    metrics = compute_internal_link_intelligence(extra_rows, "example.com")
+    metrics = compute_internal_link_intelligence(extra_rows)
     assert metrics["https://example.com/"]["Click Depth"] == 0
     assert metrics["https://example.com/isolated"]["Click Depth"] == CLICK_DEPTH_UNREACHABLE
     assert metrics["https://example.com/isolated"]["Reachable from Homepage"] is False
@@ -100,7 +100,7 @@ def test_unreachable_with_inlinks_is_not_orphan() -> None:
             }
         ),
     ]
-    metrics = compute_internal_link_intelligence(extra_rows, "example.com")
+    metrics = compute_internal_link_intelligence(extra_rows)
     cart = metrics["https://example.com/cart"]
     checkout = metrics["https://example.com/checkout"]
     assert cart["Click Depth"] == CLICK_DEPTH_UNREACHABLE
@@ -128,7 +128,7 @@ def test_reachable_from_homepage_true_when_on_homepage_path() -> None:
             }
         ),
     ]
-    metrics = compute_internal_link_intelligence(extra_rows, "example.com")
+    metrics = compute_internal_link_intelligence(extra_rows)
     assert metrics["https://example.com/"]["Reachable from Homepage"] is True
     assert metrics["https://example.com/about"]["Reachable from Homepage"] is True
 

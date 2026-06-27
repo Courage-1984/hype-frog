@@ -5,6 +5,9 @@ import asyncio
 import aiohttp
 
 from hype_frog.config import CONNECT_TIMEOUT_SECONDS, READ_TIMEOUT_SECONDS, TIMEOUT_SECONDS
+from hype_frog.core import get_logger
+
+logger = get_logger(__name__)
 
 
 async def check_url_status_light(session: aiohttp.ClientSession, url: str) -> int | None:
@@ -16,11 +19,13 @@ async def check_url_status_light(session: aiohttp.ClientSession, url: str) -> in
     try:
         async with session.head(url, timeout=timeout, allow_redirects=True) as resp:
             return resp.status
-    except Exception:
+    except Exception as exc:
+        logger.debug("HEAD %r failed, falling back to GET: %s", url, exc)
         try:
             async with session.get(url, timeout=timeout, allow_redirects=True) as resp:
                 return resp.status
-        except Exception:
+        except Exception as exc2:
+            logger.debug("GET %r also failed: %s", url, exc2)
             return None
 
 

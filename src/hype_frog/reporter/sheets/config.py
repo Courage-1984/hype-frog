@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-import os
+from hype_frog.core.env_vars import (
+    get_hf_debug_excel_isolation_mode,
+    get_hf_disable_conditional_formatting,
+    get_hf_disable_data_validation,
+    get_hf_disable_external_links_and_images,
+    get_hf_disable_non_core_freeze_panes,
+    get_hf_disable_tooltips,
+    get_hf_excel_theme,
+)
 
 STD_NAVY: str = "2F3A4A"
 STD_WHITE: str = "FFFFFF"
@@ -61,23 +69,38 @@ DATA_HEAVY_TABS: set[str] = {
 }
 
 
-def env_bool(name: str, default: bool) -> bool:
-    raw: str | None = os.getenv(name)
-    if raw is None:
-        return default
-    return str(raw).strip().lower() in {"1", "true", "yes", "y", "on"}
-
-
-DEBUG_EXCEL_ISOLATION_MODE: bool = env_bool("HF_DEBUG_EXCEL_ISOLATION_MODE", False)
-DISABLE_DATA_VALIDATION: bool = env_bool("HF_DISABLE_DATA_VALIDATION", False)
+DEBUG_EXCEL_ISOLATION_MODE: bool = get_hf_debug_excel_isolation_mode()
+DISABLE_DATA_VALIDATION: bool = get_hf_disable_data_validation()
 # Dedicated control for header/cell tooltips (Excel comments). Kept separate from
 # data-validation dropdowns so operators can suppress one without the other.
-DISABLE_TOOLTIPS: bool = env_bool("HF_DISABLE_TOOLTIPS", False)
-DISABLE_CONDITIONAL_FORMATTING: bool = env_bool("HF_DISABLE_CONDITIONAL_FORMATTING", False)
-DISABLE_EXTERNAL_LINKS_AND_IMAGES: bool = env_bool(
-    "HF_DISABLE_EXTERNAL_LINKS_AND_IMAGES", False
-)
-DISABLE_NON_CORE_FREEZE_PANES: bool = env_bool("HF_DISABLE_NON_CORE_FREEZE_PANES", False)
+DISABLE_TOOLTIPS: bool = get_hf_disable_tooltips()
+DISABLE_CONDITIONAL_FORMATTING: bool = get_hf_disable_conditional_formatting()
+DISABLE_EXTERNAL_LINKS_AND_IMAGES: bool = get_hf_disable_external_links_and_images()
+DISABLE_NON_CORE_FREEZE_PANES: bool = get_hf_disable_non_core_freeze_panes()
+
+# Optional Catppuccin Mocha palette for Excel (HF_EXCEL_THEME=mocha).
+if get_hf_excel_theme() == "mocha":
+    from hype_frog.reporter.mocha_theme import excel_palette_overrides
+
+    _mocha = excel_palette_overrides()
+    STD_NAVY = _mocha["STD_NAVY"]
+    STD_WHITE = _mocha["STD_WHITE"]
+    STD_BLUE = _mocha["STD_BLUE"]
+    STD_FROG_GREEN = _mocha["STD_FROG_GREEN"]
+    RAG_RED = _mocha["RAG_RED"]
+    RAG_RED_FONT = _mocha["RAG_RED_FONT"]
+    RAG_AMBER = _mocha["RAG_AMBER"]
+    RAG_AMBER_FONT = _mocha["RAG_AMBER_FONT"]
+    RAG_GREEN = _mocha["RAG_GREEN"]
+    RAG_GREEN_FONT = _mocha["RAG_GREEN_FONT"]
+    RAG_RED_SOFT = _mocha["RAG_RED_SOFT"]
+    RAG_AMBER_SOFT = _mocha["RAG_AMBER_SOFT"]
+    RAG_NEUTRAL = _mocha["RAG_NEUTRAL"]
+    ZEBRA_BAND = _mocha["ZEBRA_BAND"]
+    HEATMAP_LOW = _mocha["HEATMAP_LOW"]
+    HEATMAP_MID = _mocha["HEATMAP_MID"]
+    HEATMAP_HIGH = _mocha["HEATMAP_HIGH"]
+    DATA_BAR_BLUE = _mocha["DATA_BAR_BLUE"]
 
 
 __all__ = [
