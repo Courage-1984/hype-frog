@@ -1,6 +1,7 @@
 from .api_clients import parse_gsc_row, parse_http_crawl_result, parse_psi_response
 from .cli import get_user_config
-from .logger import configure_logging, get_logger
+from .console import log_completion_panel, log_phase_banner, log_stage_timer, log_startup_panel
+from .logger import configure_logging, console, get_logger
 from .models import (
     CheckpointPayload,
     CrawlResult,
@@ -18,7 +19,12 @@ from .models import (
 
 __all__ = [
     "configure_logging",
+    "console",
     "get_logger",
+    "log_completion_panel",
+    "log_phase_banner",
+    "log_stage_timer",
+    "log_startup_panel",
     "get_user_config",
     "CheckpointPayload",
     "CrawlResult",

@@ -429,7 +429,7 @@ async def fetch_and_parse(
             main_values["Load Time (s)"] = round(time.time() - start_time, 3)
         finalize_row_state(main_data, extra)
         backfill_extra_content_hub_metrics(extra_values, main_values)
-        logger.info("[%s] Crawled: %s", main_values["Status Code"], url)
+        logger.debug("[%s] Crawled: %s", main_values["Status Code"], url)
         delay_seconds = (
             request_delay if request_delay is not None else get_delay_between_requests()
         )
@@ -437,3 +437,59 @@ async def fetch_and_parse(
             delay_seconds + random.uniform(0, get_request_jitter_seconds())
         )
         return CrawlRowPayload(main=main_data, extra=extra)
+
+
+def configure_playwright_browsers_path() -> str | None:
+    """Pin Playwright browser binaries to a persistent, writable directory.
+
+    In a frozen (PyInstaller) build the bundled Playwright package lives inside an
+    ephemeral ``_MEIxxxx`` temp directory that is recreated and wiped on every run,
+    so any browsers installed there vanish immediately. Point both the installer and
+    the launcher at a stable per-user location so a one-time
+    ``--install-playwright`` persists across runs.
+
+    Returns the resolved path when an override is applied, otherwise ``None``
+    (development runs keep Playwright's default venv-relative location).
+    """
+    import os
+    import sys
+    from pathlib import Path
+
+    existing = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if existing:
+        return existing
+    if not getattr(sys, "frozen", False):
+        return None
+
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    target = Path(base) / "hype-frog" / "ms-playwright"
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return None
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(target)
+    return str(target)
+
+
+def install_playwright_chromium() -> tuple[bool, str]:
+    """Install the Playwright Chromium binary. Safe to call from a frozen exe."""
+    import subprocess
+
+    configure_playwright_browsers_path()
+    try:
+        from playwright._impl._driver import compute_driver_executable
+
+        # Modern Playwright returns (node_executable, cli_js_path); older builds
+        # returned a single launcher script. Normalise both into one command.
+        driver = compute_driver_executable()
+        cmd = [str(part) for part in driver] if isinstance(driver, (tuple, list)) else [str(driver)]
+        result = subprocess.run(
+            [*cmd, "install", "chromium"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return True, "Playwright Chromium installed. Accurate crawl mode is now available."
+        return False, f"Playwright install failed:\n{result.stderr}"
+    except Exception as exc:
+        return False, f"Could not install Playwright Chromium: {exc}"

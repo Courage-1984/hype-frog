@@ -514,7 +514,9 @@ def rules_by_name() -> dict[str, IssueRule]:
 
 def test_all_summary_rules_have_unique_names() -> None:
     names = [rule.name for rule in get_summary_rules()]
-    assert len(names) == len(set(names))
+    seen: set[str] = set()
+    duplicates = [n for n in names if n in seen or seen.add(n)]  # type: ignore[func-returns-value]
+    assert not duplicates, f"Duplicate IssueRule names: {duplicates}"
 
 
 def test_rule_trigger_matrix_covers_every_rule(rules_by_name: dict[str, IssueRule]) -> None:

@@ -1,0 +1,47 @@
+---
+description: Orchestration layer ownership, crawl loop policy, BFS budget, enrichment batching, export sequencing, and export registry for orchestration/.
+globs: "src/hype_frog/orchestration/**/*.py"
+alwaysApply: false
+---
+
+Canonical narrative: [`docs/system_architecture.md`](../../docs/system_architecture.md). Keep rules and docs aligned when editing orchestration code.
+
+# Orchestration layer rules
+
+## Purpose and boundaries
+
+`orchestration/` drives the *coordination* of crawl, enrichment, and export — it must not own business logic. Its modules call into `crawler/`, `analysis/`, `pipeline/`, and `reporter/`; they do not implement extraction, scoring, or formatting.
+
+## Module ownership
+
+- `crawl_runner.py` — BFS crawl loop, concurrency scheduling, CMS action URL filtering, checkpoint integration.
+- `enrichment_flow.py` — Batched PSI and GSC enrichment after the crawl phase; dispatches to `crawler/psi_engine.py` and `crawler/gsc_engine.py`.
+- `export_flow.py` — Sequencing of xlsx, HTML, and PDF export; calls into `reporter/`; non-fatal on individual export failures.
+- `export_registry.py` — Registry of named export artefacts produced during a run; used for delta comparison and run history.
+- `run_setup.py` — Initialises run context (config validation, output path resolution, logging bootstrap) before the crawl starts.
+
+## CMS action URL filtering
+
+`crawl_runner.py` enforces `config_defaults.EXCLUDED_CMS_ACTION_QUERY_PARAMS` to drop WooCommerce/CMS action URLs from the BFS queue and internal-link discovery. Extend the frozenset in `config_defaults.py` when new CMS action patterns appear — do not hard-code patterns in `crawl_runner.py`.
+
+## BFS budget
+
+The crawl loop must respect `max_pages` and `max_depth` from `RunConfig`/config. When the budget is exhausted, log at `INFO` and stop cleanly — do not silently truncate without a log message.
+
+## Enrichment batching
+
+`enrichment_flow.py` must batch PSI and GSC API calls (never one request per URL serially). Respect per-service rate limits and propagate `skip_reason` tokens when quota is exhausted rather than leaving rows blank.
+
+## Export sequencing
+
+`export_flow.py` must:
+1. Write xlsx first (highest priority; must not be blocked by HTML or PDF failures).
+2. Attempt HTML export if `HF_EXPORT_HTML=1`; log `WARNING` on failure, continue.
+3. Attempt PDF export if `HF_EXPORT_PDF=1`; log `WARNING` on failure, continue.
+4. Register artefact paths in `export_registry.py` on success.
+
+Never raise from step 2 or 3 in a way that aborts step 1 or skips subsequent steps.
+
+## No print() in orchestration
+
+Same as pipeline: **`print()` is prohibited** in `orchestration/`. Use `core/` logging exclusively.

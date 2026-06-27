@@ -10,12 +10,12 @@ from openpyxl.workbook.workbook import Workbook
 
 from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 from hype_frog.reporter.sheets.toc import PREFERRED_WORKBOOK_TAB_ORDER
+from hype_frog.reporter.sheets.workbook_layout import SHEETS_EXCLUDED_FROM_TOC
 
 _ACTION_LITERALS = frozenset(
     {
         "Needs Copy",
         "Needs Optimisation",
-        "Needs Optimization",
         "Complete",
         "Ready to Publish",
     }
@@ -104,13 +104,24 @@ def audit_workbook(
     expected_toc = [
         t
         for t in PREFERRED_WORKBOOK_TAB_ORDER
-        if t != "Table of Contents" and t in wb.sheetnames
+        if t != "Table of Contents"
+        and t in wb.sheetnames
+        and t not in SHEETS_EXCLUDED_FROM_TOC
     ]
     for tab in workbook_tabs:
-        if tab != "Table of Contents" and tab not in _PREFERRED_TAB_SET:
+        if (
+            tab != "Table of Contents"
+            and tab not in _PREFERRED_TAB_SET
+            and tab not in SHEETS_EXCLUDED_FROM_TOC
+        ):
             expected_toc.append(tab)
     if toc_tabs != expected_toc:
-        missing_in_toc = set(workbook_tabs) - {"Table of Contents"} - set(toc_tabs)
+        missing_in_toc = (
+            set(workbook_tabs)
+            - {"Table of Contents"}
+            - set(toc_tabs)
+            - SHEETS_EXCLUDED_FROM_TOC
+        )
         if missing_in_toc:
             errors.append(f"TOC missing sheets: {sorted(missing_in_toc)}")
         if set(toc_tabs) - set(workbook_tabs):

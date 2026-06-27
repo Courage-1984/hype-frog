@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from openpyxl.chart import BarChart, DoughnutChart, Reference
 from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.series import DataPoint
+from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
@@ -22,14 +23,39 @@ from hype_frog.reporter.dashboard_logic import (
     compute_dashboard_metrics,
 )
 from hype_frog.reporter.engine_io import _safe_sheet_name, _sanitize_excel_value
-from hype_frog.reporter.sheets.config import EXECUTIVE_DASHBOARD_SHEET, STD_NAVY
+from hype_frog.reporter.sheets.config import (
+    DEBUG_EXCEL_ISOLATION_MODE,
+    EXECUTIVE_DASHBOARD_SHEET,
+    STD_BLUE,
+    STD_NAVY,
+)
+from hype_frog.reporter.sheets.dashboard_config import (
+    LIGHT_HEADER_COLOR,
+    PANEL_BG_COLOR,
+    VALUE_BLOCK_COLOR,
+)
 
-_KPI_FILL = PatternFill("solid", fgColor="DCE3EA")
-_SECTION_FILL = PatternFill("solid", fgColor="E5E7EB")
+# Reuse the shared Dashboard structural palette so both dashboards read consistently.
+_KPI_FILL = PatternFill("solid", fgColor=VALUE_BLOCK_COLOR)
+_SECTION_FILL = PatternFill("solid", fgColor=LIGHT_HEADER_COLOR)
 _SOURCE_FILL = PatternFill("solid", fgColor="F3F4F6")
-_INSIGHT_FILL = PatternFill("solid", fgColor="F5F7FA")
+_INSIGHT_FILL = PatternFill("solid", fgColor=PANEL_BG_COLOR)
 
 _KEY_INSIGHTS_ROW = 5
+
+# Curated tooltips for the less self-evident KPI cards (T5).
+_EXEC_CARD_TOOLTIPS: dict[str, str] = {
+    "SEO Health (now)": "Average SEO health across all crawled URLs (0–100).",
+    "SEO Health (illustrative projected)": (
+        "Illustrative SEO health if the prioritised fixes are completed. "
+        "A planning estimate, not a guarantee."
+    ),
+    "AEO Readiness": "Share of answer-engine readiness signals present across URLs.",
+    "Traffic Lift (est.)": (
+        "Rough estimated monthly organic visit uplift from remediating priority pages."
+    ),
+    "Performance (PSI)": "Average mobile PageSpeed Insights performance score (0–100).",
+}
 
 # Visual grid: rows 1–58 are charts/KPIs; row 59 hint; source tables from row 60.
 _CHART_BAND_ROW_HEIGHT_PT = 15.0
@@ -564,7 +590,6 @@ def populate_chart_data_sheet(
     current_health = round(summary_metrics.health_score_pct, 1)
     projected_health = round(summary_metrics.projected_health_score_pct, 1)
     technical_health = _avg_technical_health(extra_rows, dashboard_metrics.overall_health)
-    label_col = _label_col()
     value_col = _value_col()
     value_col_2 = _value_col_2()
     projected_technical = _project_component_score(technical_health, summary_metrics)
@@ -938,6 +963,22 @@ def _write_kpi_cards(
     subtitle.font = Font(size=9, color="374151")
     exec_ws.row_dimensions[2].height = 40
 
+    # T5 — the Executive Dashboard must not be a navigation dead-end. Place return links
+    # in column N (clear of the A–L chart band) on the frozen header rows so they stay
+    # visible. Skipped in isolation mode, matching the standard nav helper.
+    if not DEBUG_EXCEL_ISOLATION_MODE:
+        for ref, target_sheet, label in (
+            ("N1", "Dashboard", "BACK TO DASHBOARD"),
+            ("N2", "Table of Contents", "BACK TO CONTENTS"),
+        ):
+            nav_cell = exec_ws[ref]
+            nav_cell.value = label
+            nav_cell.hyperlink = f"#'{target_sheet}'!A1"
+            nav_cell.style = "Hyperlink"
+            nav_cell.font = Font(color=STD_BLUE, underline="single", bold=True)
+            nav_cell.alignment = Alignment(horizontal="left", vertical="center")
+        exec_ws.column_dimensions["N"].width = 22
+
     cards: list[tuple[str, str]] = [
         ("SEO Health (now)", f"{summary_metrics.health_score_pct:.0f}%"),
         (
@@ -965,6 +1006,9 @@ def _write_kpi_cards(
         label_cell.font = Font(bold=True, size=10, color=STD_NAVY)
         label_cell.fill = _KPI_FILL
         label_cell.alignment = Alignment(horizontal="center")
+        tip = _EXEC_CARD_TOOLTIPS.get(label)
+        if tip:
+            label_cell.comment = Comment(tip, "hype-frog")
         value_cell = exec_ws.cell(row=row + 1, column=col, value=value)
         value_cell.font = Font(bold=True, size=18)
         value_cell.fill = _KPI_FILL
@@ -1039,7 +1083,6 @@ def write_executive_dashboard(
         _ROW_SEC_ISSUES,
         "Issue distribution — unique URLs vs issue instances (see source row 60+)",
     )
-    severity_header = layout.severity_start + 1
     owner_header = layout.owner_start + 1
     _reserve_chart_band(exec_ws, _ROW_CH_ISSUES, _CHART_BAND_ROWS)
     _add_severity_comparison_chart(

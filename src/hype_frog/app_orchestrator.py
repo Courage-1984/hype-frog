@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+import time
 from collections import defaultdict
 from datetime import datetime
 from urllib.parse import urlparse
@@ -16,6 +17,7 @@ from hype_frog.config import (
     TIMEOUT_SECONDS,
 )
 from hype_frog.core import get_logger
+from hype_frog.core.console import log_completion_panel
 from hype_frog.core.run_config import RunConfig
 from hype_frog.orchestration.crawl_runner import execute_crawl
 from hype_frog.orchestration.enrichment_flow import run_enrichment
@@ -43,6 +45,7 @@ def _value_or_default(value: object, default: float = 0.0) -> float:
 
 
 async def main(run: RunConfig | None = None) -> None:
+    _start = time.perf_counter()
     setup = resolve_run_setup(run)
     crawl_result = await execute_crawl(setup)
     enrichment_result = await run_enrichment(crawl_result)
@@ -54,6 +57,13 @@ async def main(run: RunConfig | None = None) -> None:
         extract_subfolder_fn=_extract_subfolder,
         build_aeo_rows_fn=_build_aeo_rows,
         build_aioseo_rows_fn=_build_aioseo_rows,
+    )
+    _pdf = crawl_result.output_filename.replace(".xlsx", "_executive_summary.pdf")
+    log_completion_panel(
+        output_filename=crawl_result.output_filename,
+        url_count=len(crawl_result.crawl_rows),
+        elapsed_seconds=time.perf_counter() - _start,
+        pdf_filename=_pdf if os.path.exists(_pdf) else None,
     )
 
 

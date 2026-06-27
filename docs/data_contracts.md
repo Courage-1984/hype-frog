@@ -69,6 +69,8 @@ The runtime uses **SQLite** for durable caches and intermediate stores (for exam
 - **Additive JSON in crawl cache** — Extra keys in cached `main_json` / `extra_json` can remain additive when consumers tolerate `extra="allow"`; **removals or renames** of cached keys require version bump or migration so resumed runs do not emit corrupted workbook rows.
 - **Operational hygiene** — Prefer explicit **delete/rebuild** of a cache file when a breaking change ships rather than leaving incompatible databases on disk without detection.
 
+> **Current state:** no `CACHE_VERSION` constant is implemented yet. Today the only invalidation path is **manual deletion** of `.cache/*.sqlite` (crawl audit cache via `checkpoint/cache.py`, plus PSI/GSC metric caches under `crawler/`). When a non-additive contract change ships, instruct the user to delete the cache, or introduce a version sentinel as described above.
+
 ## Runtime configuration (D6)
 
 Tunable thresholds and crawl pacing live in `src/hype_frog/config_defaults.py`. Optional overrides:

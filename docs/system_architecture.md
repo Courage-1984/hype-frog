@@ -83,7 +83,7 @@ Runtime rows are dictionary pairs wrapped by Pydantic models (details: [data_con
 `rules/registry.py` defines **`IssueRule`** (`severity`, `name`, `fn`, `scope` defaulting to `"url"`). `get_summary_rules()` returns **99** rules: **90** URL-scoped, **8** site-scoped, **1** server-scoped.
 
 - **URL scope** — one IssueInventory / FixPlan row per affected URL.
-- **Site / server scope** — aggregated rows in IssueInventory and Issue Register with labels `(site-wide)` / `(server config)` and **`Affected URL Count`** instead of duplicating per URL (`reporter/summary_builder.py`).
+- **Site / server scope** — aggregated rows in **Issue Register** (canonical backlog) with labels `(site-wide)` / `(server config)` and **`Affected URL Count`**. Legacy **IssueInventory** remains exported for delta/history tooling but is hidden and excluded from the TOC.
 
 ## PSI, Lighthouse, and CrUX
 
@@ -149,7 +149,7 @@ Tab order and visibility are defined in `reporter/sheets/workbook_layout.py`.
 
 **Primary (visible):** Table of Contents, Dashboard, Executive Dashboard, Summary, Priority URLs, FixPlan, Quick Wins, Content Optimisation Hub, Content Hub Metrics, Main, AIOSEO Recommendations, Link Inventory, Broken Link Impact, SitemapQA, Template & Duplication Risks, Playbook.
 
-**Advanced (hidden by default, linked from Dashboard/TOC):** Issue Register, Technical Diagnostics, Content & AI Readiness, Link Intelligence, CMS Action URLs, IssueInventory, Redirects, Redirect Map, Robots.txt Analysis, Crawl Log, Link Equity Map, Anchor Text Audit, Snippet Opportunities, Competitor Benchmarks (when `--competitors` / `HF_COMPETITORS` set), Script Inventory, Image Inventory, ResolvedIssues, DeltaFromPreviousRun, Audit Run Details.
+**Advanced (hidden by default, linked from Dashboard/TOC):** Issue Register (canonical backlog), Technical Diagnostics, Content & AI Readiness, Link Intelligence, CMS Action URLs, Redirects, Redirect Map, Robots.txt Analysis, Crawl Log, Link Equity Map, Anchor Text Audit, Snippet Opportunities, Competitor Benchmarks (when `--competitors` / `HF_COMPETITORS` set), Script Inventory, Image Inventory, ResolvedIssues, DeltaFromPreviousRun, Audit Run Details. Legacy **IssueInventory** is still exported for delta tooling but hidden and omitted from the TOC.
 
 Legacy standalone Technical/Content/AEO tabs are **not** emitted in full-suite mode; merged **Technical Diagnostics** and **Content & AI Readiness** supersede them.
 
@@ -162,6 +162,36 @@ Lists URLs excluded from crawl because they carry CMS action query parameters (s
 - New measured fields → **new keys** (additive). Avoid renames/removals without migration.
 - New sheets/tabs → TOC and view-state patterns updated.
 - New network integrations → retry/backoff and session limits respected.
+
+## HTML executive report
+
+Every crawl can produce a self-contained HTML executive report alongside the xlsx workbook, triggered by `HF_EXPORT_HTML=1`.
+
+The HTML report is **white-label**: no tool-internal naming appears in the rendered output. Branding, logo, and colours are configurable via environment variables (`HF_REPORT_PREPARED_BY`, `HF_REPORT_CLIENT_NAME`, `HF_REPORT_LOGO_PATH`, `HF_REPORT_BRAND_COLOUR`, `HF_REPORT_ACCENT_COLOUR`). All are optional; defaults produce an unbranded report.
+
+The output file is self-contained — all CSS is inline in a `<style>` block, no external stylesheets or scripts. It renders identically from disk or HTTP, and produces a clean 4–6 page PDF via Print → Save as PDF from any browser.
+
+**Module structure (under `reporter/`):**
+- `html_report_data.py` — aggregates enriched pipeline data into a `ReportContext` dataclass; read-only consumer of pipeline rows.
+- `html_report_renderer.py` — renders `ReportContext` to a self-contained HTML string; pure computation, no I/O.
+- `html_report_writer.py` — writes the rendered HTML to disk.
+
+HTML report generation is **non-fatal**: failures are logged at `WARNING` level but do not prevent xlsx delivery.
+
+## Validation and smoke-test infrastructure
+
+Non-crawl entrypoints in `core/` provide preflight and regression gates (wired through `main.py` flags):
+
+| Module | Flag(s) | Behaviour |
+|--------|---------|-----------|
+| `core/integration_validator.py` | `--validate` (`--validate-url`, `--psi-probe-url`) | Checks `.env`, GSC OAuth files + Search Console API, PSI key + one live probe, Playwright/Chromium, semantic engine, optional LLM keys. `IntegrationCheck` carries `CheckStatus` (`PASS`/`WARN`/`FAIL`/`SKIP`); exit `1` on any `FAIL`. |
+| `core/quick_test.py` | `--quick-test` (+ `--quick-test-fast`, `--quick-test-skip-{preflight,pytest,audit}`) | Preflight (no live PSI) → focused pytest subset → live 10-URL BFS crawl (accurate mode, depth 2, full suite) → post-export workbook audit. |
+| `core/full_smoke_test.py` + `core/full_smoke_fixtures.py` | `--full-smoke-test` (+ `--full-smoke-test-fast`, `--full-smoke-test-skip-{preflight,pytest,audit}`) | Strict preflight (incl. live PSI) → pytest subset → ~80 synthetic-URL **mocked** crawl (timeout/404/redirect status mix) → real enrichment + export → workbook audit. Output under `reports/full_smoke_test/`; volume via `HF_FULL_SMOKE_URL_COUNT`. |
+| `core/run_config.py` | — | Frozen `RunConfig` presets (`quick_test_run_config`, `full_smoke_run_config`) and `ResumeCheckpointMode` consumed by `orchestration/run_setup.resolve_run_setup` for non-interactive runs. |
+
+`reporter/workbook_audit.py` (`audit_workbook`, `count_main_rows`) backs the audit phase: TOC at index 0, tab order, freeze panes, Main `Extraction State` contract, Content Hub literals, merged-diagnostic sheet presence.
+
+Sheet ordering, column registries, and shared row builders for export live in `orchestration/export_registry.py` (`get_sheet_sequence`, `get_standard_sheet_columns`, `get_finalization_steps`, `build_*_rows`), consumed by `orchestration/export_flow.execute_export`.
 
 ## Out of scope for automation
 

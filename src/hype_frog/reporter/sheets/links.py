@@ -8,6 +8,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.core.url_normalization import normalize_url
+from hype_frog.reporter.engine_rows import content_hub_column_letter
 from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 from hype_frog.reporter.sheets.layout import main_sheet_url_column_letter
 
@@ -20,6 +21,39 @@ def _technical_diagnostics_jump_formula(url_col_letter: str, row: int, *, link_l
     return (
         f'=IFERROR(HYPERLINK("#\'{td}\'!A"&MATCH({url_col_letter}{row},\'{td}\'!A:A,0),'
         f'"{link_label}"),HYPERLINK("#\'{td}\'!A1","{link_label}"))'
+    )
+
+
+def _fixplan_hub_status_formula(fixplan_url_letter: str, row: int) -> str:
+    """Return Hub ``Status`` for a FixPlan URL via INDEX/MATCH on the Content Hub.
+
+    Hub data starts at row 3 (row 1 banner, row 2 headers). Column letters are resolved
+    from the canonical export order so reordering does not silently join on SEO Score.
+    """
+    hub = CONTENT_OPTIMISATION_HUB_SHEET
+    status_l = content_hub_column_letter("Status")
+    url_l = content_hub_column_letter("URL")
+    return (
+        f"=IFERROR(INDEX('{hub}'!{status_l}3:{status_l}10000,"
+        f"MATCH({fixplan_url_letter}{row},'{hub}'!{url_l}3:{url_l}10000,0)),"
+        f'"Not in Hub")'
+    )
+
+
+def _reference_tab_jump_formula(ref_letter: str, url_letter: str, row: int) -> str:
+    """Build a HYPERLINK+MATCH jump into a per-row reference tab named in ``ref_letter``.
+
+    The reference tab name is a runtime cell value, so it is wrapped in single quotes
+    for both the HYPERLINK target and the INDIRECT lookup, and any embedded apostrophes
+    are doubled with ``SUBSTITUTE`` so names with spaces or apostrophes resolve correctly.
+    """
+    # ``q`` is the sheet name with single quotes escaped (``'`` -> ``''``) for safe
+    # quoting inside an Excel sheet reference.
+    q = f'SUBSTITUTE({ref_letter}{row},"\'","\'\'")'
+    return (
+        f'=IFERROR(HYPERLINK("#\'"&{q}&"\'!A"&'
+        f'MATCH({url_letter}{row},INDIRECT("\'"&{q}&"\'!A:A"),0),"Open"),'
+        f'HYPERLINK("#\'"&{q}&"\'!A1","Open"))'
     )
 
 
@@ -254,7 +288,7 @@ def apply_cross_sheet_links(
                 worksheet.cell(
                     row=r,
                     column=open_ref_col,
-                    value=f'=IFERROR(HYPERLINK("#"&{ref_letter}{r}&"!A"&MATCH({url_letter}{r},INDIRECT("\'"&{ref_letter}{r}&"\'!A:A"),0),"Open"),HYPERLINK("#"&{ref_letter}{r}&"!A1","Open"))',
+                    value=_reference_tab_jump_formula(ref_letter, url_letter, r),
                 )
         if issue_col and "FixPlan" in writer.book.sheetnames:
             fix_ws = writer.book["FixPlan"]
@@ -308,11 +342,7 @@ def apply_cross_sheet_links(
                 worksheet.cell(
                     row=r,
                     column=hub_status_col,
-                    value=(
-                        f"=IFERROR(INDEX('{CONTENT_OPTIMISATION_HUB_SHEET}'!C:C,"
-                        f"MATCH({u_letter}{r},'{CONTENT_OPTIMISATION_HUB_SHEET}'!F:F,0)),"
-                        '"Not in Hub")'
-                    ),
+                    value=_fixplan_hub_status_formula(u_letter, r),
                 )
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys as _sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -64,15 +65,40 @@ from hype_frog.config_defaults import (
 )
 from hype_frog.config_loader import apply_user_config, load_user_config
 
-# --- Repository layout (config.py lives at src/hype_frog/config.py) ---
+# --- Repository layout ---
+# When running as a PyInstaller frozen exe, PROJECT_ROOT is the directory containing
+# the exe so that .env, client_secrets.json, and token.json can sit next to it.
+# In development, we walk up three levels from this file to the repo root.
 PACKAGE_ROOT: Path = Path(__file__).resolve().parent
-PROJECT_ROOT: Path = PACKAGE_ROOT.parent.parent
+
+if getattr(_sys, "frozen", False):
+    PROJECT_ROOT: Path = Path(_sys.executable).parent
+    SECRETS_DIR: Path = PROJECT_ROOT          # flat layout: secrets live next to the exe
+else:
+    PROJECT_ROOT = PACKAGE_ROOT.parent.parent
+    SECRETS_DIR = PROJECT_ROOT / "secrets"
+
 SRC_ROOT: Path = PACKAGE_ROOT.parent
 DATA_DIR: Path = PROJECT_ROOT / "data"
-SECRETS_DIR: Path = PROJECT_ROOT / "secrets"
 LOGS_DIR: Path = PROJECT_ROOT / "logs"
 REPORTS_LATEST_DIR: Path = PROJECT_ROOT / "reports" / "latest"
 REPORTS_ARCHIVE_DIR: Path = PROJECT_ROOT / "reports" / "archive"
+
+
+def resolve_project_relative_path(raw: str) -> Path:
+    """Resolve a configured path relative to ``PROJECT_ROOT`` when not absolute.
+
+    In a frozen exe build ``PROJECT_ROOT`` is the directory containing
+    ``hype-frog.exe``, so values like ``./assets/client_logo.png`` resolve next
+    to the executable rather than the process working directory.
+    """
+    cleaned = str(raw or "").strip()
+    if not cleaned:
+        return Path()
+    path = Path(cleaned)
+    if path.is_absolute():
+        return path
+    return (PROJECT_ROOT / path).resolve()
 
 
 def load_environment() -> None:

@@ -18,7 +18,20 @@ from hype_frog.config import (
     TIMEOUT_SECONDS,
     get_delay_between_requests,
 )
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
+
 from hype_frog.core import get_logger
+from hype_frog.core.console import log_phase_banner, log_startup_panel
+from hype_frog.core.logger import console
 from hype_frog.core.memory_guard import (
     MemoryLimitExceeded,
     check_memory_limit,
@@ -175,15 +188,6 @@ def _candidate_internal_links(
     return out
 
 
-def _log_phase_banner(title: str) -> None:
-    bar = "=" * 72
-    logger.info("")
-    logger.info(bar)
-    logger.info(" %s", title)
-    logger.info(bar)
-    logger.info("")
-
-
 def _max_depth_from_env(default: int = 3) -> int:
     raw = os.getenv("HF_MAX_DEPTH", "").strip()
     if not raw:
@@ -264,12 +268,12 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
 
     async with create_session() as session:
         if setup.target_input.lower().endswith(".xml"):
-            _log_phase_banner("SETUP: Parsing provided sitemap seed list")
+            log_phase_banner("SETUP: Parsing provided sitemap seed list")
             urls, sitemap_meta, sitemap_files_meta = await parse_sitemap(setup.target_input, session)
             parsed_source = urlparse(setup.target_input)
             source_label = parsed_source.netloc or "sitemap"
         else:
-            _log_phase_banner("SETUP: Single URL seed mode")
+            log_phase_banner("SETUP: Single URL seed mode")
             parsed_target = urlparse(setup.target_input)
             if parsed_target.scheme and parsed_target.netloc:
                 urls = [setup.target_input]
@@ -305,7 +309,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                 if _is_crawlable_html_candidate(str(url))
             }
         if len(urls) != original_count:
-            logger.info("Removed %s duplicate URLs.", original_count - len(urls))
+            logger.debug("Removed %s duplicate URLs.", original_count - len(urls))
         if setup.max_urls is not None and len(urls) > setup.max_urls:
             urls = urls[: setup.max_urls]
             logger.info(
@@ -335,13 +339,13 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                 workers,
                 request_delay,
             )
-            logger.info("Run mode: Full SEO suite (preset)")
-            logger.info("Checkpoint save: disabled (preset)")
+            logger.debug("Run mode: Full SEO suite (preset)")
+            logger.debug("Checkpoint save: disabled (preset)")
         else:
-            logger.info("Crawl safety profile:")
-            logger.info("1. Gentle (fewer workers, longer delay)")
-            logger.info("2. Balanced (default)")
-            logger.info("3. Faster (more workers, shorter delay)")
+            console.print("\n[bold]Crawl Safety Profile[/bold]")
+            console.print("  [cyan]1[/cyan]  Gentle   — fewer workers, longer delay")
+            console.print("  [cyan]2[/cyan]  Balanced — default")
+            console.print("  [cyan]3[/cyan]  Faster   — more workers, shorter delay")
             profile_choice = input(
                 "Select Crawl Safety Profile [1:Gentle | 2:Balanced | 3:Faster]: "
             ).strip()
@@ -355,7 +359,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                 workers = MAX_WORKERS
                 request_delay = get_delay_between_requests()
             else:
-                logger.info("> Invalid input, defaulting to Balanced.")
+                logger.warning("Invalid input; defaulting to Balanced.")
                 workers = MAX_WORKERS
                 request_delay = get_delay_between_requests()
 
@@ -369,7 +373,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             elif suite_choice == "":
                 full_suite = False
             else:
-                logger.info("> Invalid input, defaulting to Full AEO/SEO Suite.")
+                logger.warning("Invalid input; defaulting to Full AEO/SEO Suite.")
                 full_suite = True
 
             previous_audit_path = input(
@@ -395,20 +399,21 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
         output_dir = os.path.dirname(output_filename)
         os.makedirs(output_dir, exist_ok=True)
 
-        logger.info("Output file: %s", output_filename)
-        print("\n" + "=" * 30)
+        log_startup_panel(
+            target_input=setup.target_input,
+            url_count=len(urls),
+            workers=workers,
+            request_delay=request_delay,
+            mode="Full AEO/SEO Suite" if full_suite else "Main Inventory Only",
+            crawl_mode=setup.crawl_mode,
+            output_filename=output_filename,
+        )
         crawl_started = time.perf_counter()
-        logger.info("Starting crawl of %s URLs...", len(urls))
         if setup.streaming:
             logger.info(
                 "Streaming mode: crawl rows persist to SQLite cache during fetch "
                 "(reduces in-memory duplication)."
             )
-        logger.info(
-            f"Max Workers: {workers} | Delay: {request_delay}s | "
-            f"Retries: {MAX_RETRIES} | Timeout: {TIMEOUT_SECONDS}s | "
-            f"Mode: {'Full Suite' if full_suite else 'Main Only'}"
-        )
 
         semaphore = asyncio.Semaphore(workers)
         robots_cache: dict[str, dict[str, object]] = {}
@@ -536,7 +541,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             )
 
         if seed_phase_active:
-            _log_phase_banner(
+            log_phase_banner(
                 f"PHASE 1/2: Crawling sitemap seed URLs first ({len(seed_queue)} URLs)"
             )
 
@@ -572,6 +577,21 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                 )
                 in_flight[task] = (next_url, next_depth, discovered_on_url, phase)
 
+        _crawl_progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[bold]{task.description}"),
+            BarColumn(bar_width=40),
+            MofNCompleteColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            TimeRemainingColumn(),
+            console=console,
+            transient=False,
+        )
+        _crawl_task = _crawl_progress.add_task(
+            "Crawling", total=total_urls, completed=crawled_count
+        )
+        _crawl_progress.start()
         try:
             _schedule_available()
             while in_flight:
@@ -620,6 +640,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                             )
                             crawl_urls_runtime.append(discovered_url)
                         total_urls = len(crawl_urls_runtime) + len(checkpoint_completed_urls)
+                    _crawl_progress.update(_crawl_task, completed=crawled_count, total=total_urls)
                     if len(pending_batch) >= flush_batch_size:
                         cache.upsert_results(pending_batch)
                         pending_batch = []
@@ -649,11 +670,12 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
                         and _ready_for_bfs_phase()
                     ):
                         seed_phase_active = False
-                        _log_phase_banner(
+                        log_phase_banner(
                             f"PHASE 2/2: BFS expansion from discovered internal links ({len(bfs_queue)} queued)"
                         )
                     _schedule_available()
         finally:
+            _crawl_progress.stop()
             if playwright_manager is not None:
                 await playwright_manager.aclose()
         if pending_batch:
@@ -683,7 +705,7 @@ async def execute_crawl(setup: RunSetup) -> CrawlExecutionResult:
             1 for row in typed_results if row.extra.values.get("Extraction Source Fallback")
         )
         crawl_duration_seconds = round(time.perf_counter() - crawl_started, 1)
-        _log_phase_banner("FINALIZE: Crawl complete, generating Excel report")
+        log_phase_banner("FINALIZE: Crawl complete, generating Excel report")
         logger.info(
             "Crawl finished in %.1fs (%s URLs, %s workers).",
             crawl_duration_seconds,

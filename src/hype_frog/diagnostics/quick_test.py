@@ -13,9 +13,12 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
+from rich.table import Table
+
 from hype_frog.config import PROJECT_ROOT, load_environment
 from hype_frog.core import configure_logging, get_logger
-from hype_frog.core.integration_validator import (
+from hype_frog.core.logger import console
+from hype_frog.diagnostics.integration_validator import (
     CheckStatus,
     IntegrationCheck,
     check_gsc_api,
@@ -227,27 +230,36 @@ def _audit_phase(output_path: str) -> QuickTestPhaseResult:
 
 
 def _print_report(report: QuickTestReport) -> None:
-    bar = "=" * 72
-    print("")
-    print(bar)
-    print(" QUICK TEST SUMMARY")
-    print(bar)
+    _STATUS_STYLE = {"PASS": "green", "WARN": "yellow", "FAIL": "bold red", "SKIP": "dim"}
+
+    table = Table(
+        title="QUICK TEST SUMMARY",
+        title_style="bold",
+        show_header=True,
+        header_style="bold",
+        show_lines=False,
+        padding=(0, 1),
+    )
+    table.add_column("Phase", min_width=22)
+    table.add_column("Status", justify="center", width=8)
+    table.add_column("Detail")
+
     for phase in report.phases:
-        icon = {"PASS": "[PASS]", "WARN": "[WARN]", "FAIL": "[FAIL]", "SKIP": "[SKIP]"}[
-            phase.status
-        ]
-        print(f"  {icon} {phase.name}: {phase.detail}")
-    if report.output_filename:
-        print(f"  Workbook: {report.output_filename}")
+        s = _STATUS_STYLE[phase.status]
+        table.add_row(phase.name, f"[{s}]{phase.status}[/{s}]", phase.detail)
+
+    console.print("")
+    console.print(table)
     if report.urls_crawled:
-        print(f"  URLs crawled: {report.urls_crawled}")
+        console.print(f"  URLs crawled: {report.urls_crawled}")
     if report.extraction_counts:
         parts = ", ".join(f"{k}={v}" for k, v in sorted(report.extraction_counts.items()))
-        print(f"  Extraction states: {parts}")
-    overall = "PASS" if report.ok else "FAIL"
-    print(f"  Overall: {overall}")
-    print(bar)
-    print("")
+        console.print(f"  Extraction states: {parts}")
+    if report.output_filename:
+        console.print(f"  Workbook: {report.output_filename}")
+    overall_style = "green" if report.ok else "bold red"
+    console.print(f"  [{overall_style}]Overall: {'PASS' if report.ok else 'FAIL'}[/{overall_style}]")
+    console.print("")
 
 
 async def _run_pipeline(config: RunConfig) -> CrawlExecutionResult:

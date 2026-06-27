@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from openpyxl.comments import Comment
-from openpyxl.formatting.rule import CellIsRule
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -36,6 +35,10 @@ from hype_frog.reporter.sheets.config import (
     CONTENT_OPTIMISATION_HUB_SHEET,
     STD_BLUE,
     STD_NAVY,
+)
+from hype_frog.reporter.sheets.layout import (
+    link_intelligence_column_letter,
+    sheet_data_column_range,
 )
 from hype_frog.reporter.sheets.workbook_layout import (
     DASHBOARD_ADVANCED_SHEET_LINKS,
@@ -169,6 +172,15 @@ def _format_priority_urls_ctr(writer: Any) -> None:
         priority_ws.cell(row=row_idx, column=ctr_col).number_format = "0.0000"
 
 
+def _fixplan_data_column(header: str) -> str:
+    """Dynamic FixPlan column range for live Dashboard roll-ups."""
+    return sheet_data_column_range("FixPlan", header)
+
+
+def _safe_excel_string_literal(value: str) -> str:
+    return str(value or "").replace('"', '""')
+
+
 def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     """Render the executive dashboard sheet with KPI and ownership blocks.
 
@@ -223,8 +235,6 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         except Exception:
             pass_rate_pct = 0.0
         seo_pass_rate_from_run = pass_rate_pct
-        critical_urls = to_int(metric_to_value.get("Critical URL Count"), 0)
-        warning_urls = to_int(metric_to_value.get("Warning URL Count"), 0)
         try:
             if "Health Score %" in metric_to_value:
                 health_from_feed = float(metric_to_value.get("Health Score %") or 0.0)
@@ -356,7 +366,12 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet["A21"] = (
             '=HYPERLINK("#\'Link Intelligence\'!A1","Generic Anchor Links (Total)")'
         )
-        worksheet["B21"] = "=SUMIFS('Link Intelligence'!$O:$O,'Link Intelligence'!$B:$B,\"Summary\")"
+        worksheet["B21"] = (
+            f"=SUMIFS('Link Intelligence'!${link_intelligence_column_letter('Generic Anchor Text Count')}:"
+            f"${link_intelligence_column_letter('Generic Anchor Text Count')},"
+            f"'Link Intelligence'!${link_intelligence_column_letter('Record Type')}:"
+            f"${link_intelligence_column_letter('Record Type')},\"Summary\")"
+        )
         worksheet["B21"].number_format = "0"
         worksheet["A22"] = '=HYPERLINK("#\'Link Inventory\'!A1","External Link Health %")'
         worksheet["B22"] = _EXCEL_EXTERNAL_LINK_HEALTH_PCT
@@ -577,7 +592,6 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             f"(see KPI B20 and Link Inventory)."
         )
 
-    status_buckets = dashboard_metrics.status_buckets
     error_count = dashboard_metrics.error_count
     success_count = dashboard_metrics.success_count
     crawl_denominator = dashboard_metrics.crawl_denominator
@@ -614,7 +628,12 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     )
     worksheet["B19"].number_format = "0%"
     worksheet["B20"] = link_inventory_broken_internal_total_formula()
-    worksheet["B21"] = "=SUMIFS('Link Intelligence'!$O:$O,'Link Intelligence'!$B:$B,\"Summary\")"
+    _li_gen = link_intelligence_column_letter("Generic Anchor Text Count")
+    _li_rec = link_intelligence_column_letter("Record Type")
+    worksheet["B21"] = (
+        f"=SUMIFS('Link Intelligence'!${_li_gen}:${_li_gen},"
+        f"'Link Intelligence'!${_li_rec}:${_li_rec},\"Summary\")"
+    )
     worksheet["B21"].number_format = "0"
     worksheet["B22"] = _EXCEL_EXTERNAL_LINK_HEALTH_PCT
     worksheet["B22"].number_format = "0%"
@@ -645,7 +664,6 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet[f"A{row}"].alignment = Alignment(horizontal="left", vertical="center")
         worksheet.row_dimensions[row].height = 24
 
-    avg_health_score = dashboard_metrics.avg_health_score
     worksheet["B6"] = (
         f'=IFERROR(AVERAGE({_TD_DYNAMIC_COLUMN.format(header="SEO Health Score")}),0)/100'
     )
@@ -672,29 +690,36 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             horizontal="center", vertical="center", wrap_text=True
         )
 
-    status_rows = [
-        (label, status_buckets[label], color) for label, color in STATUS_ROW_STYLE
-    ]
-    for idx, (label, count, color) in enumerate(status_rows, start=5):
+    status_count_formulas: dict[str, str] = {
+        "200 OK": f'=COUNTIFS({_td_sc2},">=200",{_td_sc2},"<300")',
+        "3xx Redirects": f'=COUNTIFS({_td_sc2},">=300",{_td_sc2},"<400")',
+        "4xx Errors": f'=COUNTIFS({_td_sc2},">=400",{_td_sc2},"<500")',
+        "5xx Errors": f'=COUNTIFS({_td_sc2},">=500",{_td_sc2},"<600")',
+        "Other": (
+            f"=MAX(0,COUNTA({_td_sc2})-"
+            f'COUNTIFS({_td_sc2},">=200",{_td_sc2},"<300")-'
+            f'COUNTIFS({_td_sc2},">=300",{_td_sc2},"<400")-'
+            f'COUNTIFS({_td_sc2},">=400",{_td_sc2},"<500")-'
+            f'COUNTIFS({_td_sc2},">=500",{_td_sc2},"<600"))'
+        ),
+    }
+    for idx, (label, color) in enumerate(STATUS_ROW_STYLE, start=5):
         worksheet[f"D{idx}"] = label
-        worksheet[f"E{idx}"] = count
+        worksheet[f"E{idx}"] = status_count_formulas[label]
         worksheet[f"D{idx}"].fill = PatternFill("solid", fgColor=color)
         worksheet[f"E{idx}"].fill = PatternFill("solid", fgColor=color)
 
-    sev_rows = [
-        (
-            label,
-            dashboard_metrics.severity_counts.get(
-                "High" if label == "Warning" else label,
-                0,
-            ),
-            color,
-        )
-        for label, color in SEVERITY_ROW_STYLE
-    ]
-    for idx, (label, count, color) in enumerate(sev_rows, start=13):
+    severity_count_formulas: dict[str, str] = {
+        "Critical": f'=COUNTIFS({_td_sev2},"Critical")',
+        "Warning": (
+            f'=COUNTIFS({_td_sev2},"Warning")+COUNTIFS({_td_sev2},"Needs Work")'
+        ),
+        "Medium": f'=COUNTIFS({_td_sev2},"Medium")',
+        "Low": f'=COUNTIFS({_td_sev2},"Low")+COUNTIFS({_td_sev2},"Observation")',
+    }
+    for idx, (label, color) in enumerate(SEVERITY_ROW_STYLE, start=13):
         worksheet[f"D{idx}"] = label
-        worksheet[f"E{idx}"] = count
+        worksheet[f"E{idx}"] = severity_count_formulas[label]
         worksheet[f"D{idx}"].fill = PatternFill("solid", fgColor=color)
         worksheet[f"E{idx}"].fill = PatternFill("solid", fgColor=color)
 
@@ -710,16 +735,25 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet[ref].fill = table_header_fill
         worksheet[ref].font = table_header_font
         worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
-    top_issue_name = dashboard_metrics.top_issue_name
-    top_issue_affected = dashboard_metrics.top_issue_affected
+    _fp_issue = _fixplan_data_column("Issue Type")
+    _fp_affected = _fixplan_data_column("Affected Count")
+    _fp_owner = _fixplan_data_column("Owner")
+    _fp_severity = _fixplan_data_column("Severity")
     worksheet["M5"] = "Primary blocking issue"
-    worksheet["N5"] = top_issue_name
+    worksheet["N5"] = (
+        f'=IFERROR(INDEX({_fp_issue}, MATCH(MAX({_fp_affected}), {_fp_affected}, 0)), "N/A")'
+    )
     worksheet["M6"] = "Top Issue Affected URLs"
-    worksheet["N6"] = top_issue_affected
+    worksheet["N6"] = f"=IFERROR(MAX({_fp_affected}),0)"
     worksheet["M7"] = "4xx/5xx URLs"
-    worksheet["N7"] = dashboard_metrics.error_count
+    worksheet["N7"] = (
+        f'=COUNTIFS({_td_sc2},">=400",{_td_sc2},"<500")'
+        f'+COUNTIFS({_td_sc2},">=500",{_td_sc2},"<600")'
+    )
     worksheet["M8"] = "Avg TTFB (ms)"
-    worksheet["N8"] = dashboard_metrics.avg_ttfb_ms
+    worksheet["N8"] = (
+        f'=IFERROR(AVERAGE({_technical_diagnostics_data_column("TTFB (ms)")}),0)'
+    )
     for row in range(5, 9):
         worksheet[f"M{row}"].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
         worksheet[f"N{row}"].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
@@ -758,14 +792,18 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         ),
     )
     owner_start_row = 24
-    for idx, (owner_name, metrics) in enumerate(
+    for idx, (owner_name, _metrics) in enumerate(
         owner_rows_sorted[:8], start=owner_start_row
     ):
-        worksheet[f"G{idx}"] = f'=HYPERLINK("#\'FixPlan\'!A1","{owner_name}")'
-        worksheet[f"H{idx}"] = metrics.issue_rows
-        worksheet[f"I{idx}"] = metrics.affected_urls
-        worksheet[f"J{idx}"] = metrics.critical
-        worksheet[f"K{idx}"] = metrics.warning
+        owner_lit = _safe_excel_string_literal(owner_name)
+        worksheet[f"G{idx}"] = f'=HYPERLINK("#\'FixPlan\'!A1","{owner_lit}")'
+        worksheet[f"H{idx}"] = f'=COUNTIF({_fp_owner},"{owner_lit}")'
+        worksheet[f"I{idx}"] = f'=SUMIF({_fp_owner},"{owner_lit}",{_fp_affected})'
+        worksheet[f"J{idx}"] = f'=COUNTIFS({_fp_owner},"{owner_lit}",{_fp_severity},"Critical")'
+        worksheet[f"K{idx}"] = (
+            f'=COUNTIFS({_fp_owner},"{owner_lit}",{_fp_severity},"Warning")'
+            f'+COUNTIFS({_fp_owner},"{owner_lit}",{_fp_severity},"Needs Work")'
+        )
         for col in ("G", "H", "I", "J", "K"):
             worksheet[f"{col}{idx}"].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
             worksheet[f"{col}{idx}"].alignment = Alignment(
@@ -893,10 +931,14 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet[ref].font = table_header_font
         worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
     for idx, top_issue in enumerate(dashboard_metrics.top_issue_rows, start=15):
+        issue_lit = _safe_excel_string_literal(top_issue.issue_name)
         worksheet[f"G{idx}"] = (
-            f'=HYPERLINK("#FixPlan!A{top_issue.source_row}","{top_issue.issue_name}")'
+            f'=IFERROR(HYPERLINK("#FixPlan!A" & MATCH("{issue_lit}", {_fp_issue}, 0)+1,'
+            f' "{issue_lit}"), "{issue_lit}")'
         )
-        worksheet[f"H{idx}"] = top_issue.affected_urls
+        worksheet[f"H{idx}"] = (
+            f'=IFERROR(INDEX({_fp_affected}, MATCH("{issue_lit}", {_fp_issue}, 0)), 0)'
+        )
         row_fill = PatternFill(
             "solid",
             fgColor=SOFT_WARN_COLOR if idx == 15 else PANEL_BG_COLOR,
@@ -938,13 +980,13 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     worksheet["J19"].font = Font(color=STD_BLUE, underline="single", bold=True)
     worksheet["J19"].alignment = Alignment(horizontal="center", vertical="center")
 
-    worksheet["I20"] = "Advanced Sheets"
-    worksheet["I20"].font = Font(bold=True, color=STD_NAVY)
-    worksheet.merge_cells("I20:K20")
-    worksheet["I21"] = DASHBOARD_ADVANCED_SHEETS_NOTE
-    worksheet.merge_cells("I21:K22")
-    worksheet["I21"].alignment = Alignment(wrap_text=True, vertical="top")
-    adv_row = 23
+    worksheet["I32"] = "Advanced Sheets"
+    worksheet["I32"].font = Font(bold=True, color=STD_NAVY)
+    worksheet.merge_cells("I32:K32")
+    worksheet["I33"] = DASHBOARD_ADVANCED_SHEETS_NOTE
+    worksheet.merge_cells("I33:K34")
+    worksheet["I33"].alignment = Alignment(wrap_text=True, vertical="top")
+    adv_row = 35
     for sheet_name, label in DASHBOARD_ADVANCED_SHEET_LINKS:
         safe = excel_sheet_link_target(sheet_name)
         worksheet[f"I{adv_row}"] = label
@@ -1013,16 +1055,8 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         kpi_comment = Comment(f"{title}\n\n{message}", "hype-frog")
         apply_comment_dimensions(kpi_comment)
         cell.comment = kpi_comment
-    worksheet.conditional_formatting.add(
-        "B20",
-        CellIsRule(
-            operator="greaterThan",
-            formula=["0"],
-            stopIfTrue=True,
-            fill=PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid"),
-            font=Font(color="FFFFFF", bold=True),
-        ),
-    )
+    # B20 broken-link alert is owned by apply_dashboard_metric_conditional_rules
+    # (flag-guarded); avoid stacking a duplicate rule here.
     apply_dashboard_metric_conditional_rules(worksheet)
     _format_priority_urls_ctr(writer)
     # Lock percentage display for executive KPIs (0–1 → ``67%`` via ``0%`` format).

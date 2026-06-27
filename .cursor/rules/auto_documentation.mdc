@@ -20,6 +20,9 @@ When code changes behaviour or contracts, update the **canonical** narrative in 
 | Pipeline, BFS, AEO, intent, ROI, PSI/CrUX, layers | `docs/system_architecture.md` |
 | Row shapes, Pydantic, checkpoints, IssueRule scope, GSC null semantics | `docs/data_contracts.md` |
 | Excel integrity, TOC, hub, view state, merged sheets, Main CF | `docs/excel_reporting_standards.md` |
+| CLI commands, flags, and usage examples | `commands.md` |
+| Env vars, API keys, secret paths | `.env.example` |
+| Project overview, quickstart, and high-level architecture | `README.md` |
 
 Cross-link with relative paths; stay **vendor-neutral** in generated prose (no third-party marketing names).
 
@@ -40,6 +43,8 @@ Proactively suggest concrete edits under `./docs/` when:
 
 1. **No live network in unit tests** — Mock `aiohttp` sessions and Playwright interactions with `unittest.mock` (and related helpers). Async tests use **pytest-asyncio** with the same discipline as production (no accidental real network awaits).
 
-2. **Mirror `src/hype_frog/` layout** — Packages under `tests/` mirror `src/hype_frog/` relative paths so ownership and imports stay obvious.
+2. **Integration tests (`tests/integration/`) are the exception** — Tests under `tests/integration/` may make real network calls against local fixtures or controlled endpoints, but must be explicitly marked (e.g. `@pytest.mark.integration`) and excluded from the default `pytest` run. Never add real-network calls to tests outside `tests/integration/`.
 
-3. **Extraction state contract** — Tests covering extraction or crawl outcomes must assert **`Extraction State`** (or the same contract field) explicitly against **`complete`**, **`partial`**, or **`skipped`** as appropriate. Never leave the three-way contract ambiguous or unasserted.
+3. **Mirror `src/hype_frog/` layout** — Packages under `tests/` mirror `src/hype_frog/` relative paths so ownership and imports stay obvious. Covered mirrors: `tests/crawler/`, `tests/extractors/`, `tests/pipeline/`, `tests/analysis/`, `tests/orchestration/`, `tests/reporter/`, `tests/rules/`, `tests/validators/`, `tests/checkpoint/`, `tests/core/`, `tests/config/`.
+
+4. **Extraction state contract** — Tests covering extraction or crawl outcomes must assert **`Extraction State`** (or the same contract field) explicitly against **`complete`**, **`partial`**, or **`skipped`** as appropriate. Never leave the three-way contract ambiguous or unasserted.

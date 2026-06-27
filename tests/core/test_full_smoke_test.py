@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from hype_frog.core.full_smoke_fixtures import (
+from hype_frog.diagnostics.full_smoke_fixtures import (
     build_full_smoke_fixture,
     build_smoke_crawl_payload,
 )
-from hype_frog.core.full_smoke_test import _validate_full_smoke_rows
+from hype_frog.diagnostics.full_smoke_test import _validate_full_smoke_rows
 from hype_frog.core.run_config import (
     FULL_SMOKE_SYNTHETIC_URL_COUNT,
     full_smoke_run_config,
@@ -67,7 +67,7 @@ def test_validate_full_smoke_rows_requires_timeout_mix() -> None:
 async def test_full_smoke_pipeline_export_offline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from hype_frog.core.full_smoke_test import _run_full_smoke_pipeline
+    from hype_frog.diagnostics.full_smoke_test import _run_full_smoke_pipeline
     from hype_frog.core.run_config import full_smoke_run_config
 
     monkeypatch.setenv("PSI_API_KEY", "test-key")

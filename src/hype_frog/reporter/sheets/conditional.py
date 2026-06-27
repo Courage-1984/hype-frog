@@ -20,10 +20,20 @@ from hype_frog.reporter.sheets.config import (
     CONTENT_HUB_FREEZE_PANES,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    DATA_BAR_BLUE,
     DEBUG_EXCEL_ISOLATION_MODE,
     DISABLE_CONDITIONAL_FORMATTING,
     DISABLE_DATA_VALIDATION,
     DISABLE_EXTERNAL_LINKS_AND_IMAGES,
+    HEATMAP_HIGH,
+    HEATMAP_LOW,
+    HEATMAP_MID,
+    RAG_AMBER,
+    RAG_AMBER_FONT,
+    RAG_GREEN,
+    RAG_GREEN_FONT,
+    RAG_RED,
+    RAG_RED_FONT,
     STD_NAVY,
     STD_WHITE,
 )
@@ -364,9 +374,13 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
                     cell.fill = zebra_fill
 
     if not DISABLE_CONDITIONAL_FORMATTING:
+        # On Main, apply_main_sheet_heatmaps owns these columns; tell the global pass
+        # to skip them so we never stack two conflicting rules on one range.
+        skip_headers = _MAIN_HEATMAP_OWNED_HEADERS if sheet_name == "Main" else frozenset()
         apply_global_conditional_formatting(
             worksheet,
             merged_audit_tabs=sheet_name in _MERGED_TAB_NAMES,
+            skip_headers=skip_headers,
         )
 
 
@@ -467,13 +481,13 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
                 ColorScaleRule(
                     start_type="num",
                     start_value=0,
-                    start_color="F8696B",
+                    start_color=HEATMAP_LOW,
                     mid_type="num",
                     mid_value=50,
-                    mid_color="FFEB84",
+                    mid_color=HEATMAP_MID,
                     end_type="num",
                     end_value=100,
-                    end_color="63BE7B",
+                    end_color=HEATMAP_HIGH,
                 ),
             )
     owner_col = headers.get("Assigned Owner")
@@ -512,55 +526,35 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
                 operator="equal",
                 formula=['"Needs Copy"'],
                 fill=PatternFill(
-                    start_color="FF0000", end_color="FF0000", fill_type="solid"
+                    start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"
                 ),
-                font=Font(color="FFFFFF", bold=True),
+                font=Font(color=RAG_RED_FONT, bold=True),
             ),
         )
-        worksheet.conditional_formatting.add(
-            ar_range,
-            CellIsRule(
-                operator="equal",
-                formula=['"Needs Optimisation"'],
-                fill=PatternFill(
-                    start_color="FFC000", end_color="FFC000", fill_type="solid"
+        for optimisation_literal in ('"Needs Optimisation"',):
+            worksheet.conditional_formatting.add(
+                ar_range,
+                CellIsRule(
+                    operator="equal",
+                    formula=[optimisation_literal],
+                    fill=PatternFill(
+                        start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid"
+                    ),
+                    font=Font(color=RAG_AMBER_FONT, bold=True),
                 ),
-                font=Font(color="000000", bold=True),
-            ),
-        )
-        worksheet.conditional_formatting.add(
-            ar_range,
-            CellIsRule(
-                operator="equal",
-                formula=['"Needs Optimization"'],
-                fill=PatternFill(
-                    start_color="FFC000", end_color="FFC000", fill_type="solid"
+            )
+        for complete_literal in ('"Complete"', '"Ready to Publish"'):
+            worksheet.conditional_formatting.add(
+                ar_range,
+                CellIsRule(
+                    operator="equal",
+                    formula=[complete_literal],
+                    fill=PatternFill(
+                        start_color=RAG_GREEN, end_color=RAG_GREEN, fill_type="solid"
+                    ),
+                    font=Font(color=RAG_GREEN_FONT, bold=True),
                 ),
-                font=Font(color="000000", bold=True),
-            ),
-        )
-        worksheet.conditional_formatting.add(
-            ar_range,
-            CellIsRule(
-                operator="equal",
-                formula=['"Complete"'],
-                fill=PatternFill(
-                    start_color="00FF00", end_color="00FF00", fill_type="solid"
-                ),
-                font=Font(color="000000", bold=True),
-            ),
-        )
-        worksheet.conditional_formatting.add(
-            ar_range,
-            CellIsRule(
-                operator="equal",
-                formula=['"Ready to Publish"'],
-                fill=PatternFill(
-                    start_color="00FF00", end_color="00FF00", fill_type="solid"
-                ),
-                font=Font(color="000000", bold=True),
-            ),
-        )
+            )
 
     health_headers = (
         "Title Health",
@@ -625,7 +619,7 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
             )
 
     og_health_col = headers.get("OG Image Health")
-    if og_health_col and end_row >= start_row:
+    if og_health_col and end_row >= start_row and not DISABLE_CONDITIONAL_FORMATTING:
         health_letter = get_column_letter(og_health_col)
         health_rng = f"{health_letter}{start_row}:{health_letter}{end_row}"
         worksheet.conditional_formatting.add(
@@ -667,7 +661,7 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
                     else (
                         ""
                         if not target_url
-                        else f'=IF(LEN("{target_url}")>0, _xlfn.IMAGE("{target_url}"), "")'
+                        else f'=IF(LEN("{target_url}")>0,IFERROR(_xlfn.IMAGE("{target_url}"),"{target_url}"),"")'
                     )
                 ),
             )
@@ -809,6 +803,19 @@ _MERGED_TAB_NAMES: frozenset[str] = frozenset(
         "Quick Wins",
         "Issue Register",
         "Template & Duplication Risks",
+    }
+)
+
+# Columns whose conditional formatting is owned by ``apply_main_sheet_heatmaps`` on the
+# Main sheet. The global pass skips these to avoid stacking two rules on one range.
+_MAIN_HEATMAP_OWNED_HEADERS: frozenset[str] = frozenset(
+    {
+        "Status Code",
+        "SEO Health Score",
+        "AEO Readiness Score",
+        "Word Count",
+        "Word Count (Body)",
+        "Severity Badge",
     }
 )
 
@@ -1182,7 +1189,7 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
                 start_value=0,
                 end_type="num",
                 end_value=2000,
-                color="4472C4",
+                color=DATA_BAR_BLUE,
             ),
         )
 
@@ -1319,20 +1326,18 @@ def apply_dashboard_metric_conditional_rules(worksheet: Worksheet) -> None:
     if worksheet.max_row < 8:
         return
 
-    worksheet.conditional_formatting.add(
-        "B5:B7",
-        ColorScaleRule(
-            start_type="num",
-            start_value=0,
-            start_color="F8696B",
-            mid_type="num",
-            mid_value=0.5,
-            mid_color="FFEB84",
-            end_type="num",
-            end_value=1,
-            end_color="63BE7B",
-        ),
+    completion_scale = dict(
+        start_type="num",
+        start_value=0,
+        start_color=HEATMAP_LOW,
+        mid_type="num",
+        mid_value=0.5,
+        mid_color=HEATMAP_MID,
+        end_type="num",
+        end_value=1,
+        end_color=HEATMAP_HIGH,
     )
+    worksheet.conditional_formatting.add("B5:B7", ColorScaleRule(**completion_scale))
     worksheet.conditional_formatting.add(
         "B8:B8",
         CellIsRule(
@@ -1346,45 +1351,19 @@ def apply_dashboard_metric_conditional_rules(worksheet: Worksheet) -> None:
         CellIsRule(
             operator="lessThan",
             formula=["0"],
-            font=Font(color="9C0006", bold=True),
+            font=Font(color=RAG_RED_FONT, bold=True),
         ),
     )
-    worksheet.conditional_formatting.add(
-        "B17:B17",
-        ColorScaleRule(
-            start_type="num",
-            start_value=0,
-            start_color="F8696B",
-            mid_type="num",
-            mid_value=0.5,
-            mid_color="FFEB84",
-            end_type="num",
-            end_value=1,
-            end_color="00B050",
-        ),
-    )
-    worksheet.conditional_formatting.add(
-        "B22:B22",
-        ColorScaleRule(
-            start_type="num",
-            start_value=0,
-            start_color="F8696B",
-            mid_type="num",
-            mid_value=0.5,
-            mid_color="FFEB84",
-            end_type="num",
-            end_value=1,
-            end_color="00B050",
-        ),
-    )
+    worksheet.conditional_formatting.add("B17:B17", ColorScaleRule(**completion_scale))
+    worksheet.conditional_formatting.add("B22:B22", ColorScaleRule(**completion_scale))
     worksheet.conditional_formatting.add(
         "B20:B20",
         CellIsRule(
             operator="greaterThan",
             formula=["0"],
             stopIfTrue=True,
-            fill=PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid"),
-            font=Font(color="FFFFFF", bold=True),
+            fill=PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"),
+            font=Font(color=RAG_RED_FONT, bold=True),
         ),
     )
 

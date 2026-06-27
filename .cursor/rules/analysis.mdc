@@ -1,0 +1,44 @@
+---
+description: Post-crawl analysis passes, data read-only contract, delta semantics, and module ownership for analysis/.
+globs: "src/hype_frog/analysis/**/*.py"
+alwaysApply: false
+---
+
+Canonical narrative: [`docs/system_architecture.md`](../../docs/system_architecture.md). Contract detail: [`docs/data_contracts.md`](../../docs/data_contracts.md). Keep rules and docs aligned when editing analysis code.
+
+# Analysis layer rules
+
+## Purpose and boundaries
+
+`analysis/` contains **post-crawl domain passes** that run after all URLs are fetched and assembled into row dicts. Analysis modules enrich rows with cross-page intelligence — they do **not** perform HTTP requests, write to the workbook, or mutate pipeline scoring weights.
+
+## Read-only consumer contract
+
+Analysis modules receive assembled row dicts (or the full crawl result set) and return enriched data. They must:
+- **Never** mutate `main_data` keys that were already set by `crawler/` or `pipeline/` without explicit approval.
+- **Never** issue live network calls (PSI, GSC, LLM, etc.) — those belong in `crawler/` and `orchestration/enrichment_flow.py`.
+- Add new keys **additively**; existing keys are append-only per `architecture.mdc` data mutability policy.
+
+## Module ownership
+
+- `canonical_chain.py` — Resolves canonical redirect chains; flags redirect loops and mismatched canonicals.
+- `hreflang_audit.py` — Validates hreflang annotations across the crawled set (return-tag checks, locale consistency).
+- `link_equity.py` — Computes internal PageRank-proxy scores from the crawled link graph.
+- `third_party_scripts.py` — Classifies and tallies third-party script domains per page; does not make external calls.
+- `snippet_opportunities.py` — Identifies featured-snippet candidacy signals from heading/content structure.
+- `topical_authority.py` — Scores topical cluster coverage from crawled content.
+- `content_similarity.py` — Computes pairwise or cluster-level content similarity (TF-IDF or equivalent); no live ML inference.
+- `competitor_benchmarks.py` — Compares crawled metrics against pre-loaded competitor data (never live-fetches competitor pages during a run).
+- `delta_engine.py` — Compares the current run against a prior export to surface changed, new, and removed URLs.
+- `content_hub_recommendations.py` — Derives content-hub gap and pillar recommendations from the crawled URL set.
+
+## Delta engine semantics
+
+`delta_engine.py` compares the current run against a prior export registered in `export_registry.py`:
+- URL matching uses **normalised URL identity** from `core/url_normalization.py` — never raw strings.
+- Missing-from-current rows are tagged as **`removed`**; new rows as **`new`**; changed rows carry a `delta_fields` list.
+- Delta output must be backward-compatible for reporters that do not yet consume it (additive keys only).
+
+## Concurrency
+
+Analysis passes that are CPU-bound may run in a `ThreadPoolExecutor` but must not block the asyncio event loop. Passes that are purely serial (e.g. hreflang matrix) are fine as sync functions called after the async crawl phase completes.

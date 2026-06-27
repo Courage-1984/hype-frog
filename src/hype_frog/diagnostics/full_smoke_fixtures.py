@@ -12,7 +12,6 @@ from urllib.parse import urlparse
 from hype_frog.core.models import CrawlRowPayload, ExtraRowPayload, MainRowPayload
 from hype_frog.core.run_config import (
     FULL_SMOKE_SITEMAP_URL,
-    FULL_SMOKE_SYNTHETIC_URL_COUNT,
     _full_smoke_url_count,
 )
 from hype_frog.core.url_normalization import normalize_url
@@ -129,11 +128,63 @@ def build_smoke_crawl_payload(fixture: FullSmokeFixture, url: str) -> CrawlRowPa
     if status in {404, "Timeout"}:
         indexability = "Non-Indexable"
 
+    # Deterministic, index-seeded content/SEO signals so the executive report reflects a
+    # *representative* audit (varied health, AEO spread, a realistic mix of severities)
+    # rather than an all-missing baseline. The homepage (index 0) is left pristine as a
+    # showcase; issues are seeded only on deeper pages. 404/Timeout pages remain Critical
+    # via the Non-200 status rule regardless of these signals.
+    meta_missing = index > 0 and index % 5 == 0
+    low_eeat = index > 0 and index % 7 == 0
+    weak_aeo = index > 0 and index % 9 == 0
+    no_schema = index > 0 and index % 12 == 0
+    low_alt = index > 0 and index % 6 == 0
+    no_og_title = index > 0 and index % 8 == 0
+
+    content_signals: dict[str, Any] = {
+        "Title Missing": False,
+        "Meta Description Missing": meta_missing,
+        "Missing H1 Flag": False,
+        "Multiple H1 Flag": False,
+        "H1 Count": 1,
+        "Schema Present": not no_schema,
+        "Schema Error Count": 0,
+        "Schema Warning Count": 0,
+        "Schema Parse Errors": 0,
+        "E-E-A-T Signal Score": 2 if low_eeat else 6,
+        "Schema Author Name": "" if low_eeat else f"Author {index}",
+        "Has Byline Element": not low_eeat,
+        "OG Title": "" if no_og_title else f"Smoke title {index}",
+        "OG Description": "" if meta_missing else f"Smoke meta description for page {index}.",
+        "OG Type": "article",
+        "Twitter Card Type": "summary_large_image",
+        "OG Published Time": "2026-06-01",
+        "Schema Published Date": "2026-06-01",
+        "Freshness Status": "Fresh",
+        "Has Privacy Policy Link": True,
+        "Has Terms Link": True,
+        "Has Consent Manager": True,
+        "Image Alt Coverage (%)": 60 if low_alt else 95,
+        "Compression Enabled": True,
+        "Cache-Control": "max-age=3600",
+        "ETag": f'"etag-{index}"',
+        "AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)": True,
+        "llms.txt Present": True,
+        "Regional Authority Score": 65,
+        "Word Count": 320 + (index % 50),
+        # AEO answer signals
+        "Paragraphs 40-60 Words Count": 0 if weak_aeo else 2,
+        "QAPage/FAQ Schema Present": not weak_aeo,
+        "Question Heading Count": 0 if weak_aeo else 3,
+        "List/Table Answer Signal": not weak_aeo,
+        "Flesch-Kincaid Grade (Est.)": 8.0,
+        "AEO Robots AI Bot Coverage": 1.0,
+    }
+
     main_values: dict[str, Any] = {
         "URL": url,
         "Final URL": final_url,
         "Title": f"Smoke title {index}",
-        "Meta Description": f"Smoke meta description for page {index}.",
+        "Meta Description": "" if meta_missing else f"Smoke meta description for page {index}.",
         "Word Count (Body)": 320 + (index % 50),
         "Indexability": indexability,
         "Extraction State": extraction_state,
@@ -163,6 +214,7 @@ def build_smoke_crawl_payload(fixture: FullSmokeFixture, url: str) -> CrawlRowPa
         "HTTP Last-Modified": "2026-06-01" if index % 3 == 0 else "",
         "Current H-Tag Structure": "H1: Smoke heading",
         "Current Page Copy Snippet": "Smoke body copy for intent classification.",
+        **content_signals,
     }
     return CrawlRowPayload(
         main=MainRowPayload.model_validate({"values": main_values}),
@@ -175,7 +227,7 @@ def _sample_lighthouse_result() -> dict[str, Any]:
         "categories": {
             "performance": {"score": 0.88},
             "accessibility": {"score": 0.85},
-            "best-practices": {"score": 0.78},
+            "best-practices": {"score": 0.82},
             "seo": {"score": 0.92},
         },
         "audits": {

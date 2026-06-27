@@ -17,6 +17,9 @@ def apply_south_african_formats(worksheet: Worksheet) -> None:
         "Critical URL Rate %",
         "Warning URL Rate %",
         "Pass Rate",
+        "Entity Density (%)",
+        "Image Alt Coverage (%)",
+        "GSC CTR",
     }
     integer_headers: set[str] = {
         "URLs Crawled",
@@ -30,6 +33,16 @@ def apply_south_african_formats(worksheet: Worksheet) -> None:
         "Affected Count",
         "Priority Score",
         "Est. Sprint Points",
+        "Potential Traffic Lift",
+        "Page Size (KB)",
+        "DOM Size",
+        "Citation Candidate Count",
+        "Desktop PSI Score",
+        "Mobile PSI Score",
+        "Lighthouse Performance (Mobile)",
+        "Lighthouse Accessibility (Mobile)",
+        "Lighthouse Best Practices (Mobile)",
+        "Lighthouse SEO Score (Mobile)",
     }
     decimal_headers: set[str] = {
         "SEO Health Score",
@@ -39,8 +52,31 @@ def apply_south_african_formats(worksheet: Worksheet) -> None:
         "TTFB (ms)",
         "Total Request Time (ms)",
         "Avg TTFB (ms)",
+        "CWV LCP (s)",
+        "CWV CLS",
+        "CWV INP (ms)",
+        "CWV FCP (ms)",
+        "CWV TTFB (ms)",
+        "Origin CrUX LCP (s)",
+        "Origin CrUX CLS",
+        "Origin CrUX INP (ms)",
+        "Mobile LCP (s)",
+        "Mobile CLS",
+        "Mobile TTFB (s)",
+        "Lab LCP (Mobile) (s)",
+        "Lab CLS (Mobile)",
+        "Lab TBT (Mobile) (ms)",
+        "Semantic AEO Score",
+        "AEO Visibility Gain",
+        "ROI Score",
     }
-    date_like_tokens: tuple[str, ...] = ("date", "timestamp", "lastmod", "updated")
+    explicit_date_headers: set[str] = {
+        "GSC Last Crawl Date",
+        "Schema Published Date",
+        "Schema Modified Date",
+        "HTTP Last-Modified",
+        "Sitemap <lastmod>",
+    }
 
     for col_idx, cell in enumerate(worksheet[1], start=1):
         header = str(cell.value or "").strip()
@@ -54,7 +90,7 @@ def apply_south_african_formats(worksheet: Worksheet) -> None:
             fmt = "[$-en-ZA]#,##0.00"
         elif header in integer_headers:
             fmt = "[$-en-ZA]#,##0"
-        elif any(token in header.lower() for token in date_like_tokens):
+        elif header in explicit_date_headers:
             fmt = "[$-en-ZA]dd/mm/yyyy hh:mm:ss"
         else:
             continue

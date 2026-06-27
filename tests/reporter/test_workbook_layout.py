@@ -6,16 +6,22 @@ from openpyxl import Workbook
 
 from hype_frog.reporter.sheets.config import (
     AIOSEO_RECOMMENDATIONS_SHEET,
+    ANCHOR_TEXT_AUDIT_SHEET,
     AUDIT_RUN_DETAILS_SHEET,
-    CONTENT_HUB_METRICS_SHEET,
+    COMPETITOR_BENCHMARKS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    IMAGE_INVENTORY_SHEET,
+    LINK_EQUITY_MAP_SHEET,
+    SCRIPT_INVENTORY_SHEET,
+    SNIPPET_OPPORTUNITIES_SHEET,
 )
 from hype_frog.reporter.sheets.workbook_layout import (
+    ADVANCED_WORKBOOK_TAB_ORDER,
     HIDDEN_SHEETS_BY_DEFAULT,
     PREFERRED_WORKBOOK_TAB_ORDER,
-    TAB_COLOR_ACTIONABLE,
     TAB_COLOR_EXECUTIVE,
     VISIBLE_WORKBOOK_TAB_ORDER,
+    _SHEET_TAB_COLORS,
     apply_workbook_tab_layout,
 )
 
@@ -64,3 +70,25 @@ def test_apply_workbook_tab_layout_orders_colors_and_hides() -> None:
     assert dash_color.upper().endswith(TAB_COLOR_EXECUTIVE.upper())
     assert wb["Technical Diagnostics"].sheet_state == "hidden"
     assert len(PREFERRED_WORKBOOK_TAB_ORDER) == len(set(PREFERRED_WORKBOOK_TAB_ORDER))
+
+
+def test_all_ordered_tabs_have_a_tab_colour() -> None:
+    """Every preferred tab except the TOC must carry a group tab colour (P1.6)."""
+    for name in PREFERRED_WORKBOOK_TAB_ORDER:
+        if name == "Table of Contents":
+            continue
+        assert name in _SHEET_TAB_COLORS, f"{name!r} has no tab colour"
+
+
+def test_advanced_inventory_sheets_have_tab_colours() -> None:
+    """The six advanced inventory sheets previously defaulted to grey (P1.6)."""
+    for name in (
+        LINK_EQUITY_MAP_SHEET,
+        ANCHOR_TEXT_AUDIT_SHEET,
+        SNIPPET_OPPORTUNITIES_SHEET,
+        COMPETITOR_BENCHMARKS_SHEET,
+        SCRIPT_INVENTORY_SHEET,
+        IMAGE_INVENTORY_SHEET,
+    ):
+        assert name in ADVANCED_WORKBOOK_TAB_ORDER
+        assert name in _SHEET_TAB_COLORS

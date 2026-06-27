@@ -31,6 +31,7 @@ logs/
 data/
 reports/
 output/
+dist/
 
 # Note: archive_legacy/ is NOT ignored here. 
 # It is best practice to commit it once as a historical backup, 

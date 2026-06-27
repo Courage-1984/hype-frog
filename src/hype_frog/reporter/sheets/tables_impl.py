@@ -37,7 +37,6 @@ from hype_frog.reporter.sheets.config import (
     DISABLE_EXTERNAL_LINKS_AND_IMAGES,
     DISABLE_NON_CORE_FREEZE_PANES,
     STD_BLUE,
-    STD_FROG_GREEN,
     STD_NAVY,
     STD_WHITE,
 )
@@ -46,10 +45,13 @@ from hype_frog.reporter.sheets.layout import (
     MAIN_COLUMN_GROUP_DEFINITIONS,
     apply_column_grouping,
     apply_column_widths,
+    apply_display_header_aliases,
     apply_intelligent_sorting,
     hide_noisy_columns,
     reorder_columns,
+    sheet_data_column_range,
 )
+from hype_frog.reporter.engine_rows import content_hub_column_letter
 from hype_frog.reporter.sheets.links import apply_editor_url_column_hyperlinks
 from hype_frog.reporter.sheets.navigation import (
     add_back_to_dashboard_link,
@@ -182,10 +184,10 @@ def _apply_diagnostic_header_tooltips(
 
 
 def _apply_link_inventory_client_polish(worksheet: Worksheet) -> None:
-    """Frog-green header row and readable widths for the seven export columns."""
+    """Navy header row and readable widths aligned with other data sheets."""
     header_fill = PatternFill(
-        start_color=STD_FROG_GREEN,
-        end_color=STD_FROG_GREEN,
+        start_color=STD_NAVY,
+        end_color=STD_NAVY,
         fill_type="solid",
     )
     header_font = Font(color=STD_WHITE, bold=True)
@@ -287,11 +289,32 @@ def _link_main_technical_health_to_diagnostics(worksheet) -> None:
         return
     url_letter = get_column_letter(url_col)
     technical_health_letter = get_column_letter(technical_health_col)
+    td_url = sheet_data_column_range("Technical Diagnostics", "URL")
+    td_health = sheet_data_column_range("Technical Diagnostics", "SEO Health Score")
     for row_idx in range(2, worksheet.max_row + 1):
         worksheet[f"{technical_health_letter}{row_idx}"] = (
-            f'=IFERROR(VLOOKUP({url_letter}{row_idx},'
-            "'Technical Diagnostics'!$A:$E,5,FALSE),\"\")"
+            f"=IFERROR(INDEX({td_health},MATCH({url_letter}{row_idx},{td_url},0)),\"\")"
         )
+
+
+def _link_hub_scores_from_main(worksheet: Worksheet) -> None:
+    """Replace static Hub score copies with live INDEX/MATCH lookups on Main."""
+    if worksheet.max_row < 3:
+        return
+    hub_url_l = content_hub_column_letter("URL")
+    score_pairs = (
+        ("SEO Score", "SEO Score"),
+        ("Technical Health", "Technical Health"),
+        ("Copy Score", "Copy Score"),
+    )
+    main_url = sheet_data_column_range("Main", "URL")
+    for hub_header, main_header in score_pairs:
+        hub_l = content_hub_column_letter(hub_header)
+        main_col = sheet_data_column_range("Main", main_header)
+        for row_idx in range(3, worksheet.max_row + 1):
+            worksheet[f"{hub_l}{row_idx}"] = (
+                f"=IFERROR(INDEX({main_col},MATCH({hub_url_l}{row_idx},{main_url},0)),\"\")"
+            )
 
 
 def adjust_sheet_format(writer, sheet_name):
@@ -333,6 +356,7 @@ def adjust_sheet_format(writer, sheet_name):
         apply_status_dropdown_to_inventory(worksheet)
     add_back_to_dashboard_link(worksheet, sheet_name)
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
+        _link_hub_scores_from_main(worksheet)
         apply_content_hub_conditional_rules(worksheet, writer)
         # Sprint 6 — Semantic AEO heatmap on the Hub (Instant Priority
         # moved to Content Hub Metrics). Runs AFTER the Hub conditional
@@ -413,6 +437,7 @@ def adjust_sheet_format(writer, sheet_name):
             _apply_link_inventory_client_polish(worksheet)
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
         finalize_content_hub_after_normalized_headers(worksheet)
+        apply_display_header_aliases(worksheet, header_row=2)
         _apply_content_hub_assigned_owner_validation(worksheet)
         _apply_content_hub_copywriter_column_layout(worksheet)
         apply_header_tooltips(worksheet, header_row=2)

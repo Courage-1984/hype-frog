@@ -84,7 +84,7 @@ _PREFERRED_TAB_SET: frozenset[str] = frozenset(PREFERRED_WORKBOOK_TAB_ORDER)
 
 HIDDEN_SHEETS_BY_DEFAULT: frozenset[str] = frozenset(ADVANCED_WORKBOOK_TAB_ORDER)
 
-SHEETS_EXCLUDED_FROM_TOC: frozenset[str] = frozenset()
+SHEETS_EXCLUDED_FROM_TOC: frozenset[str] = frozenset({"IssueInventory"})
 
 TOC_PRIMARY_SECTION_LABEL = "Primary workflow"
 TOC_ADVANCED_SECTION_LABEL = (
@@ -99,12 +99,11 @@ DASHBOARD_ADVANCED_SHEETS_NOTE = (
 
 # (sheet_name, dashboard_label) — hyperlinks work even when the tab is hidden.
 DASHBOARD_ADVANCED_SHEET_LINKS: tuple[tuple[str, str], ...] = (
-    ("Issue Register", "Issue Register"),
+    ("Issue Register", "Issue Register (canonical backlog)"),
     ("Technical Diagnostics", "Technical Diagnostics"),
     ("Content & AI Readiness", "Content & AI Readiness"),
     ("Link Intelligence", "Link Intelligence"),
     ("CMS Action URLs", "CMS Action URLs"),
-    ("IssueInventory", "Issue Inventory"),
     ("Redirects", "Redirects"),
     (REDIRECT_MAP_SHEET, "Redirect Map"),
     (ROBOTS_ANALYSIS_SHEET, "Robots.txt Analysis"),
@@ -139,6 +138,12 @@ _SHEET_TAB_COLORS: dict[str, str] = {
     "Redirects": TAB_COLOR_ADVANCED,
     REDIRECT_MAP_SHEET: TAB_COLOR_ADVANCED,
     ROBOTS_ANALYSIS_SHEET: TAB_COLOR_ADVANCED,
+    LINK_EQUITY_MAP_SHEET: TAB_COLOR_ADVANCED,
+    ANCHOR_TEXT_AUDIT_SHEET: TAB_COLOR_ADVANCED,
+    SNIPPET_OPPORTUNITIES_SHEET: TAB_COLOR_ADVANCED,
+    COMPETITOR_BENCHMARKS_SHEET: TAB_COLOR_ADVANCED,
+    SCRIPT_INVENTORY_SHEET: TAB_COLOR_ADVANCED,
+    IMAGE_INVENTORY_SHEET: TAB_COLOR_ADVANCED,
     CRAWL_LOG_SHEET: TAB_COLOR_HISTORICAL,
     "ResolvedIssues": TAB_COLOR_HISTORICAL,
     "DeltaFromPreviousRun": TAB_COLOR_HISTORICAL,
@@ -180,6 +185,31 @@ def apply_workbook_tab_visibility(wb: Workbook) -> None:
             ws.sheet_state = "visible"
 
 
+# Tab the workbook should open on. The Table of Contents stays at index 0 (left-most),
+# but the client lands on the executive Dashboard rather than a wall of links.
+WORKBOOK_LANDING_SHEET: str = "Dashboard"
+
+
+def apply_workbook_active_tab(
+    wb: Workbook, *, landing_sheet: str = WORKBOOK_LANDING_SHEET
+) -> None:
+    """Open the workbook on ``landing_sheet`` (default Dashboard); TOC stays index 0.
+
+    Falls back to the Table of Contents when the landing sheet is absent. Ensures
+    exactly one tab is selected so Excel lands deterministically on the target.
+    """
+    target = landing_sheet if landing_sheet in wb.sheetnames else "Table of Contents"
+    if target not in wb.sheetnames:
+        return
+    idx = wb.sheetnames.index(target)
+    wb.active = idx
+    for i, name in enumerate(wb.sheetnames):
+        try:
+            wb[name].views.sheetView[0].tabSelected = i == idx
+        except (IndexError, AttributeError):
+            continue
+
+
 def apply_workbook_tab_layout(wb: Workbook) -> None:
     """Reorder tabs, apply colours, and set default visibility."""
     reorder_workbook_tabs(wb)
@@ -197,6 +227,8 @@ __all__ = [
     "TOC_PRIMARY_SECTION_LABEL",
     "SHEETS_EXCLUDED_FROM_TOC",
     "VISIBLE_WORKBOOK_TAB_ORDER",
+    "WORKBOOK_LANDING_SHEET",
+    "apply_workbook_active_tab",
     "apply_workbook_tab_colors",
     "apply_workbook_tab_layout",
     "apply_workbook_tab_visibility",

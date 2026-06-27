@@ -1,28 +1,18 @@
 from __future__ import annotations
 
-from openpyxl.comments import Comment
 from openpyxl.worksheet.worksheet import Worksheet
 
+from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 
-SEMANTIC_AEO_HEADER_TOOLTIPS: dict[str, str] = {
-    "Entity Density (%)": (
-        "Description: The percentage of the page content identified as Named "
-        "Entities (People, Orgs, Places).\n"
-        "Calculation: (Entities / Total Words) * 100."
-    ),
-    "Top Entities": (
-        "Description: The 3 most frequent Named Entities found on the page. "
-        "Used for semantic relevance."
-    ),
-    "Citation Candidate Count": (
-        "Description: Number of 40-60 word snippets that start with "
-        "answer-engine triggers (e.g., 'is', 'means')."
-    ),
-    "Semantic AEO Score": (
-        "Description: A weighted score (0-100) based on entity density and "
-        "citation readiness."
-    ),
-}
+# Legacy export for tests and callers; canonical bodies live in validation.py.
+SEMANTIC_AEO_HEADER_TOOLTIPS: frozenset[str] = frozenset(
+    {
+        "Entity Density (%)",
+        "Top Entities",
+        "Citation Candidate Count",
+        "Semantic AEO Score",
+    }
+)
 
 
 def apply_semantic_aeo_tooltips(
@@ -30,13 +20,15 @@ def apply_semantic_aeo_tooltips(
     *,
     header_row: int = 1,
 ) -> None:
-    """Attach comments for semantic AEO metrics without touching guardrails."""
-    for col_idx in range(1, worksheet.max_column + 1):
-        cell = worksheet.cell(row=header_row, column=col_idx)
-        header = str(cell.value or "").strip()
-        tooltip = SEMANTIC_AEO_HEADER_TOOLTIPS.get(header)
-        if tooltip:
-            cell.comment = Comment(tooltip, "hype-frog")
+    """Attach semantic AEO header comments via the curated tooltip registry."""
+    from hype_frog.reporter.sheets.validation import apply_curated_header_tooltips
+
+    apply_curated_header_tooltips(
+        worksheet,
+        CONTENT_OPTIMISATION_HUB_SHEET,
+        header_row=header_row,
+        only_headers=SEMANTIC_AEO_HEADER_TOOLTIPS,
+    )
 
 
 __all__ = ["SEMANTIC_AEO_HEADER_TOOLTIPS", "apply_semantic_aeo_tooltips"]

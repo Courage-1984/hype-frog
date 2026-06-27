@@ -1,0 +1,40 @@
+---
+description: IssueRule definitions, stable identifiers, scoring policy, playbook entries, and registry contract for rules/.
+globs: "src/hype_frog/rules/**/*.py"
+alwaysApply: false
+---
+
+Canonical narrative: [`docs/data_contracts.md`](../../docs/data_contracts.md) (IssueRule scope). Keep rules and docs aligned when editing rules code.
+
+# Rules engine rules
+
+## Module ownership
+
+- `registry.py` — Defines all `IssueRule` instances and exports the canonical rule registry. The registry is the single source of truth for rule identifiers, severities, and descriptions.
+- `scoring.py` — Computes SEO Health Score, AEO Readiness Score, and other composite scores from row signals. Consumes rule registry; does not write to the workbook.
+- `playbook_entries.py` — Associates each `IssueRule` with its human-readable playbook: what it means, why it matters, and how to fix it. Pure data; no logic.
+
+## Stable identifiers
+
+Every `IssueRule` must have a **stable, machine-readable identifier** (e.g. `missing_title`, `canonical_mismatch`). These identifiers:
+- Are used in Fix Plan sheets, reporting, and client exports — **never rename** without a migration plan.
+- Must be lowercase snake_case.
+- Must be unique across the registry; add a uniqueness assertion in `test_scoring.py` or `test_registry_rules.py`.
+
+## Adding a new rule
+
+1. Define the `IssueRule` in `registry.py` with a stable identifier, severity, and short description.
+2. Add the corresponding playbook entry in `playbook_entries.py`.
+3. If it affects the SEO Health Score or AEO Readiness Score, update `scoring.py` and `docs/data_contracts.md`.
+4. Add at least one test in `tests/rules/` asserting the rule fires (or does not fire) on a fixture row.
+5. Verify the Fix Plan sheet still renders correctly after the addition.
+
+## Severity levels
+
+Use the severity levels already established in the registry. Do not introduce new levels without updating the conditional formatting rules in `reporter/sheets/conditional.py` and the Fix Plan severity filter.
+
+## Scoring policy
+
+- Scores must be **0–100** integers or `None` when inputs are missing.
+- Scoring functions in `scoring.py` must be **pure**: no side effects, no network calls, no row mutation.
+- Composite scores (SEO Health Score, AEO Readiness Score) are defined in `docs/data_contracts.md`; do not change their formula without updating that doc and running the scoring tests.

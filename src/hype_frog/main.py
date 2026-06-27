@@ -7,10 +7,11 @@ import asyncio
 import os
 
 from hype_frog.config import apply_runtime_override, load_environment
+from hype_frog.core.logger import console
 from hype_frog.core.run_config import FULL_SMOKE_SYNTHETIC_URL_COUNT
-from hype_frog.core.integration_validator import run_validation_cli
-from hype_frog.core.quick_test import QuickTestOptions, run_quick_test_gate
-from hype_frog.core.full_smoke_test import FullSmokeOptions, run_full_smoke_gate
+from hype_frog.diagnostics.integration_validator import run_validation_cli
+from hype_frog.diagnostics.quick_test import QuickTestOptions, run_quick_test_gate
+from hype_frog.diagnostics.full_smoke_test import FullSmokeOptions, run_full_smoke_gate
 from hype_frog.app_orchestrator import main as _async_main
 from hype_frog.crawler.gsc_engine import ensure_gsc_oauth_token
 from hype_frog.extractors.semantic_setup import install_semantic_model
@@ -81,6 +82,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "Install/verify the spaCy en_core_web_sm model "
             "(requires: uv sync --extra semantic)"
+        ),
+    )
+    parser.add_argument(
+        "--install-playwright",
+        action="store_true",
+        help=(
+            "Install the Playwright Chromium browser binary required for "
+            "accurate rendered-page crawl mode (one-time setup)"
         ),
     )
     parser.add_argument(
@@ -199,6 +208,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def run(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
     load_environment()
+    from hype_frog.crawler.fetcher import configure_playwright_browsers_path
+
+    configure_playwright_browsers_path()
     if args.psi_delay is not None and args.psi_delay >= 0:
         apply_runtime_override("PSI_BASE_DELAY_SECONDS", args.psi_delay)
     if args.validate:
@@ -210,16 +222,21 @@ def run(argv: list[str] | None = None) -> None:
         )
     if args.install_semantic:
         ok, message = install_semantic_model()
-        print(message)
+        console.print(f"[green]{message}[/green]" if ok else f"[red]{message}[/red]")
+        raise SystemExit(0 if ok else 1)
+    if args.install_playwright:
+        from hype_frog.crawler.fetcher import install_playwright_chromium
+        ok, message = install_playwright_chromium()
+        console.print(f"[green]{message}[/green]" if ok else f"[red]{message}[/red]")
         raise SystemExit(0 if ok else 1)
     if args.gsc_auth:
         ok, token_path = ensure_gsc_oauth_token()
         if ok:
-            print(f"GSC OAuth token ready: {token_path}")
+            console.print(f"[green]GSC OAuth token ready: {token_path}[/green]")
         else:
-            print(
-                "GSC OAuth token bootstrap failed. Ensure "
-                "secrets/client_secrets.json exists and re-run --gsc-auth."
+            console.print(
+                "[red]GSC OAuth token bootstrap failed. Ensure "
+                "secrets/client_secrets.json exists and re-run --gsc-auth.[/red]"
             )
         return
     if args.full_smoke_test or args.full_smoke_test_fast:

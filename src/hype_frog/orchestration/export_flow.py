@@ -15,8 +15,10 @@ from hype_frog.config import (
     DEFAULT_OWNER_BY_SEVERITY,
     MAX_RETRIES,
     TIMEOUT_SECONDS,
+    resolve_project_relative_path,
 )
 from hype_frog.core import get_logger
+from hype_frog.core.console import log_phase_banner
 from hype_frog.core.models import SummaryMetricsPayload
 from hype_frog.core.crawl_log import CRAWL_LOG_COLUMNS, crawl_log_sheet_rows
 from hype_frog.crawler.robots_mapping import (
@@ -129,6 +131,9 @@ from hype_frog.extractors.semantic_setup import probe_semantic_engine
 
 logger = get_logger(__name__)
 
+# Sheets emitted only when optional enrichment data exists (e.g. --competitors).
+_OPTIONAL_FORMAT_SHEETS: frozenset[str] = frozenset({COMPETITOR_BENCHMARKS_SHEET})
+
 
 def normalize_url_key(url: object, keep_query: bool = True) -> str:
     return normalize_url(url, keep_query=keep_query)
@@ -211,12 +216,19 @@ def execute_export(
     summary_rows: list[dict[str, Any]] = []
     fixplan_rows: list[dict[str, Any]] = []
     quick_wins_rows: list[dict[str, Any]] = []
+    priority_rows: list[dict[str, Any]] = []
+    broken_link_impact_rows: list[dict[str, Any]] = []
+    run_timestamp: str = ""
+    summary_metrics: SummaryMetricsPayload | None = None
+    log_phase_banner("EXPORT: Building workbook")
     try:
         writer = pd.ExcelWriter(output_filename, engine="openpyxl")
         main_cols = list(main_rows[0].keys()) if main_rows else []
+        logger.info("Writing Main sheet (%d rows)...", len(main_rows))
         write_dict_rows_sheet(writer, "Main", main_cols, typed_main_rows)
         adjust_sheet_format(writer, "Main")
         if full_suite:
+            logger.info("Building full audit: %d URLs...", len(typed_extra_rows))
             sheet_columns = get_standard_sheet_columns()
             merged_columns = get_merged_sheet_columns()
             aioseo_rows = build_aioseo_rows_fn(extra_rows, main_by_url, DEFAULT_OWNER_BY_SEVERITY)
@@ -303,6 +315,7 @@ def execute_export(
                 crawlgraph_rows=graph_rows,
                 main_rows=main_rows,
             )
+            logger.info("Writing summary and issue sheets...")
             summary_df = pd.DataFrame(summary_rows)
             to_excel_safe(summary_df, writer, "Summary", index=False)
             to_excel_safe(issue_inventory_df, writer, "IssueInventory", index=False)
@@ -344,6 +357,7 @@ def execute_export(
                 CMS_ACTION_URLS_COLUMNS,
                 cms_action_rows,
             )
+            logger.info("Writing link and duplication analysis sheets...")
             link_inventory_rows = build_link_inventory_rows(extra_rows)
             write_dict_rows_sheet(
                 writer,
@@ -497,7 +511,7 @@ def execute_export(
                 for row in extra_rows
                 if value_or_default_fn(row.get("Critical Issues Count"), 0.0) > 0
             ][:10]
-            quick_wins_rows = [
+            dashboard_quick_win_rows = [
                 {"Block": "Quick Wins", "URL": row.get("URL"), "Issue": "Missing meta on high-impression page"}
                 for row in extra_rows
                 if bool(row.get("Meta Description Missing"))
@@ -514,7 +528,7 @@ def execute_export(
                     and any(slug in str(row.get("URL") or "").lower() for slug in high_value_slugs)
                 )
             ][:10]
-            action_hub_df = pd.DataFrame(critical_issues_rows + quick_wins_rows + growth_rows)
+            action_hub_df = pd.DataFrame(critical_issues_rows + dashboard_quick_win_rows + growth_rows)
             if not action_hub_df.empty:
                 to_excel_safe(action_hub_df, writer, "Dashboard", index=False, startrow=20)
             immediate_action_cols = ["URL", "Business Risk Score", "Why Prioritized", "Action Needed", "Owner", "Status"]
@@ -737,7 +751,7 @@ def execute_export(
             render_fallback_count = sum(
                 1 for row in typed_extra_rows if row.values.get("Extraction Source Fallback")
             )
-            logger.info("Crawl duration for Dashboard RunMetadata: %.1fs", crawl_duration_s)
+            logger.debug("Crawl duration for Dashboard RunMetadata: %.1fs", crawl_duration_s)
             run_meta_rows = [
                 {"Key": "Run Timestamp", "Value": run_timestamp},
                 {"Key": "Total URLs", "Value": len(urls)},
@@ -917,6 +931,7 @@ def execute_export(
                     enrichment.competitor_benchmark_rows,
                 )
         registry_config = ExportRegistryConfig(full_suite=full_suite)
+        logger.info("Applying workbook formatting...")
         for final_step in get_finalization_steps():
             if final_step == "apply_tab_hyperlinks":
                 apply_tab_hyperlinks(writer)
@@ -925,6 +940,11 @@ def execute_export(
                     format_name = sname
                     if format_name in writer.sheets:
                         adjust_sheet_format(writer, format_name)
+                    elif format_name in _OPTIONAL_FORMAT_SHEETS:
+                        logger.debug(
+                            "Optional sheet not present; skipping formatting: %s",
+                            format_name,
+                        )
                     else:
                         logger.warning(
                             "Skipping sheet formatting for missing sheet: %s", format_name
@@ -945,23 +965,79 @@ def execute_export(
 
     patch_xlsx_app_xml_for_excel_compatibility(output_filename)
 
-    if os.getenv("HF_EXPORT_PDF", "").strip().lower() in {"1", "true", "yes"}:
+    export_pdf = os.getenv("HF_EXPORT_PDF", "").strip().lower() in {"1", "true", "yes"}
+    export_html = os.getenv("HF_EXPORT_HTML", "").strip().lower() in {"1", "true", "yes"}
+    if export_pdf or export_html:
+        # Build the shared ReportContext ONCE so the PDF and HTML executive
+        # reports always present identical figures (single source of truth).
+        # Branding resolves HF_REPORT_* first, then HF_PDF_*, then a shared
+        # default, keeping both deliverables visually consistent.
+        from hype_frog.reporter.html_report_data import build_report_context
+        from hype_frog.reporter.html_report_writer import _load_logo_base64
+
+        shared_brand_colour = (
+            os.getenv("HF_REPORT_BRAND_COLOUR", "").strip()
+            or os.getenv("HF_PDF_BRAND_COLOUR", "").strip()
+            or "#1e293b"
+        )
+        shared_prepared_by = (
+            os.getenv("HF_REPORT_PREPARED_BY", "").strip()
+            or os.getenv("HF_PDF_PREPARED_BY", "").strip()
+        )
+        shared_client_name = (
+            os.getenv("HF_REPORT_CLIENT_NAME", "").strip()
+            or os.getenv("HF_PDF_CLIENT_NAME", "").strip()
+        )
+
+        report_ctx = None
         try:
-            export_executive_summary_pdf(
-                workbook_path=output_filename,
-                client_domain=crawl_result.source_label,
-                summary_rows=summary_rows,
-                fixplan_rows=fixplan_rows,
+            report_ctx = build_report_context(
                 main_rows=main_rows,
                 extra_rows=extra_rows,
+                fixplan_rows=fixplan_rows,
+                priority_rows=priority_rows,
+                summary_rows=summary_rows,
+                broken_link_impact_rows=broken_link_impact_rows,
                 quick_win_rows=quick_wins_rows,
-                client_name=os.getenv("HF_PDF_CLIENT_NAME", "").strip(),
-                prepared_by=os.getenv("HF_PDF_PREPARED_BY", "").strip(),
-                brand_colour=os.getenv("HF_PDF_BRAND_COLOUR", "#1a365d").strip() or "#1a365d",
-                logo_path=os.getenv("HF_PDF_LOGO_PATH", "").strip() or None,
+                run_timestamp=run_timestamp,
+                summary_metrics=summary_metrics,
+                domain=crawl_result.source_label,
+                prepared_by=shared_prepared_by,
+                client_name=shared_client_name,
+                logo_base64=_load_logo_base64(),
+                brand_colour=shared_brand_colour,
+                accent_colour=os.getenv("HF_REPORT_ACCENT_COLOUR", "#2563eb").strip() or "#2563eb",
             )
         except Exception as exc:
-            logger.warning("Could not export executive summary PDF: %s", exc)
+            logger.warning("Could not build executive report context (non-fatal): %s", exc)
+
+        if export_pdf and report_ctx is not None:
+            try:
+                raw_logo = (
+                    os.getenv("HF_PDF_LOGO_PATH", "").strip()
+                    or os.getenv("HF_REPORT_LOGO_PATH", "").strip()
+                )
+                resolved_logo = (
+                    str(resolve_project_relative_path(raw_logo)) if raw_logo else None
+                )
+                export_executive_summary_pdf(
+                    workbook_path=output_filename,
+                    ctx=report_ctx,
+                    run_date="",
+                    logo_path=resolved_logo,
+                )
+            except Exception as exc:
+                logger.warning("Could not export executive summary PDF: %s", exc)
+
+        if export_html and report_ctx is not None:
+            try:
+                from pathlib import Path as _Path
+                from hype_frog.reporter.html_report_writer import write_html_report as _write_html
+
+                _html_path = _Path(output_filename).with_suffix(".html")
+                _write_html(report_ctx, _html_path)
+            except Exception as exc:
+                logger.warning("HTML report generation failed (non-fatal): %s", exc)
 
     return ExportSummary(
         output_filename=output_filename,

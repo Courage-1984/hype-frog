@@ -4,13 +4,20 @@ from __future__ import annotations
 
 from openpyxl.comments import Comment
 
+from hype_frog.reporter.engine_rows import CONTENT_HUB_EXPORT_COLUMNS
+from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 from hype_frog.reporter.sheets.dashboard_config import (
     DASHBOARD_KPI_ROW_COMMENTS,
     DASHBOARD_TOOLTIPS,
 )
+from hype_frog.orchestration.export_registry import build_sitemapqa_rows
+from hype_frog.reporter.sheets.layout import _PREFERRED_COLUMN_ORDERS
 from hype_frog.reporter.sheets.merged_builders import (
+    BROKEN_LINK_IMPACT_COLUMNS,
     CONTENT_AI_READINESS_COLUMNS,
     LINK_INTELLIGENCE_COLUMNS,
+    LINK_INVENTORY_COLUMNS,
+    QUICK_WINS_COLUMNS,
     TECHNICAL_DIAGNOSTICS_COLUMNS,
 )
 from hype_frog.reporter.sheets.validation import (
@@ -48,10 +55,19 @@ def test_schema_and_curated_tooltips_include_calculation_section() -> None:
 
 def test_curated_headers_remain_subset_of_export_column_contracts() -> None:
     """If a curated key drifts from merged tab headers, tooltips silently stop applying."""
+    sitemapqa_columns = tuple(
+        build_sitemapqa_rows(sitemap_meta={}, extra_rows=[])[0].keys()
+    )
     contracts = {
         "Technical Diagnostics": TECHNICAL_DIAGNOSTICS_COLUMNS,
         "Content & AI Readiness": CONTENT_AI_READINESS_COLUMNS,
         "Link Intelligence": LINK_INTELLIGENCE_COLUMNS,
+        "FixPlan": tuple(_PREFERRED_COLUMN_ORDERS["FixPlan"]),
+        "Quick Wins": QUICK_WINS_COLUMNS,
+        "Broken Link Impact": BROKEN_LINK_IMPACT_COLUMNS,
+        "Link Inventory": LINK_INVENTORY_COLUMNS,
+        "SitemapQA": sitemapqa_columns,
+        CONTENT_OPTIMISATION_HUB_SHEET: CONTENT_HUB_EXPORT_COLUMNS,
     }
     for sheet, keys in curated_help_keys_by_sheet().items():
         allowed = contracts[sheet]

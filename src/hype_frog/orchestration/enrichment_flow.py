@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 import math
 import time
-from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
 from hype_frog.core import get_logger
+from hype_frog.core.console import log_phase_banner, log_stage_timer
 from hype_frog.core.discovery_order import order_main_and_extra_rows
 from hype_frog.crawler import (
     check_url_status_light_limited,
@@ -66,26 +66,6 @@ from hype_frog.core.url_normalization import normalize_url
 from hype_frog.pipeline.content_duplicates import enrich_content_duplicate_signals
 
 logger = get_logger(__name__)
-
-
-def _log_phase_banner(title: str) -> None:
-    bar = "=" * 72
-    logger.info("")
-    logger.info(bar)
-    logger.info(" %s", title)
-    logger.info(bar)
-    logger.info("")
-
-
-@contextmanager
-def _log_stage_timer(stage_name: str):
-    started = time.perf_counter()
-    logger.info(">> %s started", stage_name)
-    try:
-        yield
-    finally:
-        elapsed = time.perf_counter() - started
-        logger.info(">> %s completed in %.1fs", stage_name, elapsed)
 
 
 def normalize_url_key(url: object, keep_query: bool = True) -> str:
@@ -206,7 +186,7 @@ def _sync_main_rows_seo_fields_from_extra(
 
 
 async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult:
-    _log_phase_banner("ENRICHMENT: Starting post-crawl data pipeline")
+    log_phase_banner("ENRICHMENT: Starting post-crawl data pipeline")
     image_probe_by_url: dict[str, dict[str, Any]] | None = None
     crawl_log = CrawlLogCollector()
     if crawl_result.crawl_log_entries is not None:
@@ -216,14 +196,14 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
     extra_rows = [row.extra for row in crawl_rows]
     sitemap_url_keys = {normalize_url_key(url) for url in crawl_result.sitemap_meta.keys()}
     async with create_session() as session:
-        _log_phase_banner("ENRICHMENT PHASE 1/5: Load GSC analytics context")
+        log_phase_banner("ENRICHMENT PHASE 1/5: Load GSC analytics context")
         try:
-            with _log_stage_timer("GSC analytics context load"):
+            with log_stage_timer("GSC analytics context load"):
                 gsc_ctx = await asyncio.to_thread(
                     load_gsc_enrichment_context, crawl_result.target_input
                 )
         except Exception as exc:
-            logger.warning("GSC metrics unavailable due to runtime error: %s", exc)
+            logger.error("GSC metrics unavailable due to runtime error: %s", exc)
             gsc_ctx = GSCEnrichmentContext({}, False, None, None)
         gsc_metrics = gsc_ctx.page_metrics
         gsc_data_freshness = format_gsc_data_freshness(
@@ -261,7 +241,7 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             and gsc_ctx.service is not None
             and gsc_ctx.site_url is not None
         ):
-            _log_phase_banner(
+            log_phase_banner(
                 "ENRICHMENT PHASE 2/5: GSC URL Inspection batch"
             )
             logger.info(
@@ -271,7 +251,7 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                 len(extra_rows),
             )
             try:
-                with _log_stage_timer("GSC URL Inspection lookups"):
+                with log_stage_timer("GSC URL Inspection lookups"):
                     inspection_by_url = await asyncio.to_thread(
                         fetch_gsc_url_inspections_batch,
                         gsc_ctx.service,
@@ -279,7 +259,7 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                         unique_inspection_urls,
                     )
             except Exception as exc:
-                logger.warning("GSC URL Inspection batch failed: %s", exc)
+                logger.error("GSC URL Inspection batch failed: %s", exc)
                 inspection_by_url = {}
                 crawl_log.record(
                     url=crawl_result.target_input,
@@ -298,8 +278,8 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             psi_map: dict[str, dict[str, object]] = {}
             logger.info("PSI disabled for this run (max PSI URLs set to 0).")
         else:
-            _log_phase_banner("ENRICHMENT PHASE 3/5: PSI metric batch")
-            with _log_stage_timer("PSI fetch"):
+            log_phase_banner("ENRICHMENT PHASE 3/5: PSI metric batch")
+            with log_stage_timer("PSI fetch"):
                 psi_map = await fetch_psi_metrics_batch(
                     session,
                     [
@@ -363,7 +343,7 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             for target in row.values.get("Internal Links List Full", []):
                 if normalize_url_key(target) not in status_by_url:
                     unresolved_targets.add(target)
-        _log_phase_banner("ENRICHMENT PHASE 4/5: Internal/external link status completion")
+        log_phase_banner("ENRICHMENT PHASE 4/5: Internal/external link status completion")
         if unresolved_targets:
             logger.info(
                 "Running lightweight status checks for %s internal links not in crawl set...",
@@ -379,7 +359,7 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             for target, status in zip(unresolved_targets, checked_statuses):
                 status_by_url[normalize_url_key(target)] = status
         else:
-            logger.info("No unresolved internal-link targets; skipping lightweight status checks.")
+            logger.debug("No unresolved internal-link targets; skipping lightweight status checks.")
 
         external_by_netloc: dict[str, int | None] | None = None
         if crawl_result.check_external_link_status:
@@ -389,10 +369,10 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                 len(external_by_netloc),
             )
         else:
-            logger.info("External domain HEAD checks disabled for this run.")
+            logger.debug("External domain HEAD checks disabled for this run.")
 
         if crawl_result.check_og_images:
-            _log_phase_banner("ENRICHMENT: OG image status and dimension checks")
+            log_phase_banner("ENRICHMENT: OG image status and dimension checks")
             await enrich_og_image_validation(
                 session,
                 extra_work,
@@ -400,10 +380,10 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
             )
             logger.info("OG image validation completed for pages with og:image set.")
         else:
-            logger.info("OG image validation disabled for this run.")
+            logger.debug("OG image validation disabled for this run.")
 
         if crawl_result.check_content_images:
-            _log_phase_banner("ENRICHMENT: Content image status and size checks")
+            log_phase_banner("ENRICHMENT: Content image status and size checks")
             image_probe_by_url = await enrich_content_image_inventory(
                 session,
                 extra_work,
@@ -414,7 +394,7 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                 len(image_probe_by_url or {}),
             )
         else:
-            logger.info("Content image validation disabled for this run.")
+            logger.debug("Content image validation disabled for this run.")
 
         annotate_link_details_with_status(
             extra_work,
@@ -445,8 +425,8 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                     recovery_action="PSI columns left blank for this URL.",
                 )
 
-    _log_phase_banner("ENRICHMENT PHASE 5/5: Scoring, intelligence, and row assembly")
-    with _log_stage_timer(
+    log_phase_banner("ENRICHMENT PHASE 5/5: Scoring, intelligence, and row assembly")
+    with log_stage_timer(
         "Scoring + link graph + SEO health merge (no network; scales with URL count)"
     ):
         crawled_finals = {
@@ -561,7 +541,7 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
     competitor_columns: tuple[str, ...] | None = None
     competitor_domains = list(crawl_result.competitor_domains or ())
     if competitor_domains:
-        with _log_stage_timer("Competitor benchmark sampling"):
+        with log_stage_timer("Competitor benchmark sampling"):
             competitor_rows, competitor_columns = await benchmark_competitor_domains(
                 client_label=crawl_result.source_label,
                 main_rows=[row.values for row in enriched_main_rows],

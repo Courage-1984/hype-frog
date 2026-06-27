@@ -146,8 +146,8 @@ def assert_action_required_guardrails(ws: Worksheet) -> None:
 
     c3 = ws.cell(row=3, column=col)
     assert c3.value == "Needs Copy", f"row 3 expected Needs Copy, got {c3.value!r}"
-    assert _fill_hex_upper(c3) == "FF0000", (
-        f"row 3 fill expected FF0000, got {_fill_hex_upper(c3)!r}"
+    assert _fill_hex_upper(c3) == "FFC7CE", (
+        f"row 3 fill expected FFC7CE (canonical RAG red), got {_fill_hex_upper(c3)!r}"
     )
 
     c4 = ws.cell(row=4, column=col)
@@ -155,7 +155,7 @@ def assert_action_required_guardrails(ws: Worksheet) -> None:
 
     c5 = ws.cell(row=5, column=col)
     assert c5.value == "Needs Copy"
-    assert _fill_hex_upper(c5) == "FF0000"
+    assert _fill_hex_upper(c5) == "FFC7CE"
 
 
 def test_friendly_toc_description_known_tabs() -> None:
@@ -192,7 +192,9 @@ def test_refresh_toc_descriptions_dynamic_uses_friendly_map() -> None:
     toc["A2"] = "Section"
     toc["B2"] = "Open"
     toc["C2"] = "Description"
-    toc["A3"] = "Technical"
+    # Production TOC stores a HYPERLINK formula in column A (not a bare sheet name).
+    # The refresh must still resolve the target sheet (guards T1 regression).
+    toc["A3"] = '=HYPERLINK("#\'Technical\'!A1","Technical")'
     toc["C3"] = "Primary columns: old fallback"
 
     refresh_toc_descriptions_dynamic(wb)
@@ -200,6 +202,22 @@ def test_refresh_toc_descriptions_dynamic_uses_friendly_map() -> None:
     desc = str(toc["C3"].value or "")
     assert "Deep-dive diagnostic" in desc
     assert "Primary columns" not in desc
+
+
+def test_refresh_toc_descriptions_dynamic_handles_quoted_sheet_name() -> None:
+    """A sheet name with an apostrophe is escaped as '' in the HYPERLINK target."""
+    wb = Workbook()
+    wb.active.title = "Bob's Sheet"
+    toc = wb.create_sheet("Table of Contents", 0)
+    toc["A2"] = "Section"
+    toc["C2"] = "Description"
+    toc["A3"] = '=HYPERLINK("#\'Bob\'\'s Sheet\'!A1","Bob\'s Sheet")'
+    toc["C3"] = "stale"
+
+    refresh_toc_descriptions_dynamic(wb)
+
+    # Unknown sheet → friendly fallback names the resolved sheet (not "stale").
+    assert "Bob's Sheet" in str(toc["C3"].value or "")
 
 
 def assert_toc_no_generic_fallback(wb: Workbook) -> None:

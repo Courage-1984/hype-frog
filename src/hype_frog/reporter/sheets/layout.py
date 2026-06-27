@@ -68,6 +68,9 @@ PERFORMANCE_CWV_GROUP_COLUMNS: tuple[str, ...] = (
 )
 
 # Canonical post-``reorder_columns`` layouts (single source for column helpers).
+# Preferred column orders per sheet. Keys for retired split tabs (Technical, Content,
+# Links, …) remain for legacy workbook compatibility but those sheets are not in the
+# default export suite — do not add new behaviour keyed only on those names.
 _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
     "Main": [
         "Health Icon",
@@ -362,6 +365,52 @@ def main_sheet_url_column_letter() -> str:
     """
     order = _PREFERRED_COLUMN_ORDERS["Main"]
     return get_column_letter(order.index("URL") + 1)
+
+
+def sheet_data_column_range(
+    sheet_name: str,
+    header: str,
+    *,
+    start_row: int = 2,
+    end_row: int = 100_000,
+) -> str:
+    """Excel OFFSET range for ``header`` on ``sheet_name`` (dynamic column lookup)."""
+    span = max(1, end_row - start_row + 1)
+    row_offset = start_row - 1
+    return (
+        f"OFFSET('{sheet_name}'!$A$1,{row_offset},"
+        f'MATCH("{header}",\'{sheet_name}\'!$1:$1,0)-1,{span},1)'
+    )
+
+
+def link_inventory_column_letter(header: str) -> str:
+    """Column letter on Link Inventory from the strict seven-column export contract."""
+    from hype_frog.reporter.sheets.merged_builders import LINK_INVENTORY_COLUMNS
+
+    return get_column_letter(LINK_INVENTORY_COLUMNS.index(header) + 1)
+
+
+def link_intelligence_column_letter(header: str) -> str:
+    """Column letter on Link Intelligence from the merged export contract."""
+    from hype_frog.reporter.sheets.merged_builders import LINK_INTELLIGENCE_COLUMNS
+
+    return get_column_letter(LINK_INTELLIGENCE_COLUMNS.index(header) + 1)
+
+
+# British English display labels for pipeline keys (append-only row keys unchanged).
+DISPLAY_HEADER_ALIASES: dict[str, str] = {
+    "On-Page Optimization Score": "On-Page Optimisation Score",
+}
+
+
+def apply_display_header_aliases(worksheet: Worksheet, *, header_row: int = 1) -> None:
+    """Rewrite row headers to British English display labels where mapped."""
+    for col_idx in range(1, worksheet.max_column + 1):
+        cell = worksheet.cell(row=header_row, column=col_idx)
+        key = str(cell.value or "").strip()
+        alias = DISPLAY_HEADER_ALIASES.get(key)
+        if alias:
+            cell.value = alias
 
 
 MAIN_COLUMN_GROUP_DEFINITIONS: dict[str, list[str]] = {
@@ -760,13 +809,19 @@ def apply_column_widths(worksheet: Worksheet) -> None:
 
 
 __all__ = [
+    "DISPLAY_HEADER_ALIASES",
     "MAIN_COLUMN_GROUP_DEFINITIONS",
     "PERFORMANCE_CWV_GROUP_COLUMNS",
-    "content_optimisation_hub_ordered_headers",
-    "sort_worksheet_rows",
-    "apply_intelligent_sorting",
-    "hide_noisy_columns",
-    "reorder_columns",
+    "apply_display_header_aliases",
     "apply_column_grouping",
     "apply_column_widths",
+    "apply_intelligent_sorting",
+    "content_optimisation_hub_ordered_headers",
+    "hide_noisy_columns",
+    "link_intelligence_column_letter",
+    "link_inventory_column_letter",
+    "main_sheet_url_column_letter",
+    "reorder_columns",
+    "sheet_data_column_range",
+    "sort_worksheet_rows",
 ]

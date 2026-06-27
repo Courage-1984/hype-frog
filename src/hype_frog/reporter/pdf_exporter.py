@@ -1,14 +1,26 @@
-"""Executive summary PDF export for client-facing deliverables (C2)."""
+"""Executive summary PDF export for client-facing deliverables (C2).
+
+This renderer is a *presentation-only* consumer of the shared
+:class:`~hype_frog.reporter.html_report_data.ReportContext`. All aggregation
+(KPIs, top issues, sprint plan, quick wins) is computed once in
+``build_report_context`` so the PDF and the HTML executive report always show
+identical figures. Do not re-aggregate pipeline rows here.
+"""
 
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from hype_frog.core import get_logger
+from hype_frog.config import resolve_project_relative_path
+
+if TYPE_CHECKING:
+    from hype_frog.reporter.html_report_data import ReportContext
 
 logger = get_logger(__name__)
+
+DEFAULT_BRAND_COLOUR = "#1e293b"
 
 
 def executive_summary_pdf_path(workbook_path: str) -> str:
@@ -21,113 +33,93 @@ def _safe_text(value: object, default: str = "—") -> str:
     return text or default
 
 
-def _top_issues(fixplan_rows: list[dict[str, Any]], limit: int = 5) -> list[dict[str, Any]]:
-    severity_rank = {"Critical": 0, "Warning": 1, "Observation": 2}
-    ranked = sorted(
-        fixplan_rows,
-        key=lambda row: (
-            severity_rank.get(str(row.get("Severity") or ""), 9),
-            -int(float(row.get("Affected Count") or 0)),
-        ),
-    )
-    return ranked[:limit]
+def _rag_label(kind: str, value: str) -> tuple[str, tuple[float, float, float]]:
+    """Return a (word, rgb) status for the KPI table.
 
+    ``kind`` is one of:
+    - ``"score"`` — higher is better (e.g. health/readiness percentages).
+    - ``"issues"`` — lower is better (issue/page counts).
+    - ``"info"`` — descriptive metric with no pass/fail status (renders "—").
 
-def _aggregate_kpis(
-    main_rows: list[dict[str, Any]],
-    extra_rows: list[dict[str, Any]],
-    summary_rows: list[dict[str, Any]],
-) -> dict[str, str]:
-    extra_by_url = {
-        str(row.get("URL") or "").strip(): row
-        for row in extra_rows
-        if row.get("URL")
-    }
-    seo_scores: list[float] = []
-    aeo_scores: list[float] = []
-    for row in main_rows:
-        url = str(row.get("URL") or "").strip()
-        extra = extra_by_url.get(url, {})
-        try:
-            seo_scores.append(float(row.get("SEO Health Score") or extra.get("SEO Health Score") or 0))
-        except (TypeError, ValueError):
-            pass
-        try:
-            aeo_scores.append(float(extra.get("AEO Readiness Score") or 0))
-        except (TypeError, ValueError):
-            pass
-
-    issue_counts = [
-        int(float(row.get("Affected URL Count") or 0))
-        for row in summary_rows
-        if str(row.get("Section") or "") == "Issue Counts"
-    ]
-    total_issues = sum(issue_counts)
-    critical = sum(
-        int(float(row.get("Affected URL Count") or 0))
-        for row in summary_rows
-        if str(row.get("Severity") or "") == "Critical"
-    )
-    warning = sum(
-        int(float(row.get("Affected URL Count") or 0))
-        for row in summary_rows
-        if str(row.get("Severity") or "") == "Warning"
-    )
-
-    avg_seo = sum(seo_scores) / len(seo_scores) if seo_scores else 0.0
-    avg_aeo = sum(aeo_scores) / len(aeo_scores) if aeo_scores else 0.0
-    return {
-        "pages_crawled": str(len(main_rows)),
-        "avg_seo_health": f"{avg_seo:.0f}",
-        "avg_aeo_readiness": f"{avg_aeo:.0f}",
-        "total_issue_instances": str(total_issues),
-        "critical_instances": str(critical),
-        "warning_instances": str(warning),
-    }
-
-
-def _rag_colour(metric_label: str, value: str) -> tuple[float, float, float]:
+    A textual word is used instead of a coloured glyph so the status survives
+    PDF text extraction and greyscale printing.
+    """
+    green = (0.18, 0.55, 0.34)
+    amber = (0.85, 0.65, 0.13)
+    red = (0.75, 0.22, 0.17)
+    grey = (0.45, 0.45, 0.45)
+    if kind == "info":
+        return ("—", grey)
     try:
         numeric = float(value)
     except (TypeError, ValueError):
-        return (0.45, 0.45, 0.45)
-    if "issue" in metric_label.lower() or "critical" in metric_label.lower():
+        return ("—", grey)
+    if kind == "issues":
         if numeric == 0:
-            return (0.18, 0.55, 0.34)
+            return ("Good", green)
         if numeric <= 5:
-            return (0.85, 0.65, 0.13)
-        return (0.75, 0.22, 0.17)
+            return ("Watch", amber)
+        return ("Critical", red)
+    if kind == "psi":
+        if numeric >= 90:
+            return ("Good", green)
+        if numeric >= 50:
+            return ("Watch", amber)
+        return ("Critical", red)
     if numeric >= 80:
-        return (0.18, 0.55, 0.34)
+        return ("Good", green)
     if numeric >= 60:
-        return (0.85, 0.65, 0.13)
-    return (0.75, 0.22, 0.17)
+        return ("Watch", amber)
+    return ("Critical", red)
+
+
+def _format_audit_date(ctx_date: str, override: str) -> str:
+    """Resolve the audit date shown in the PDF.
+
+    Prefer the crawl ``run_timestamp`` (so regenerating the PDF later does not
+    silently re-date the audit); fall back to today only when nothing parses.
+    """
+    if override:
+        return override
+    raw = (ctx_date or "")[:10]
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").strftime("%d %B %Y")
+    except ValueError:
+        return datetime.now().astimezone().strftime("%d %B %Y")
 
 
 def export_executive_summary_pdf(
     *,
     workbook_path: str,
-    client_domain: str,
-    summary_rows: list[dict[str, Any]],
-    fixplan_rows: list[dict[str, Any]],
-    main_rows: list[dict[str, Any]],
-    extra_rows: list[dict[str, Any]],
-    quick_win_rows: list[dict[str, Any]] | None = None,
-    client_name: str = "",
-    prepared_by: str = "",
-    brand_colour: str = "#1a365d",
+    ctx: ReportContext,
+    run_date: str = "",
     logo_path: str | None = None,
 ) -> str | None:
-    """Generate a two-page executive summary PDF alongside the workbook."""
+    """Generate a one-page executive summary PDF from the shared ReportContext."""
     try:
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import cm
-        from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-    except ImportError:
-        logger.warning("reportlab is not installed; skipping PDF export.")
+        from reportlab.platypus import (
+            Image,
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
+    except ImportError as exc:
+        logger.warning(
+            "reportlab is not available; skipping PDF export (%s).",
+            exc,
+        )
         return None
+
+    brand_colour = ctx.brand_colour or DEFAULT_BRAND_COLOUR
+    client_name = ctx.client_name or ctx.domain
+    prepared_by = ctx.prepared_by or "Your agency team"
+    audit_date = _format_audit_date(ctx.crawl_date, run_date)
 
     output_path = executive_summary_pdf_path(workbook_path)
     doc = SimpleDocTemplate(
@@ -157,11 +149,12 @@ def export_executive_summary_pdf(
     )
     body_style = ParagraphStyle("ExecBody", parent=styles["BodyText"], fontSize=10, leading=14)
 
-    run_date = datetime.now().astimezone().strftime("%d %B %Y")
     story: list[Any] = []
-    if logo_path and Path(logo_path).exists():
+
+    resolved_logo = resolve_project_relative_path(logo_path or "")
+    if resolved_logo and resolved_logo.is_file():
         try:
-            story.append(Image(logo_path, width=4 * cm, height=1.5 * cm))
+            story.append(Image(str(resolved_logo), width=4 * cm, height=1.5 * cm))
             story.append(Spacer(1, 0.3 * cm))
         except Exception as exc:
             logger.warning("Could not embed logo in PDF: %s", exc)
@@ -169,29 +162,35 @@ def export_executive_summary_pdf(
     story.append(Paragraph("SEO & AEO Executive Summary", title_style))
     story.append(
         Paragraph(
-            f"<b>Client:</b> {_safe_text(client_name or client_domain)}<br/>"
-            f"<b>Domain:</b> {_safe_text(client_domain)}<br/>"
-            f"<b>Audit date:</b> {run_date}<br/>"
+            f"<b>Client:</b> {_safe_text(client_name)}<br/>"
+            f"<b>Domain:</b> {_safe_text(ctx.domain)}<br/>"
+            f"<b>Audit date:</b> {audit_date}<br/>"
             f"<b>Prepared by:</b> {_safe_text(prepared_by, 'Your agency team')}",
             body_style,
         )
     )
     story.append(Spacer(1, 0.4 * cm))
 
-    kpis = _aggregate_kpis(main_rows, extra_rows, summary_rows)
+    # ── Key metrics (sourced entirely from ctx) ───────────────────────────────
+    kpi_specs: list[tuple[str, str, str]] = [
+        ("Pages crawled", str(ctx.total_urls), "info"),
+        ("Average SEO health", f"{ctx.seo_health_mean:.0f}", "score"),
+        ("Average AEO readiness", f"{ctx.aeo_readiness_mean:.0f}", "score"),
+        ("Critical pages", str(ctx.critical_url_count), "issues"),
+        ("Warning pages", str(ctx.warning_url_count), "issues"),
+    ]
+    if ctx.psi_mobile_mean > 0:
+        kpi_specs.append(("Mobile PSI", f"{ctx.psi_mobile_mean:.0f}", "psi"))
+    if ctx.seo_health_projected > ctx.seo_health_mean and ctx.seo_health_projected > 0:
+        kpi_specs.append(("Projected SEO health", f"{ctx.seo_health_projected:.0f}", "score"))
     kpi_table_data = [["Metric", "Value", "Status"]]
-    for label, key in (
-        ("Pages crawled", "pages_crawled"),
-        ("Average SEO health", "avg_seo_health"),
-        ("Average AEO readiness", "avg_aeo_readiness"),
-        ("Critical issue instances", "critical_instances"),
-        ("Warning issue instances", "warning_instances"),
-    ):
-        value = kpis[key]
-        rag = _rag_colour(label, value)
-        kpi_table_data.append([label, value, "●"])
+    status_colours: list[tuple[float, float, float]] = []
+    for label, value, kind in kpi_specs:
+        status_text, status_rgb = _rag_label(kind, value)
+        kpi_table_data.append([label, value, status_text])
+        status_colours.append(status_rgb)
 
-    kpi_table = Table(kpi_table_data, colWidths=[8 * cm, 3 * cm, 1.5 * cm])
+    kpi_table = Table(kpi_table_data, colWidths=[8 * cm, 3 * cm, 3 * cm])
     kpi_style = [
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(brand_colour)),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -200,63 +199,107 @@ def export_executive_summary_pdf(
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
     ]
     for row_idx in range(1, len(kpi_table_data)):
-        rag = _rag_colour(kpi_table_data[row_idx][0], kpi_table_data[row_idx][1])
-        kpi_style.append(("TEXTCOLOR", (2, row_idx), (2, row_idx), colors.Color(*rag)))
+        rgb = status_colours[row_idx - 1]
+        kpi_style.append(("TEXTCOLOR", (2, row_idx), (2, row_idx), colors.Color(*rgb)))
+        kpi_style.append(("FONTNAME", (2, row_idx), (2, row_idx), "Helvetica-Bold"))
     kpi_table.setStyle(TableStyle(kpi_style))
     story.append(Paragraph("Key metrics", h2_style))
     story.append(kpi_table)
+    story.append(
+        Paragraph(
+            '<font size="8" color="#666666">Status key &mdash; scores: '
+            "Good \u2265 80, Watch 60&ndash;79, Critical &lt; 60 "
+            "(Mobile PSI: Good \u2265 90). "
+            "Page counts: Good = 0, Watch \u2264 5, Critical &gt; 5.</font>",
+            body_style,
+        )
+    )
     story.append(Spacer(1, 0.4 * cm))
 
-    story.append(Paragraph("Top issues", h2_style))
-    for issue in _top_issues(fixplan_rows):
+    # ── Search visibility (shared GSC figures) ────────────────────────────────
+    if ctx.gsc_available:
+        story.append(Paragraph("Search visibility (Search Console)", h2_style))
         story.append(
             Paragraph(
-                f"• <b>{_safe_text(issue.get('Issue Type'))}</b> "
-                f"({_safe_text(issue.get('Severity'))}, "
-                f"{int(float(issue.get('Affected Count') or 0))} URLs)",
+                f"<b>{ctx.gsc_clicks_total:,}</b> clicks and "
+                f"<b>{ctx.gsc_impressions_total:,}</b> impressions over the last 30 days; "
+                f"average position <b>{ctx.gsc_avg_position}</b> across "
+                f"<b>{ctx.gsc_pages_with_clicks}</b> page(s) with clicks.",
                 body_style,
             )
         )
-    if not fixplan_rows:
+        if ctx.gsc_data_freshness:
+            story.append(
+                Paragraph(
+                    f'<font size="8" color="#666666">{_safe_text(ctx.gsc_data_freshness)}</font>',
+                    body_style,
+                )
+            )
+        story.append(Spacer(1, 0.3 * cm))
+
+    # ── Top issues (shared with HTML report) ──────────────────────────────────
+    story.append(Paragraph("Top issues", h2_style))
+    if ctx.top_issues:
+        for issue in ctx.top_issues[:5]:
+            story.append(
+                Paragraph(
+                    f"&bull; <b>{_safe_text(issue.get('name'))}</b> "
+                    f"({_safe_text(issue.get('severity'))}, "
+                    f"{int(float(issue.get('affected_count') or 0))} pages)",
+                    body_style,
+                )
+            )
+    else:
         story.append(Paragraph("No open issues were detected in this crawl.", body_style))
 
+    # ── Quick wins (shared with HTML report) ──────────────────────────────────
     story.append(Spacer(1, 0.3 * cm))
     story.append(Paragraph("Quick wins", h2_style))
-    quick_rows = quick_win_rows or []
-    for row in quick_rows[:5]:
-        story.append(
-            Paragraph(
-                f"• {_safe_text(row.get('Issue'))} — "
-                f"effort {_safe_text(row.get('Effort (hrs)'), '?')} hrs",
-                body_style,
+    if ctx.quick_wins:
+        for win in ctx.quick_wins[:5]:
+            story.append(
+                Paragraph(
+                    f"&bull; {_safe_text(win.get('name'))} &mdash; "
+                    f"effort {float(win.get('effort_hours') or 0):.1f} hrs",
+                    body_style,
+                )
             )
-        )
-    if not quick_rows:
+    else:
         story.append(Paragraph("No quick wins identified for this run.", body_style))
 
+    # ── Sprint & resource plan (identical to HTML report) ─────────────────────
     story.append(Spacer(1, 0.3 * cm))
-    story.append(Paragraph("Recommended sprint focus", h2_style))
-    sprint_rows = [
-        [
-            _safe_text(row.get("Issue Type")),
-            _safe_text(row.get("Severity")),
-            _safe_text(row.get("Effort")),
-            _safe_text(row.get("Owner")),
-        ]
-        for row in _top_issues(fixplan_rows, limit=6)
-    ]
-    if sprint_rows:
-        sprint_table = Table(
-            [["Issue", "Severity", "Effort", "Owner"], *sprint_rows],
-            colWidths=[7 * cm, 2.5 * cm, 2 * cm, 3 * cm],
+    story.append(Paragraph("Sprint & resource plan", h2_style))
+    if ctx.sprint_plan:
+        sprint_data = [["Sprint", "Issues", "Hours", "Owner"]]
+        for sprint in ctx.sprint_plan:
+            sprint_data.append(
+                [
+                    _safe_text(sprint.get("sprint")),
+                    str(int(sprint.get("issue_count") or 0)),
+                    f"{float(sprint.get('hours') or 0):.0f}h",
+                    _safe_text(sprint.get("owner")),
+                ]
+            )
+        sprint_data.append(
+            [
+                "Total",
+                str(sum(int(s.get("issue_count") or 0) for s in ctx.sprint_plan)),
+                f"{ctx.total_fix_hours:.0f}h",
+                "",
+            ]
         )
+        sprint_table = Table(sprint_data, colWidths=[6 * cm, 2 * cm, 2 * cm, 4.5 * cm])
         sprint_table.setStyle(
             TableStyle(
                 [
                     ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(brand_colour)),
                     ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                     ("GRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
                     ("FONTSIZE", (0, 0), (-1, -1), 9),
+                    ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#e2e8f0")),
+                    ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
                 ]
             )
         )

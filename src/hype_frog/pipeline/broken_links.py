@@ -11,7 +11,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-_LINK_INVENTORY_DATA_END_ROW = 50_000
+_LINK_INVENTORY_DATA_END_ROW = 100_000
+
+
+def _link_inventory_range(header: str, *, start_row: int = 2) -> str:
+    from hype_frog.reporter.sheets.layout import link_inventory_column_letter
+
+    col = link_inventory_column_letter(header)
+    end = _LINK_INVENTORY_DATA_END_ROW
+    return f"'Link Inventory'!${col}${start_row}:${col}${end}"
 
 
 def is_internal_link_type(link_type: object) -> bool:
@@ -83,23 +91,25 @@ def count_broken_internal_from_link_details(
 
 def link_inventory_broken_internal_total_formula() -> str:
     """Excel formula: total broken internal link instances on Link Inventory."""
-    end = _LINK_INVENTORY_DATA_END_ROW
+    link_type = _link_inventory_range("Link Type")
+    status = _link_inventory_range("Status Code")
     return (
-        f"=SUMPRODUCT(('Link Inventory'!$E$2:$E${end}=\"Internal\")*"
-        f"('Link Inventory'!$F$2:$F${end}>=400)*"
-        f"('Link Inventory'!$F$2:$F${end}<600))"
+        f'=SUMPRODUCT(({link_type}="Internal")*'
+        f"({status}>=400)*"
+        f"({status}<600))"
     )
 
 
 def link_inventory_broken_per_source_formula(source_cell_ref: str) -> str:
     """Excel formula: broken internal instances for one source URL (Link Intelligence)."""
-    end = _LINK_INVENTORY_DATA_END_ROW
-    inv = "'Link Inventory'"
+    source = _link_inventory_range("Source URL")
+    link_type = _link_inventory_range("Link Type")
+    status = _link_inventory_range("Status Code")
     return (
-        f"=SUMPRODUCT(({inv}!$A$2:$A${end}={source_cell_ref})*"
-        f"({inv}!$E$2:$E${end}=\"Internal\")*"
-        f"({inv}!$F$2:$F${end}>=400)*"
-        f"({inv}!$F$2:$F${end}<600))"
+        f"=SUMPRODUCT(({source}={source_cell_ref})*"
+        f'({link_type}="Internal")*'
+        f"({status}>=400)*"
+        f"({status}<600))"
     )
 
 

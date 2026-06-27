@@ -7,17 +7,21 @@ alwaysApply: true
 
 ## Module boundaries
 
-Preserve separation. Dependency direction: **core** and **config** are foundations; **crawler** and **extractors** consume them; **validators** and **analysis** enrich row dicts; **pipeline** orchestrates enrichment and export; **rules** encodes scoring and issue logic; **reporter** builds workbook output; **checkpoint** persists resume state.
+Preserve separation. All paths below are relative to `src/hype_frog/`. Dependency direction: **core** and **config** are foundations; **crawler** and **extractors** consume them; **validators** and **analysis** enrich row dicts; **orchestration** drives the crawl loop and export sequence; **pipeline** assembles rows and scoring glue; **rules** encodes scoring and issue logic; **reporter** builds workbook/HTML/PDF output; **checkpoint** persists resume state.
 
-- `crawler/` — HTTP sessions, fetching, optional rendered capture, sitemap, PSI/GSC integrations.
-- `extractors/` — HTML and metadata parsing; no direct workbook writing.
+- `config.py` / `config_defaults.py` / `config_loader.py` — Runtime configuration, env-var resolution, default constants (frozen sets, thresholds). Single source of truth for all tunable values. See `.cursor/rules/config.mdc`.
+- `core/` — Logging (`logger.py`), CLI helpers (`cli.py`), URL normalization, Pydantic contracts (`models.py`), run config (`run_config.py`), status codes, memory guard, crawl log, text/file utils shared across all layers.
+- `crawler/` — HTTP sessions, fetching, optional rendered capture, sitemap, PSI (`psi_engine.py`), GSC (`gsc_engine.py`) integrations, redirect chains, robots mapping, data assembly (`data_assembler.py`). See `.cursor/rules/crawler_engine.mdc`.
+- `extractors/` — HTML and metadata parsing (page, schema, eeat, og_social, freshness, semantic engine); no direct workbook writing.
 - `validators/` — JSON-LD schema validation (`schema_validator.py`).
-- `analysis/` — Post-crawl domain passes (canonical/hreflang chains, link equity, third-party scripts, snippets, topical authority, similarity, competitor benchmarks, delta).
-- `pipeline/` — Row assembly, sanitization helpers, scoring glue, graph engine, export paths shared with the CLI entrypoint.
-- `rules/` — `IssueRule` definitions, scoring, stable identifiers, playbook entries.
-- `src/hype_frog/reporter/` — Spreadsheet construction, tabs, conditional formats, navigation, view state.
+- `analysis/` — Post-crawl domain passes (canonical/hreflang chains, link equity, third-party scripts, snippets, topical authority, content similarity, competitor benchmarks, delta engine, content hub recommendations). See `.cursor/rules/analysis.mdc`.
+- `orchestration/` — Drives the BFS crawl loop (`crawl_runner.py`), batched enrichment (`enrichment_flow.py`), export sequencing (`export_flow.py`), run setup (`run_setup.py`), and export registry (`export_registry.py`). See `.cursor/rules/orchestration.mdc`.
+- `pipeline/` — Row assembly (`assemble.py`), sanitization helpers, scoring glue, graph engine, GSC coverage/inspection, image inventory, broken links, OG image validation, content duplicates/clusters/hubs.
+- `rules/` — `IssueRule` definitions, scoring, stable identifiers, playbook entries. See `.cursor/rules/rules_engine.mdc`.
+- `reporter/` — Spreadsheet construction, tabs, conditional formats, navigation, view state, HTML report, PDF export. See `.cursor/rules/excel_engine.mdc`.
 - `checkpoint/` — Durable crawl progress for long runs.
-- `core/` — Logging, CLI helpers, URL normalization, Pydantic contracts shared across layers.
+- `main.py` / `app_orchestrator.py` — Top-level entrypoints; do not add business logic here.
+- `diagnostics/` — CLI validation gates: `quick_test.py` (`--quick-test`), `full_smoke_test.py` (`--full-smoke-test`), `full_smoke_fixtures.py` (synthetic fixture network patches), `integration_validator.py` (`--validate`). These are **CLI features that ship with the package**, not test utilities — keep them importable from `main.py`.
 
 ## Concurrency and entrypoint
 
@@ -40,11 +44,11 @@ The primary entrypoint drives bounded **asyncio** concurrency over URL lists. Ne
 
 ## Historical and archive material
 
-Do not treat `./archive/` as live product code unless a task explicitly says to integrate it. Never delete repository files to “clean up”; prefer additive changes or human-requested archival workflow (no destructive git or shell removal per project policy).
+Do not treat `./archive/`, `./archive_legacy/`, or any other archive directory as live product code unless a task explicitly says to integrate it. Never delete repository files to “clean up”; prefer additive changes or human-requested archival workflow (no destructive git or shell removal per project policy).
 
 ## Excluded from automated analysis
 
-Ignore the `./.old/` directory for scans, refactors, and documentation generation.
+Ignore the `./.old/`, `./archive/`, and `./archive_legacy/` directories for scans, refactors, and documentation generation.
 
 ## Vibe check (before non-trivial logic)
 
@@ -71,6 +75,15 @@ Prefer **small, reviewable** diffs. If coordinated edits would span **more than 
 ## Data mutability
 
 Treat pipeline row dictionaries (including **`main_data` / main row keys**) as **append-only** for existing keys: no renames/removals without explicit approval and a migration plan. New fields must be **additive** and backward-tolerant for reporters.
+
+## Environment variables
+
+All env vars for hype-frog are documented in `.env.example`. When adding a new runtime knob:
+1. Add the var to `.env.example` with a comment block explaining its purpose, accepted values, and defaults.
+2. Wire it through `config_loader.py` / `config_defaults.py` — never read `os.environ` directly in domain modules.
+3. Update `docs/system_architecture.md` if the var affects pipeline behaviour.
+
+See `.cursor/rules/config.mdc` for naming conventions and loading precedence.
 
 ## Safety net
 

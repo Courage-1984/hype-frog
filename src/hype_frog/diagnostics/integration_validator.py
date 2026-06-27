@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -29,8 +30,15 @@ from hype_frog.extractors.semantic_setup import (
     probe_semantic_engine,
 )
 
-_DEFAULT_PSI_PROBE_URL = "https://example.com"
+PSI_DEFAULT_PROBE_URL = "https://example.com"
+_DEFAULT_PSI_PROBE_URL = PSI_DEFAULT_PROBE_URL
 _GSC_READONLY_SCOPE = SCOPES[0]
+
+
+def _playwright_install_hint() -> str:
+    if getattr(sys, "frozen", False):
+        return "./hype-frog.exe --install-playwright"
+    return "uv run playwright install chromium"
 
 
 class CheckStatus(str, Enum):
@@ -261,6 +269,10 @@ async def check_psi_api_live(test_url: str) -> IntegrationCheck:
 
 async def check_playwright_chromium() -> IntegrationCheck:
     """Verify Playwright can launch Chromium (Python package + browser binaries)."""
+    from hype_frog.crawler.fetcher import configure_playwright_browsers_path
+
+    configure_playwright_browsers_path()
+    install_hint = _playwright_install_hint()
     try:
         from playwright.async_api import async_playwright
     except ImportError:
@@ -271,7 +283,7 @@ async def check_playwright_chromium() -> IntegrationCheck:
                 "Playwright is not installed. Run: uv sync  "
                 "(playwright is a core dependency in pyproject.toml)."
             ),
-            details={"install_hint": "uv run playwright install chromium"},
+            details={"install_hint": install_hint},
         )
 
     try:
@@ -284,9 +296,9 @@ async def check_playwright_chromium() -> IntegrationCheck:
             status=CheckStatus.FAIL,
             message=(
                 "Chromium browser binaries are missing or cannot launch. "
-                "Run: uv run playwright install chromium"
+                f"Run: {install_hint}"
             ),
-            details={"error": str(exc), "install_hint": "uv run playwright install chromium"},
+            details={"error": str(exc), "install_hint": install_hint},
         )
 
     return IntegrationCheck(

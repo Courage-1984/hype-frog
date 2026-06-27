@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from rich.console import Console
+from rich.logging import RichHandler
 
 _LOGGING_CONFIGURED = False
+
+# Shared console — import from here for progress bars, panels, and status spinners.
+# legacy_windows=False forces ANSI mode; avoids the legacy Win32 renderer that
+# cannot encode non-CP1252 characters in modern Windows Terminal / pwsh sessions.
+console = Console(legacy_windows=False)
 
 
 def configure_logging() -> None:
@@ -19,18 +27,33 @@ def configure_logging() -> None:
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
 
-    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    # Console: rich coloured output — short timestamps, no module path clutter.
+    # markup=False prevents URLs / bracket chars in log messages being misread as tags.
+    rich_handler = RichHandler(
+        console=console,
+        show_time=True,
+        show_path=False,
+        log_time_format="%H:%M:%S",
+        rich_tracebacks=True,
+        markup=False,
+    )
+    rich_handler.setLevel(logging.INFO)
 
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(formatter)
-
-    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    # File: plain text, full detail, rotating (5 MB × 3 backups).
+    file_formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    )
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=5_000_000,
+        backupCount=3,
+        encoding="utf-8",
+    )
     file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(formatter)
+    file_handler.setFormatter(file_formatter)
 
     root_logger.handlers.clear()
-    root_logger.addHandler(console_handler)
+    root_logger.addHandler(rich_handler)
     root_logger.addHandler(file_handler)
 
     _LOGGING_CONFIGURED = True

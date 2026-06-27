@@ -58,7 +58,6 @@ def resolve_run_setup(run: RunConfig | None) -> RunSetup:
     """Resolve startup configuration for interactive and preset runs."""
     configure_logging()
     load_dotenv()
-    logger.info("=== Python Technical SEO Auditor ===")
 
     if run is not None:
         logger.info("Non-interactive run preset active (e.g. --quick-test).")

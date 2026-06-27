@@ -5,7 +5,15 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
-from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
+from hype_frog.reporter.sheets.config import (
+    CONTENT_OPTIMISATION_HUB_SHEET,
+    DATA_BAR_BLUE,
+    DISABLE_CONDITIONAL_FORMATTING,
+    RAG_AMBER,
+    RAG_AMBER_SOFT,
+    RAG_GREEN,
+    RAG_RED,
+)
 
 
 def apply_fixplan_workflow_formatting(worksheet: Worksheet) -> None:
@@ -102,11 +110,19 @@ def ensure_freeze_header(worksheet: Worksheet) -> None:
 
 
 def apply_global_conditional_formatting(
-    worksheet: Worksheet, *, merged_audit_tabs: bool = False
+    worksheet: Worksheet,
+    *,
+    merged_audit_tabs: bool = False,
+    skip_headers: frozenset[str] = frozenset(),
 ) -> None:
-    if worksheet.max_row <= 1:
+    # Honour the kill switch defensively, regardless of caller.
+    if DISABLE_CONDITIONAL_FORMATTING or worksheet.max_row <= 1:
         return
     headers = _legacy_sheet_header_index(worksheet)
+    # Drop columns owned by a more specific pass (e.g. Main heatmaps) so we do not
+    # stack two conflicting rules on the same range.
+    for skipped in skip_headers:
+        headers.pop(skipped, None)
     last_row = worksheet.max_row
     status_col = headers.get("Status Code") or headers.get("Target Status (if crawled)")
     if status_col:
@@ -159,7 +175,7 @@ def apply_global_conditional_formatting(
                 DataBarRule(
                     start_type="min",
                     end_type="max",
-                    color="638EC6",
+                    color=DATA_BAR_BLUE,
                     showValue=True,
                 ),
             )
@@ -175,7 +191,7 @@ def apply_global_conditional_formatting(
                 DataBarRule(
                     start_type="min",
                     end_type="max",
-                    color="638EC6",
+                    color=DATA_BAR_BLUE,
                     showValue=True,
                 ),
             )
@@ -325,7 +341,7 @@ def apply_global_conditional_formatting(
             FormulaRule(
                 formula=[f'LOWER({col}2)="yes"'],
                 stopIfTrue=True,
-                fill=PatternFill("solid", fgColor="FFC7CE"),
+                fill=PatternFill("solid", fgColor=RAG_RED),
             ),
         )
         worksheet.conditional_formatting.add(
@@ -333,11 +349,13 @@ def apply_global_conditional_formatting(
             FormulaRule(
                 formula=[f'LOWER({col}2)="no"'],
                 stopIfTrue=True,
-                fill=PatternFill("solid", fgColor="C6EFCE"),
+                fill=PatternFill("solid", fgColor=RAG_GREEN),
             ),
         )
 
-    severity_badge_col = headers.get("Severity Badge")
+    # Match the rich "Severity Badge" column and the plain "Severity" column used on
+    # FixPlan / issue sheets, so severity reads consistently wherever it appears.
+    severity_badge_col = headers.get("Severity Badge") or headers.get("Severity")
     if severity_badge_col:
         col = get_column_letter(severity_badge_col)
         rng = f"{col}2:{col}{last_row}"
@@ -346,7 +364,7 @@ def apply_global_conditional_formatting(
             FormulaRule(
                 formula=[f'LOWER({col}2)="critical"'],
                 stopIfTrue=True,
-                fill=PatternFill("solid", fgColor="FFC7CE"),
+                fill=PatternFill("solid", fgColor=RAG_RED),
             ),
         )
         worksheet.conditional_formatting.add(
@@ -354,7 +372,7 @@ def apply_global_conditional_formatting(
             FormulaRule(
                 formula=[f'LOWER({col}2)="warning"'],
                 stopIfTrue=True,
-                fill=PatternFill("solid", fgColor="FFCC99"),
+                fill=PatternFill("solid", fgColor=RAG_AMBER_SOFT),
             ),
         )
         worksheet.conditional_formatting.add(
@@ -362,7 +380,7 @@ def apply_global_conditional_formatting(
             FormulaRule(
                 formula=[f'OR(LOWER({col}2)="pass",LOWER({col}2)="observation")'],
                 stopIfTrue=True,
-                fill=PatternFill("solid", fgColor="C6EFCE"),
+                fill=PatternFill("solid", fgColor=RAG_GREEN),
             ),
         )
 
@@ -375,7 +393,7 @@ def apply_global_conditional_formatting(
             FormulaRule(
                 formula=[f'LOWER({col}2)="done"'],
                 stopIfTrue=True,
-                fill=PatternFill("solid", fgColor="D9EAD3"),
+                fill=PatternFill("solid", fgColor=RAG_GREEN),
             ),
         )
         worksheet.conditional_formatting.add(
@@ -385,7 +403,7 @@ def apply_global_conditional_formatting(
                     f'OR(LOWER({col}2)="to do",LOWER({col}2)="in progress",LOWER({col}2)="in review")'
                 ],
                 stopIfTrue=True,
-                fill=PatternFill("solid", fgColor="FFF2CC"),
+                fill=PatternFill("solid", fgColor=RAG_AMBER),
             ),
         )
 
@@ -435,7 +453,7 @@ def apply_executive_priority_formatting(
 
     Missing headers skip the corresponding rule.
     """
-    if worksheet.max_row <= header_row:
+    if DISABLE_CONDITIONAL_FORMATTING or worksheet.max_row <= header_row:
         return
     headers = _header_index_at_row(worksheet, header_row)
     last_row = worksheet.max_row

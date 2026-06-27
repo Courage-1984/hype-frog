@@ -5,8 +5,17 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.worksheet import Worksheet
 
-from hype_frog.reporter.sheets.config import DISABLE_DATA_VALIDATION
+from hype_frog.reporter.sheets.config import (
+    CONTENT_OPTIMISATION_HUB_SHEET,
+    DISABLE_DATA_VALIDATION,
+    DISABLE_TOOLTIPS,
+)
 from hype_frog.reporter.sheets.style_helpers import header_index
+
+# Tooltips (cell comments) are suppressed by the dedicated tooltip flag, but the legacy
+# data-validation flag is still honoured for backward compatibility. Dropdowns remain
+# gated by ``DISABLE_DATA_VALIDATION`` only.
+_DISABLE_TOOLTIP_COMMENTS: bool = DISABLE_TOOLTIPS or DISABLE_DATA_VALIDATION
 
 HELP_DESCRIPTION_PREFIX: str = "Description:"
 HELP_CALCULATION_PREFIX: str = "Calculation:"
@@ -162,10 +171,138 @@ _LINK_INTELLIGENCE_HELP: dict[str, str] = {
     ),
 }
 
+_FIXPLAN_HELP: dict[str, str] = {
+    "Priority Score": format_help_layer(
+        description="Remediation ranking (higher = fix sooner) blending severity and reach.",
+        calculation=(
+            "Computed in the pipeline from issue severity, affected-URL count, and business "
+            "risk; persisted on the FixPlan row (not recalculated in Excel)."
+        ),
+    ),
+    "Affected Link Instances": format_help_layer(
+        description="Count of broken plus unresolved internal link instances for this issue/URL.",
+        calculation="Sum of broken + unresolved internal links per URL from link analysis.",
+    ),
+    "Est. Sprint Points": format_help_layer(
+        description="Relative delivery effort for this fix expressed in sprint points.",
+        calculation="Mapped from the estimated hours band during FixPlan assembly.",
+    ),
+    "Aging/Priority": format_help_layer(
+        description="Recommended sprint bucket for the fix.",
+        calculation=(
+            'One of "Immediate (Current Sprint)", "Next Sprint", or "Backlog", derived from '
+            "Priority Score thresholds."
+        ),
+    ),
+    "Action Needed": format_help_layer(
+        description="Whether this row still requires work (Yes) or is clear (No).",
+        calculation="Yes/No flag set during FixPlan assembly from the resolution state.",
+    ),
+}
+
+_QUICK_WINS_HELP: dict[str, str] = {
+    "Effort (hrs)": format_help_layer(
+        description="Estimated hands-on hours to complete this quick win.",
+        calculation="Estimated during Quick Wins assembly from the issue's fix profile.",
+    ),
+    "Business Risk Score": format_help_layer(
+        description="Relative business exposure of leaving this issue unresolved (higher = worse).",
+        calculation="Blends severity with traffic/visibility signals in the pipeline.",
+    ),
+    "GSC Clicks (30d)": format_help_layer(
+        description="Search Console clicks for this URL over the trailing 30 days.",
+        calculation="Pass-through from GSC performance data; blank when GSC is unavailable.",
+    ),
+    "Revenue Risk": format_help_layer(
+        description="Qualitative revenue exposure flag for the affected page.",
+        calculation="Derived from page intent and traffic during Quick Wins assembly.",
+    ),
+}
+
+_BROKEN_LINK_IMPACT_HELP: dict[str, str] = {
+    "Inbound Link Count": format_help_layer(
+        description="How many internal links point at this broken destination.",
+        calculation="Count of internal link edges resolving to this broken target URL.",
+    ),
+    "Source Page Clicks Total": format_help_layer(
+        description="Combined GSC clicks of the pages that link to this broken URL.",
+        calculation="Sum of trailing-30-day GSC clicks across the linking source pages.",
+    ),
+    "Recommended Action": format_help_layer(
+        description="Suggested remediation for the broken destination.",
+        calculation="Heuristic from status code and link context (fix, redirect, or remove).",
+    ),
+}
+
+_LINK_INVENTORY_HELP: dict[str, str] = {
+    "Generic Anchor": format_help_layer(
+        description='Whether the anchor text is non-descriptive (e.g. "click here", "read more").',
+        calculation="Boolean flag from anchor-text analysis on the outbound link.",
+    ),
+    "Rel Attribute": format_help_layer(
+        description="The link's rel value (e.g. nofollow, sponsored, ugc) or blank.",
+        calculation="Captured verbatim from the anchor element during extraction.",
+    ),
+    "Link Type": format_help_layer(
+        description="Internal vs external classification for the link edge.",
+        calculation="Derived from comparing the target host with the crawl domain.",
+    ),
+}
+
+_SITEMAPQA_HELP: dict[str, str] = {
+    "Found via Crawl": format_help_layer(
+        description="Whether the URL was discovered by crawling internal links.",
+        calculation="Boolean membership check against the crawl frontier.",
+    ),
+    "Found via Sitemap": format_help_layer(
+        description="Whether the URL appears in an XML sitemap.",
+        calculation="Boolean membership check against parsed sitemap entries.",
+    ),
+    "In Sitemap but Non-200": format_help_layer(
+        description="Sitemap URL that did not return HTTP 200 (wastes crawl budget).",
+        calculation="True when a sitemap URL's resolved status code is not 200.",
+    ),
+    "Crawled but Missing from Sitemap": format_help_layer(
+        description="Indexable crawled URL absent from any sitemap (discoverability gap).",
+        calculation="True when a crawled 200 URL is not present in sitemap entries.",
+    ),
+    "Lastmod vs HTTP Match": format_help_layer(
+        description="Whether the sitemap <lastmod> agrees with the HTTP Last-Modified header.",
+        calculation="Date comparison (day precision) between sitemap lastmod and HTTP header.",
+    ),
+}
+
+_CONTENT_HUB_SEMANTIC_HELP: dict[str, str] = {
+    "Entity Density (%)": format_help_layer(
+        description=(
+            "The percentage of page content identified as named entities (people, orgs, places)."
+        ),
+        calculation="(Named entities / total words) × 100 from semantic extraction.",
+    ),
+    "Top Entities": format_help_layer(
+        description="The most frequent named entities on the page (semantic relevance signal).",
+        calculation="Ranked entity list from the semantic analyser for this URL.",
+    ),
+    "Citation Candidate Count": format_help_layer(
+        description="Count of 40–60 word snippets suitable for answer-engine citation.",
+        calculation="Snippets starting with answer triggers (e.g. 'is', 'means') from semantic pass.",
+    ),
+    "Semantic AEO Score": format_help_layer(
+        description="Weighted 0–100 score from entity density and citation readiness.",
+        calculation="Composite semantic/AEO score from the crawl enrichment pass.",
+    ),
+}
+
 _SHEET_CURATED_HEADER_HELP: dict[str, dict[str, str]] = {
     "Content & AI Readiness": _CONTENT_AI_READINESS_HELP,
     "Technical Diagnostics": _TECHNICAL_DIAGNOSTICS_HELP,
     "Link Intelligence": _LINK_INTELLIGENCE_HELP,
+    CONTENT_OPTIMISATION_HUB_SHEET: _CONTENT_HUB_SEMANTIC_HELP,
+    "FixPlan": _FIXPLAN_HELP,
+    "Quick Wins": _QUICK_WINS_HELP,
+    "Broken Link Impact": _BROKEN_LINK_IMPACT_HELP,
+    "Link Inventory": _LINK_INVENTORY_HELP,
+    "SitemapQA": _SITEMAPQA_HELP,
 }
 
 SCHEMA_METADATA_HEADER_TOOLTIP_BODIES: dict[str, str] = {
@@ -381,6 +518,29 @@ def tooltip_for_header(header: str) -> str:
     )
 
 
+def apply_curated_header_tooltips(
+    worksheet: Worksheet,
+    sheet_title: str,
+    *,
+    header_row: int = 1,
+    only_headers: frozenset[str] | None = None,
+) -> None:
+    """Attach curated help comments for ``sheet_title`` (single registry entry point)."""
+    if _DISABLE_TOOLTIP_COMMENTS:
+        return
+    author = "hype-frog"
+    for col_idx in range(1, worksheet.max_column + 1):
+        cell = worksheet.cell(row=header_row, column=col_idx)
+        header = str(cell.value or "").strip()
+        if not header or (only_headers is not None and header not in only_headers):
+            continue
+        body = resolve_curated_help_body(sheet_title, header)
+        if body is None:
+            continue
+        title = friendly_metric_label(header)[:32] or "Column"
+        _attach_header_comment(cell, f"{title}\n\n{body}", author)
+
+
 def add_all_header_tooltips(worksheet: Worksheet) -> None:
     """Attach generic header guidance as cell comments on row-one headers.
 
@@ -390,7 +550,7 @@ def add_all_header_tooltips(worksheet: Worksheet) -> None:
     Args:
         worksheet: Worksheet where comments are added.
     """
-    if DISABLE_DATA_VALIDATION:
+    if _DISABLE_TOOLTIP_COMMENTS:
         return
     headers = header_index(worksheet)
     author = "hype-frog"
@@ -415,7 +575,7 @@ def add_header_tooltips(worksheet: Worksheet) -> None:
 
     add_schema_header_tooltips(
         worksheet,
-        disable_data_validation=DISABLE_DATA_VALIDATION,
+        disable_data_validation=_DISABLE_TOOLTIP_COMMENTS,
         header_index_fn=header_index,
     )
 

@@ -1,6 +1,6 @@
 ---
-description: Crawl modes, Playwright async-only policy, retries, extraction contracts, layer split, and URL identity for crawler/extractors/pipeline/core.
-globs: "{src/hype_frog/crawler,src/hype_frog/extractors,src/hype_frog/pipeline,src/hype_frog/core}/**/*.py"
+description: Crawl modes, Playwright async-only policy, retries, extraction contracts, layer split, and URL identity for crawler/extractors/pipeline/core/orchestration.
+globs: "{src/hype_frog/crawler,src/hype_frog/extractors,src/hype_frog/pipeline,src/hype_frog/core,src/hype_frog/orchestration}/**/*.py"
 alwaysApply: false
 ---
 
@@ -37,9 +37,33 @@ New extractor or fetch outcomes must map into **complete** / **partial** / **ski
 
 CMS/WooCommerce action query parameters block crawl-queue and internal-link discovery (`config_defaults.EXCLUDED_CMS_ACTION_QUERY_PARAMS`, enforced in `orchestration/crawl_runner.py`). Extend the frozenset in `config_defaults.py` when new CMS actions appear.
 
-## PSI Lighthouse categories
+## Data assembler contract
+
+`crawler/data_assembler.py` (`DataAssembler`) owns the merge of raw HTTP and rendered signals into a single row dict:
+- `finalize_row_state` maps non-integer `Status Code` values (`timeout`, `connection error`, `dns error`, etc.) to indexable string codes before scoring.
+- Never call `DataAssembler` methods from outside `crawler/`; pipeline consumers receive the already-assembled row dict.
+- Any new signal source (new fetcher, new extractor) must wire its output through `DataAssembler` — not merged ad hoc in `crawl_runner.py` or `pipeline/`.
+
+## GSC authentication and engine
+
+`crawler/gsc_engine.py` manages OAuth credential loading and Search Console API calls:
+- Credential files: `secrets/client_secrets.json` and `secrets/token.json` (canonical), with legacy fallbacks in `src/hype_frog/` or repo root. The `secrets/` directory is gitignored.
+- All auth fallback paths must be tested via mocked file I/O — see `tests/crawler/test_gsc_auth_paths.py` for the established pattern.
+- Do not hard-code credential paths outside `gsc_engine.py`.
+- GSC batch calls must use bounded page sizes and respect the configured date-range limits from `config_defaults.py`.
+
+## Network engine
+
+`crawler/network_engine.py` owns low-level HTTP mechanics (connection pooling, SSL handling, header management). Keep it free of business logic. Domain-level retry decisions belong in `fetcher.py`; concurrency limits belong in `crawl_runner.py`.
+
+## PSI Lighthouse categories and CrUX
 
 `psi_engine._PSI_CATEGORIES` requests **performance**, **accessibility**, **best-practices**, and **seo** for each mobile/desktop PSI call.
+
+- **Rate limits:** PSI quota is per API key per day. Log a warning and skip remaining PSI calls (marking affected rows with a `PSI Data Status` value indicating quota exhaustion) rather than hard-failing the crawl.
+- **CrUX data:** CrUX field data may be absent (new page / low traffic). Treat absent CrUX as `None`/blank — never substitute a synthetic value.
+- **Response caching:** PSI results for a URL must not be re-fetched within the same run unless the user explicitly resets the run. Cache responses in the checkpoint or in-memory for the run duration.
+- **Timeout:** every PSI HTTP call must respect the global LLM/API timeout policy from `architecture.mdc` (≈5 s hard cap unless documented otherwise).
 
 ## Skipped with reason (dead-letter policy)
 
@@ -59,6 +83,13 @@ Use **bounded retries** with **exponential backoff** (and jitter where the codeb
 
 - Keep **`aiohttp.TCPConnector`** limits (`limit`, `limit_per_host`, `keepalive_timeout`) aligned with `config`.
 - Cap concurrent browser sessions with the project **semaphore**; do not remove backpressure without an equivalent limit.
+
+## Sitemap discovery
+
+`crawler/sitemap.py` handles sitemap fetch and URL extraction:
+- Respect `robots.txt` sitemap directives before falling back to `/sitemap.xml`.
+- Apply the same URL normalization and CMS action query-param exclusion rules as the BFS queue.
+- Sitemap URLs are additive to the crawl queue; they do not bypass `config_defaults.EXCLUDED_CMS_ACTION_QUERY_PARAMS`.
 
 ## URL identity
 

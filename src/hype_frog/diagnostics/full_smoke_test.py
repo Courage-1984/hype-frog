@@ -12,13 +12,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
+from rich.table import Table
+
 from hype_frog.config import PROJECT_ROOT, load_environment
 from hype_frog.core import configure_logging, get_logger
-from hype_frog.core.full_smoke_fixtures import (
+from hype_frog.core.logger import console
+from hype_frog.diagnostics.full_smoke_fixtures import (
     build_full_smoke_fixture,
     full_smoke_network_patches,
 )
-from hype_frog.core.integration_validator import (
+from hype_frog.diagnostics.integration_validator import (
+    PSI_DEFAULT_PROBE_URL,
     CheckStatus,
     IntegrationCheck,
     check_gsc_api,
@@ -28,7 +32,7 @@ from hype_frog.core.integration_validator import (
     check_psi_api_live,
     format_validation_report,
 )
-from hype_frog.core.quick_test import (
+from hype_frog.diagnostics.quick_test import (
     QuickTestPhaseResult,
     QuickTestReport,
     _audit_phase,
@@ -104,9 +108,8 @@ async def run_full_smoke_preflight(target_input: str) -> list[IntegrationCheck]:
     checks.append(check_gsc_api(property_url))
     psi_key_check = checks[2]
     if psi_key_check.status == CheckStatus.PASS:
-        # Lightweight URL — validates API key/quota, not the client's heavy homepage.
-        probe_url = os.getenv("HF_PSI_PROBE_URL", "https://example.com").strip() or "https://example.com"
-        checks.append(await check_psi_api_live(probe_url))
+        # Validate API key with a fast stable URL — not the crawl homepage (can PSI-timeout).
+        checks.append(await check_psi_api_live(PSI_DEFAULT_PROBE_URL))
     else:
         checks.append(
             IntegrationCheck(
@@ -210,27 +213,36 @@ def _validate_full_smoke_rows(
 
 
 def _print_report(report: QuickTestReport) -> None:
-    bar = "=" * 72
-    print("")
-    print(bar)
-    print(" FULL SMOKE TEST SUMMARY")
-    print(bar)
+    _STATUS_STYLE = {"PASS": "green", "WARN": "yellow", "FAIL": "bold red", "SKIP": "dim"}
+
+    table = Table(
+        title="FULL SMOKE TEST SUMMARY",
+        title_style="bold",
+        show_header=True,
+        header_style="bold",
+        show_lines=False,
+        padding=(0, 1),
+    )
+    table.add_column("Phase", min_width=22)
+    table.add_column("Status", justify="center", width=8)
+    table.add_column("Detail")
+
     for phase in report.phases:
-        icon = {"PASS": "[PASS]", "WARN": "[WARN]", "FAIL": "[FAIL]", "SKIP": "[SKIP]"}[
-            phase.status
-        ]
-        print(f"  {icon} {phase.name}: {phase.detail}")
-    if report.output_filename:
-        print(f"  Workbook: {report.output_filename}")
+        s = _STATUS_STYLE[phase.status]
+        table.add_row(phase.name, f"[{s}]{phase.status}[/{s}]", phase.detail)
+
+    console.print("")
+    console.print(table)
     if report.urls_crawled:
-        print(f"  URLs crawled: {report.urls_crawled}")
+        console.print(f"  URLs crawled: {report.urls_crawled}")
     if report.extraction_counts:
         parts = ", ".join(f"{k}={v}" for k, v in sorted(report.extraction_counts.items()))
-        print(f"  Extraction states: {parts}")
-    overall = "PASS" if report.ok else "FAIL"
-    print(f"  Overall: {overall}")
-    print(bar)
-    print("")
+        console.print(f"  Extraction states: {parts}")
+    if report.output_filename:
+        console.print(f"  Workbook: {report.output_filename}")
+    overall_style = "green" if report.ok else "bold red"
+    console.print(f"  [{overall_style}]Overall: {'PASS' if report.ok else 'FAIL'}[/{overall_style}]")
+    console.print("")
 
 
 async def _run_full_smoke_pipeline(config: RunConfig) -> CrawlExecutionResult:

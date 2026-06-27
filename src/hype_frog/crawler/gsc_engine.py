@@ -16,14 +16,14 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-from hype_frog.config import SECRETS_DIR
+from hype_frog.config import PROJECT_ROOT as _RUNTIME_ROOT, SECRETS_DIR
 from hype_frog.core import get_logger
 
 SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
 logger = get_logger(__name__)
 
-_PROJECT_DIR = Path(__file__).resolve().parents[1]
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+_PROJECT_DIR = _RUNTIME_ROOT
+_REPO_ROOT = _RUNTIME_ROOT
 
 _CACHE_TTL_SECONDS = 24 * 60 * 60
 _ROW_LIMIT = 25_000

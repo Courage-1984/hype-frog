@@ -1,0 +1,40 @@
+---
+description: Config layer ownership, env var naming conventions, loading precedence, and config_defaults policy.
+globs: "src/hype_frog/config{.py,_defaults.py,_loader.py}"
+alwaysApply: false
+---
+
+# Config layer rules
+
+## Module ownership
+
+- `config_defaults.py` — **Single source of truth** for all default values (thresholds, frozen sets, timeouts, category lists). No env-var reads here; pure constants only.
+- `config_loader.py` — Reads env vars (via `os.environ` / `python-dotenv`) and merges them with defaults. This is the **only** module permitted to call `os.environ` directly. Domain modules must receive resolved config, not read env vars themselves.
+- `config.py` — Top-level config dataclass (or `RunConfig` if in `core/run_config.py`). Assembles config from `config_loader` and validates ranges. Exposes a single config object to the rest of the application.
+
+## Loading precedence
+
+1. `.env` file (loaded by `python-dotenv` at startup, lowest priority).
+2. Shell environment variables (override `.env`).
+3. CLI flags passed to `main.py` / `app_orchestrator.py` (highest priority).
+
+Never read env vars in `crawler/`, `pipeline/`, `analysis/`, `orchestration/`, or `reporter/`. Pass config through `RunConfig` or equivalent dataclass.
+
+## Env var naming conventions
+
+- All hype-frog env vars are prefixed `HF_` (e.g. `HF_EXPORT_HTML`, `HF_OUTPUT_FILENAME`).
+- Third-party API keys use the vendor's conventional name without a prefix (e.g. `PSI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`).
+- Boolean flags use `1` / `0` or unset (never `true`/`false`).
+- All env vars must be documented in `.env.example` with a comment block before merging.
+
+## config_defaults.py policy
+
+- All constants must have explicit types (`frozenset[str]`, `int`, `float`, etc.).
+- Do not store secrets, API keys, or user-specific paths in `config_defaults.py`.
+- When adding a new CMS action query param to `EXCLUDED_CMS_ACTION_QUERY_PARAMS`, add it to the frozenset and add a test in `tests/orchestration/test_cms_action_urls.py`.
+
+## config.py / RunConfig
+
+- All tunable crawl parameters must flow through `RunConfig` (or the equivalent config dataclass): `max_pages`, `max_depth`, `max_psi_urls`, concurrency limits, output paths, feature flags.
+- `RunConfig` is immutable after construction; do not add setters or allow mutation during a run.
+- Type-annotate all fields; validate ranges in `__post_init__` or equivalent (e.g. `max_pages > 0`).

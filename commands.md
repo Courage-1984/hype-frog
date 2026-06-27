@@ -157,18 +157,30 @@ git push -u origin main
 # Full gate before a long run (~8–15 min with pytest + live PSI probe)
 uv run hype-frog --full-smoke-test
 
-# Quick export path check (~1 min)
-uv run hype-frog --full-smoke-test-fast
 
-# Heavier scale (closer to your 264-URL runs)
-HF_FULL_SMOKE_URL_COUNT=120 uv run hype-frog --full-smoke-test-fast
+
+
+To build the exe
+
+uv sync --extra dev --extra semantic --extra render
+uv run python build_exe.py
+
+# One-time dist setup (from repo root)
+copy .env dist\
+copy secrets\client_secrets.json dist\
+copy secrets\token.json dist\
+mkdir dist\assets
+copy assets\client_logo.png dist\assets\   # optional branding
+
+cd dist
+./hype-frog.exe --install-playwright       # one-time Chromium download (~150 MB)
+./hype-frog.exe --validate                 # all checks should PASS
+./hype-frog.exe                            # interactive audit
+
 
 
 
 https://africanmarketingconfederation.org/page-sitemap.xml
 https://ticonafrica.org/page-sitemap.xml
 
-
-npm install -g @anthropic-ai/claude-code
-claude login
 

@@ -259,3 +259,8 @@ def test_jittered_seconds_stays_within_bounds() -> None:
 def test_jittered_seconds_never_negative() -> None:
     assert psi._jittered_seconds(0.0, 0.3) == 0.0
 
+
+def test_format_probe_transport_error_timeout_has_detail() -> None:
+    message = psi._format_probe_transport_error(TimeoutError(), timeout_seconds=45.0)
+    assert "TimeoutError" in message
+    assert "45" in message

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from openpyxl.comments import Comment
 from openpyxl.styles import Font, PatternFill
 from openpyxl.workbook.workbook import Workbook
@@ -10,10 +12,15 @@ from hype_frog.reporter.sheets.config import (
     CONTENT_OPTIMISATION_HUB_SHEET,
     CRAWL_LOG_SHEET,
     EXECUTIVE_DASHBOARD_SHEET,
+    RAG_AMBER,
+    RAG_GREEN,
+    RAG_RED,
+    RAG_RED_FONT,
     REDIRECT_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
 )
 from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
+from hype_frog.reporter.sheets.workbook_layout import apply_workbook_active_tab
 from hype_frog.reporter.sheets.layout import (
     CONTENT_HUB_HEADER_COMMENT_OG_IMAGE_PREVIEW,
     CONTENT_HUB_HEADER_COMMENT_SEO_SCORE,
@@ -83,11 +90,29 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     CRAWL_LOG_SHEET: (
         "Errors and warnings from fetch, render, PSI, and GSC phases for this audit run."
     ),
+    "Link Equity Map": (
+        "Internal PageRank distribution: inlink/outlink counts and equity flow per URL."
+    ),
+    "Anchor Text Audit": (
+        "Anchor-text profile per destination: distribution, generic-anchor share, and diversity."
+    ),
+    "Snippet Opportunities": (
+        "Pages with answer-block potential for featured snippets and AI answer extraction."
+    ),
+    "Script Inventory": (
+        "Third-party and first-party scripts per URL with blocking and privacy implications."
+    ),
+    "Image Inventory": (
+        "Every image with alt-text coverage, filename quality, dimensions, and mixed-content flags."
+    ),
     "Duplicates": "Near-duplicate titles and meta descriptions across the crawl set.",
     "Pattern and Template Issues": (
         "Folder-level clusters and template-wide systemic issue patterns."
     ),
-    "IssueInventory": "Flattened issue log with severity, owner seed, and stable IDs.",
+    "IssueInventory": (
+        "Legacy flattened issue log (superseded by Issue Register for client workflows). "
+        "Hidden from the Table of Contents; use Issue Register for backlog tracking."
+    ),
     "SitemapQA": "Sitemap coverage, URL membership checks, and sitemap metadata QA.",
     "Quick Reference Guide": "In-workbook SEO and AEO copy standards and guardrails.",
     "Glossary & Legend": "Definitions for metrics, badges, and workbook conventions.",
@@ -260,11 +285,11 @@ def apply_header_tooltips(worksheet: Worksheet, *, header_row: int = 1) -> None:
 
 
 _ACTION_REQUIRED_FILL = PatternFill(
-    start_color="FF0000",
-    end_color="FF0000",
+    start_color=RAG_RED,
+    end_color=RAG_RED,
     fill_type="solid",
 )
-_ACTION_REQUIRED_FONT = Font(bold=True, color="FFFFFF")
+_ACTION_REQUIRED_FONT = Font(bold=True, color=RAG_RED_FONT)
 
 
 def _action_header_map(ws: Worksheet, header_row: int = 1) -> dict[str, int]:
@@ -283,10 +308,10 @@ _ACTION_REQUIRED_ALLOWED: frozenset[str] = frozenset(
     {"Needs Copy", "Needs Optimisation", "Complete"}
 )
 _OPTIMISATION_FILL = PatternFill(
-    start_color="FFC000", end_color="FFC000", fill_type="solid"
+    start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid"
 )
 _COMPLETE_FILL = PatternFill(
-    start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"
+    start_color=RAG_GREEN, end_color=RAG_GREEN, fill_type="solid"
 )
 
 
@@ -331,6 +356,37 @@ def apply_action_required_guardrails(ws: Worksheet, *, header_row: int = 1) -> N
             cell.fill = _COMPLETE_FILL
 
 
+# Production TOC column A stores ``=HYPERLINK("#'Sheet'!A1","Sheet")``; legacy/test rows
+# may store the bare sheet name. Resolve the real sheet name from either form.
+_TOC_HYPERLINK_TARGET_RE = re.compile(
+    r"""HYPERLINK\(\s*"#'(?P<target>.+)'!A1"\s*,""", re.IGNORECASE
+)
+_TOC_HYPERLINK_DISPLAY_RE = re.compile(
+    r'HYPERLINK\([^,]*,\s*"(?P<display>.*)"\s*\)\s*$', re.IGNORECASE
+)
+
+
+def _toc_sheet_name_from_cell_value(value: object) -> str:
+    """Resolve the sheet name a TOC column-A cell points at.
+
+    Returns ``""`` for empty rows and merged section-label rows (which are not
+    HYPERLINK formulas and do not name a sheet).
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("="):
+        target = _TOC_HYPERLINK_TARGET_RE.search(raw)
+        if target:
+            # Excel escapes a single quote in a sheet name as ``''`` inside the target.
+            return target.group("target").replace("''", "'").strip()
+        display = _TOC_HYPERLINK_DISPLAY_RE.search(raw)
+        if display:
+            return display.group("display").strip()
+        return ""
+    return raw
+
+
 def refresh_toc_descriptions_dynamic(wb: Workbook) -> None:
     """Rewrite TOC column C using the canonical friendly description map."""
     if "Table of Contents" not in wb.sheetnames:
@@ -340,32 +396,37 @@ def refresh_toc_descriptions_dynamic(wb: Workbook) -> None:
     while row <= toc.max_row:
         name_cell = toc.cell(row=row, column=1)
         desc_cell = toc.cell(row=row, column=3)
-        sheet_name = name_cell.value
-        if not sheet_name:
-            row += 1
-            continue
-        name = str(sheet_name).strip()
-        if name not in wb.sheetnames:
+        name = _toc_sheet_name_from_cell_value(name_cell.value)
+        if not name or name not in wb.sheetnames:
             row += 1
             continue
         desc_cell.value = friendly_toc_description(name)
-        cur = str(desc_cell.value or "")
-        if _BANNED_TOC_FALLBACK.lower() in cur.lower():
-            desc_cell.value = friendly_toc_description(name)
         row += 1
+
+
+#: Sheets whose bespoke freeze contracts must survive the final C2 normalisation:
+#: the Table of Contents (``A3``), the Content Optimisation Hub (banner-aware freeze),
+#: and the Executive Dashboard (``A8`` above the chart band).
+FREEZE_C2_EXEMPT_SHEETS: frozenset[str] = frozenset(
+    {
+        "Table of Contents",
+        CONTENT_OPTIMISATION_HUB_SHEET,
+        EXECUTIVE_DASHBOARD_SHEET,
+    }
+)
 
 
 def apply_freeze_c2_data_sheets(
     wb: Workbook, *, skip_names: frozenset[str] | None = None
 ) -> None:
-    """``freeze_panes = 'C2'`` on every sheet except skips (default: TOC and Content Hub)."""
-    skip = skip_names or frozenset(
-        {
-            "Table of Contents",
-            CONTENT_OPTIMISATION_HUB_SHEET,
-            EXECUTIVE_DASHBOARD_SHEET,
-        }
-    )
+    """Normalise data-grid freezes to ``C2``; this is the **final** freeze authority.
+
+    Runs last in :func:`apply_workbook_export_guardrails`, so it deliberately wins over
+    earlier per-sheet freezes for ordinary data sheets (a single, predictable contract:
+    keep the URL/key column and header visible). Sheets with bespoke layouts are exempt
+    via :data:`FREEZE_C2_EXEMPT_SHEETS` and keep the freeze set during sheet assembly.
+    """
+    skip = skip_names or FREEZE_C2_EXEMPT_SHEETS
     for name in wb.sheetnames:
         if name in skip:
             continue
@@ -373,10 +434,12 @@ def apply_freeze_c2_data_sheets(
 
 
 def apply_workbook_export_guardrails(wb: Workbook) -> None:
-    """Apply Action Required styling, dynamic TOC blurbs, then C2 freezes."""
+    """Apply Action Required styling, dynamic TOC blurbs, C2 freezes, then landing tab."""
     for name in wb.sheetnames:
         if name == "Table of Contents":
             continue
         apply_action_required_guardrails(wb[name])
     refresh_toc_descriptions_dynamic(wb)
     apply_freeze_c2_data_sheets(wb)
+    # Last write wins: open the workbook on the Dashboard (TOC stays left-most).
+    apply_workbook_active_tab(wb)

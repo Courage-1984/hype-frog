@@ -113,6 +113,8 @@ def apply_workbook_toc_and_links(
             section_label=TOC_ADVANCED_SECTION_LABEL,
         )
         for sheet_name in ADVANCED_WORKBOOK_TAB_ORDER:
+            if sheet_name in SHEETS_EXCLUDED_FROM_TOC:
+                continue
             row_ptr = _append_toc_row(
                 toc_ws, wb_ref, row_ptr, sheet_name, std_blue_color=std_blue
             )

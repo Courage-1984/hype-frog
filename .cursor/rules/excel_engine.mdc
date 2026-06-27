@@ -1,7 +1,7 @@
 ---
 description: Excel workbook integrity, sanitization, ghost/nuclear view state, TOC, hub semantics, and reporter module ownership.
 globs: "src/hype_frog/reporter/**/*.py"
-alwaysApply: true
+alwaysApply: false
 ---
 
 Canonical narrative: [`docs/excel_reporting_standards.md`](../../docs/excel_reporting_standards.md). Keep rules and docs aligned when editing reporter code.
@@ -48,8 +48,10 @@ Do not inject **non-numeric strings** into columns governed by numeric condition
 
 ## Content Optimisation Hub — Action Required
 
-- Ready path: **`Ready to Publish`**. Blocked path: **`Needs Copy`**.
-- **Conditional formatting** must highlight **`Needs Copy`** in **red** (`CellIsRule` patterns in `src/hype_frog/reporter/sheets/conditional.py`). Do not rename literals without updating formulas and rules.
+- The **Action Required** column is **formula-driven** in `engine_rows.py`: `=IF(<On-Page Optimization Score> >= 85, "Complete", "Needs Copy")`. So the live ready literal is **`Complete`** (score ≥ 85) and the blocked literal is **`Needs Copy`** (score < 85).
+- **Allowed literal set** (`engine_guardrails._ACTION_REQUIRED_ALLOWED`): **`Complete`**, **`Needs Copy`**, **`Needs Optimisation`**. `engine_guardrails.apply_action_required_guardrails` normalises legacy/free-text values (e.g. `Ready to Publish`, `completed` → `Complete`; `Needs Optimization` → `Needs Optimisation`; unknown text → `Needs Copy`) and **skips the `Content Optimisation Hub` sheet**, which relies on the conditional rules below instead.
+- **Conditional formatting** (`reporter/sheets/conditional.py` `apply_content_hub_conditional_rules`) highlights **`Needs Copy`** in **red** (white bold), **`Needs Optimisation`** in amber, and **`Complete`** / `Ready to Publish` in green via `CellIsRule`. Do not rename literals without updating both the formula and the format rules.
+- **Status** is a separate workflow column (data-validation list `To Do, In Progress, Review, Completed`); Dashboard completion metrics count `Status == Completed`, not Action Required.
 - Do not pass **`None`** to action columns where populated text is required for formatting.
 
 ## Reporter module ownership
@@ -59,6 +61,14 @@ Do not inject **non-numeric strings** into columns governed by numeric condition
 - `engine_io.py` — workbook-safe I/O, sanitization, row-writing bridges.
 - `engine_rows.py` — report-row assembly and domain-specific shaping.
 - `excel_engine.py` — compatibility facade / re-export, not the behaviour monolith.
+- `narrative_engine.py` — generates natural-language insight copy for sheet cells. Read-only consumer of row dicts; no workbook writes.
+- `summary_builder.py` — aggregates cross-sheet summary statistics consumed by the Dashboard and Executive Dashboard. No workbook writes.
+- `dashboard_logic.py` — computes Dashboard KPI values and chart data from assembled rows. No workbook writes; callers in `sheets/dashboard.py` own actual worksheet writes.
+- `chart_compat.py` — openpyxl chart compatibility shims. Isolated here so chart-specific workarounds do not leak into other writers.
+- `workbook_audit.py` — post-write audit pass that validates workbook state (TOC alignment, sheet name collisions, formula integrity). **Read-only** against the workbook — must not modify cells; raise or log issues only.
+- `pdf_exporter.py` — generates a PDF executive report when `HF_EXPORT_PDF=1`. Generation is **non-fatal**: failures log at `WARNING` and do not block xlsx or HTML delivery. See PDF env vars below.
+- `help_layer.py` — injects tooltip / comment overlays into sheets. Runs after all data writes; never writes data cells.
+- `sheets/config.py` — sheet-level constants (column widths, row heights, colour palettes) shared across sheet builders. No logic.
 
 ## New sheets
 
@@ -70,7 +80,38 @@ Dedup key: `(Source URL, Target URL, Anchor Text)` in `build_link_inventory_rows
 
 ## Main sheet conditional formatting
 
-`apply_main_sheet_heatmaps` in `conditional.py` — colour scales on health/PSI/Lighthouse/AEO columns; respect `HF_DISABLE_CONDITIONAL_FORMATTING`.
+`apply_main_sheet_heatmaps` in `conditional.py` — 0–100 colour scales on `SEO Health Score`, `Mobile/Desktop PSI Score`, Lighthouse category scores and `AEO Readiness Score`; inverted scale on `Lab LCP (Mobile) (s)`; 0/5/10 scale on `E-E-A-T Signal Score`; a `Word Count (Body)` data bar; and `CellIsRule` fills (e.g. `Status Code` ≥ 400 red). Respect `HF_DISABLE_CONDITIONAL_FORMATTING`.
+
+## HTML executive report modules
+
+Modules under `reporter/` for the white-label HTML executive report:
+
+- `html_report_data.py` — HTML report data aggregation; read-only consumer of pipeline row dicts. Produces a `ReportContext` dataclass.
+- `html_report_renderer.py` — HTML template rendering; pure string transformation, no I/O.
+- `html_report_writer.py` — HTML file I/O; writes rendered HTML to disk.
+
+Triggered by `HF_EXPORT_HTML=1`. Generation is **non-fatal** — failures log at `WARNING` and do not block xlsx delivery.
+
+**HTML report env vars** (all optional):
+- `HF_EXPORT_HTML=1` — enable HTML report generation.
+- `HF_REPORT_PREPARED_BY` — preparer name shown in report header.
+- `HF_REPORT_CLIENT_NAME` — client name shown in report header and footer.
+- `HF_REPORT_LOGO_PATH` — path to logo image embedded as base64 in the HTML.
+- `HF_REPORT_BRAND_COLOUR` — hex colour for primary brand elements (default `#1e293b`).
+- `HF_REPORT_ACCENT_COLOUR` — hex colour for accent/CTA elements (default `#2563eb`).
+
+## PDF executive report
+
+Triggered by `HF_EXPORT_PDF=1`. Generation is **non-fatal** — failures log at `WARNING` and do not block xlsx or HTML delivery.
+
+**PDF env vars** (all optional):
+- `HF_EXPORT_PDF=1` — enable PDF report generation.
+- `HF_PDF_CLIENT_NAME` — client name shown in report.
+- `HF_PDF_LOGO_PATH` — path to logo image.
+- `HF_PDF_PREPARED_BY` — preparer name.
+- `HF_PDF_BRAND_COLOUR` — hex colour for primary brand elements (default `#1e293b`).
+
+All env vars above must be documented in `.env.example` whenever they change.
 
 ## Duplicate column prevention
 

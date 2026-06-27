@@ -13,7 +13,7 @@ def _resolve_crawl_engine(raw: str) -> str:
     if choice == "2":
         return "accurate"
     if choice:
-        logger.info("> Invalid input, defaulting to Precise (Javascript Rendering).")
+        logger.warning("Invalid input; defaulting to Precise (Javascript Rendering).")
     return "accurate"
 
 

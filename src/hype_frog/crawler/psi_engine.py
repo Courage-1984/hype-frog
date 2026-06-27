@@ -97,8 +97,8 @@ class _BatchAbortState:
 
 
 def _project_root() -> Path:
-    # psi_engine.py -> crawler -> hype_frog -> src -> repo root
-    return Path(__file__).resolve().parents[3]
+    from hype_frog.config import PROJECT_ROOT  # lazy import avoids circular at module level
+    return PROJECT_ROOT
 
 
 def _cache_db_path() -> Path:
@@ -1155,10 +1155,21 @@ async def fetch_psi_metrics_batch(
     return results
 
 
+def _format_probe_transport_error(exc: BaseException, *, timeout_seconds: float) -> str:
+    """Human-readable transport error (``TimeoutError`` often has an empty ``str()``)."""
+    name = type(exc).__name__
+    detail = str(exc).strip()
+    if detail:
+        return f"{name}: {detail}"
+    if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
+        return f"{name} (no response within {timeout_seconds:.0f}s)"
+    return name
+
+
 async def probe_psi_api_key(
     test_url: str = "https://example.com",
     *,
-    timeout_seconds: float = 90.0,
+    timeout_seconds: float = 45.0,
 ) -> tuple[bool, str, dict[str, Any] | None]:
     """Verify ``PSI_API_KEY`` with a single mobile Lighthouse request.
 
@@ -1249,8 +1260,6 @@ async def probe_psi_api_key(
                     f"PSI request failed with HTTP {response.status}. {error_message or 'No error detail returned.'}",
                     details,
                 )
-    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
-        detail = str(exc).strip() or type(exc).__name__
-        if isinstance(exc, TimeoutError):
-            detail = f"request timed out after {timeout_seconds:.0f}s"
-        return False, f"PSI request failed: {detail}", details
+    except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError) as exc:
+        transport = _format_probe_transport_error(exc, timeout_seconds=timeout_seconds)
+        return False, f"PSI request failed: {transport}", details

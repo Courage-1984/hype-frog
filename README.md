@@ -9,6 +9,7 @@ Concurrent **Python 3.12** pipeline for large-scale URL crawling, structured ext
 - Ingests a single URL or a sitemap document, deduplicates and optionally caps URL volume.
 - Crawls with configurable concurrency and delay profiles; discovers internal links in **breadth-first** order subject to depth and deduplication caps.
 - Produces a multi-sheet **audit workbook** (primary inventory, merged diagnostics, optional full suite) with sanitization and governed view state to reduce client corruption risk.
+- Generates a **white-label HTML executive report** alongside the xlsx — self-contained, printable to PDF, configurable branding (`HF_EXPORT_HTML=1`).
 - Supports checkpointed runs for long crawls and optional comparison against a prior workbook.
 - Optional PSI lab + CrUX field data, GSC Search Analytics and URL Inspection, schema validation, E-E-A-T signals, content similarity, third-party script inventory, snippet opportunities, and competitor benchmarking.
 
@@ -82,7 +83,8 @@ playwright install chromium
 - **PSI:** set `PSI_API_KEY` in `.env` when you want PageSpeed Insights lab data. The key must belong to a Google Cloud project with the PageSpeed Insights API enabled.
 - **GSC:** the app uses the **OAuth desktop** flow via `secrets/client_secrets.json` and `secrets/token.json` (see `.env.example`). Run `uv run hype-frog --gsc-auth` once per machine to create or refresh `secrets/token.json`. Legacy fallbacks: the same filenames under `src/hype_frog/` or the repo root. The signed-in user needs Search Console access to a property that matches the crawl target; the code requests read-only scope `https://www.googleapis.com/auth/webmasters.readonly`.
 - **Optional flags:** `--check-og-images`, `--check-images`, `--gsc-url-inspection`, `--gsc-url-inspection-full`, `--competitors`, `--benchmarks`, `--previous-run`, `--streaming`, `--max-memory-mb`, `--export-pdf`, `--psi-delay` (see `uv run hype-frog --help`).
-- **Environment:** `HF_COMPETITORS`, `HF_STREAMING`, `HF_MAX_MEMORY_MB`, `GSC_URL_INSPECTION`, `CHECK_CONTENT_IMAGES`, `CHECK_OG_IMAGES`, `HF_EXPORT_PDF`, `HF_OUTPUT_FILENAME`, `HF_MAX_DEPTH`.
+- **Environment:** `HF_COMPETITORS`, `HF_STREAMING`, `HF_MAX_MEMORY_MB`, `GSC_URL_INSPECTION`, `CHECK_CONTENT_IMAGES`, `CHECK_OG_IMAGES`, `HF_EXPORT_PDF`, `HF_EXPORT_HTML`, `HF_OUTPUT_FILENAME`, `HF_MAX_DEPTH`, `HF_FULL_SMOKE_URL_COUNT`.
+- **HTML/PDF report branding (optional):** `HF_REPORT_PREPARED_BY`, `HF_REPORT_CLIENT_NAME`, `HF_REPORT_LOGO_PATH`, `HF_REPORT_BRAND_COLOUR`, `HF_REPORT_ACCENT_COLOUR` (HTML); `HF_PDF_CLIENT_NAME`, `HF_PDF_PREPARED_BY`, `HF_PDF_LOGO_PATH`, `HF_PDF_BRAND_COLOUR` (PDF). See `.env.example`.
 - Interactive runs prompt for crawl profile, suite mode, checkpoint interval, and optional previous workbook path.
 
 ## Running

@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+from hype_frog.reporter.sheets.config import (
+    RAG_AMBER,
+    RAG_AMBER_SOFT,
+    RAG_GREEN,
+    RAG_RED,
+    RAG_RED_SOFT,
+)
 from hype_frog.reporter.sheets.validation import format_help_layer
 
 LIGHT_HEADER_COLOR = "E5E7EB"
 TABLE_HEADER_COLOR = "ADD8E6"
 VALUE_BLOCK_COLOR = "DCE3EA"
 PANEL_BG_COLOR = "F5F7FA"
-GOOD_COLOR = "C6EFCE"
-WARN_COLOR = "FFEB9C"
-ALERT_COLOR = "FFC7CE"
-SOFT_ALERT_COLOR = "FFC1C1"
-SOFT_WARN_COLOR = "FFCC99"
+# RAG fills resolve to the canonical palette in sheets/config.py (single source of truth).
+GOOD_COLOR = RAG_GREEN
+WARN_COLOR = RAG_AMBER
+ALERT_COLOR = RAG_RED
+SOFT_ALERT_COLOR = RAG_RED_SOFT
+SOFT_WARN_COLOR = RAG_AMBER_SOFT
 
 DASHBOARD_COLUMN_WIDTHS: dict[str, int] = {
     "A": 35,
