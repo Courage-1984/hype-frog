@@ -184,3 +184,25 @@ https://africanmarketingconfederation.org/page-sitemap.xml
 https://ticonafrica.org/page-sitemap.xml
 
 
+
+
+# 1. Safety backup of your current work
+git branch backup-local-main
+
+# 2. Optional: save what's on GitHub before overwriting it
+git branch backup-remote-main origin/main
+
+# 3. Push your local main (safer than --force)
+git push --force-with-lease origin main
+
+
+
+
+
+uv tool install git-filter-repo
+
+
+git filter-repo --path build/ --path .cache/ --invert-paths --force
+
+git remote add origin https://github.com/Courage-1984/hype-frog.git
+
