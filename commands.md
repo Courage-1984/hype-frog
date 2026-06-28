@@ -150,6 +150,17 @@ Writes `reports/matrix_test/matrix_*.xlsx` + `matrix_audit_summary.json`.
 
 ---
 
+## Delta / previous run comparison
+
+```powershell
+uv run hype-frog --previous-run reports/latest/audit_20240601.xlsx
+uv run hype-frog --previous-run reports/latest/audit_20240601_delta_summary.json
+```
+
+Populates `DeltaFromPreviousRun` and `ResolvedIssues` sheets with new/resolved issue rows, KPI deltas, and up to three SEO Health trend points per URL. Each full-suite run auto-writes `{basename}_delta_summary.json` for use as the next run's `--previous-run` input.
+
+---
+
 ## Nuclear reset (local env artefacts)
 
 **PowerShell:**
@@ -166,93 +177,34 @@ rm -rf .venv .pytest_cache .ruff_cache uv.lock test_dashboard_fix.xlsx
 
 Then re-run **Fresh clone / full toolchain** above.
 
----
+Delete PSI/crawl caches (required after breaking cache schema changes):
 
-## Git: re-sync index with `.gitignore` (use with care)
-
-```bash
-git rm -r --cached .
-git add .
-git commit -m "Cleanup: Untrack files listed in .gitignore"
-git push -u origin main
+```powershell
+Remove-Item -Recurse -Force .cache\ -ErrorAction SilentlyContinue
 ```
 
 ---
 
-## Still TODO
+## Build the exe (distribution)
 
-| # | Item | Notes |
-|---|------|--------|
-| 13 | D2 — LLM as post-crawl pass | Cost and reliability improvement |
-
-
-
-
-
-# Full gate before a long run (~8–15 min with pytest + live PSI probe)
-uv run hype-frog --full-smoke-test
-
-
-
-
-To build the exe
-
+```powershell
 uv sync --extra dev --extra semantic --extra render
 uv run python build_exe.py
+```
 
-# One-time dist setup (from repo root)
+One-time dist setup (from repo root):
+
+```powershell
 copy .env dist\
 copy secrets\client_secrets.json dist\
 copy secrets\token.json dist\
 mkdir dist\assets
 copy assets\client_logo.png dist\assets\   # optional branding
+```
 
+```powershell
 cd dist
-./hype-frog.exe --install-playwright       # one-time Chromium download (~150 MB)
-./hype-frog.exe --validate                 # all checks should PASS
-./hype-frog.exe                            # interactive audit
-
-
-
-
-https://africanmarketingconfederation.org/page-sitemap.xml
-https://ticonafrica.org/page-sitemap.xml
-
-
-
-
-# 1. Safety backup of your current work
-git branch backup-local-main
-
-# 2. Optional: save what's on GitHub before overwriting it
-git branch backup-remote-main origin/main
-
-# 3. Push your local main (safer than --force)
-git push --force-with-lease origin main
-
-
-
-
-
-uv tool install git-filter-repo
-
-
-git filter-repo --path build/ --path .cache/ --invert-paths --force
-
-git remote add origin https://github.com/Courage-1984/hype-frog.git
-
-
-
-git fetch origin
-
-git push --force-with-lease origin main
-
-
-git push --force origin main
-
-
-
-uv run hype-frog --quick-test
-uv run hype-frog --full-smoke-test
-
-
+.\hype-frog.exe --install-playwright   # one-time Chromium download (~150 MB)
+.\hype-frog.exe --validate             # all checks should PASS
+.\hype-frog.exe                        # interactive audit
+```

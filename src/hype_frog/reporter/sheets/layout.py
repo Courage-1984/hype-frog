@@ -6,8 +6,11 @@ from typing import Any
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
+from hype_frog.core import get_logger
 from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 from hype_frog.reporter.sheets.style_helpers import header_index, to_int
+
+logger = get_logger(__name__)
 
 # Canonical Performance / CWV column order (LI-HF-PSI-P0 Part 3).
 PERFORMANCE_CWV_GROUP_COLUMNS: tuple[str, ...] = (
@@ -774,9 +777,13 @@ def apply_column_widths(worksheet: Worksheet) -> None:
                 cell_str = str(cell.value)
                 if len(cell_str) > max_length:
                     max_length = len(cell_str)
-            except Exception:
-                pass
-        worksheet.column_dimensions[column_letter].width = min(max_length + 2, 60)
+            except Exception as exc:
+                logger.debug(
+                    "Auto-fit skipped cell %s!%s: %s",
+                    worksheet.title,
+                    cell.coordinate,
+                    exc,
+                )
     headers = header_index(worksheet)
     for header_name, width in {
         "URL": 45,

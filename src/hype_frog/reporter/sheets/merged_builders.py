@@ -7,6 +7,9 @@ from typing import Any
 from hype_frog.crawler.redirect_chain import RedirectHopRecord, build_redirect_map_row
 from hype_frog.config import get_quick_wins_max_effort_hours, get_quick_wins_max_results
 from hype_frog.analysis.delta_engine import IssueRecord, days_between
+from hype_frog.core import get_logger
+
+logger = get_logger(__name__)
 
 TECHNICAL_DIAGNOSTICS_LIGHTHOUSE_COLUMNS: tuple[str, ...] = (
     "CrUX Level",
@@ -149,6 +152,7 @@ LINK_INTELLIGENCE_COLUMNS: tuple[str, ...] = (
     "Internal Link Statuses",
     "Actionable Fixes",
     "Source Legacy Tab",
+    "Broken Links (computed)",
 )
 
 # Strict seven-column client export (no sparse ``Column_N`` headers); rows built in
@@ -600,7 +604,7 @@ def build_issue_register_rows(
                 "Sprint": "",
                 "Status": "Open",
                 "Affected URLs Sample": _to_str(row.get("Affected URLs (sample)")),
-                "Source Legacy Tab": "Summary",
+                "Source Legacy Tab": "Summary (site-wide — no single URL; sort by URL to separate from per-URL issues)",
                 "Source Row ID": idx,
                 **history,
             }
@@ -727,6 +731,7 @@ def build_link_intelligence_rows(
                     else ""
                 ),
                 "Source Legacy Tab": "Links",
+                "Broken Links (computed)": broken_ct,
             }
         )
 
@@ -976,7 +981,13 @@ def build_quick_wins_rows(
             try:
                 if not rule_fn(row):
                     continue
-            except Exception:
+            except Exception as exc:
+                logger.debug(
+                    "Issue rule %s skipped for URL %s: %s",
+                    rule_name,
+                    url,
+                    exc,
+                )
                 continue
             if (url, rule_name) in seen:
                 continue
@@ -984,10 +995,16 @@ def build_quick_wins_rows(
 
             clicks = float(row.get("GSC Clicks") or 0)
             risk = float(row.get("Business Risk Score") or 0)
-            if clicks == 0 and risk <= 100:
+            if clicks == 0 and risk <= 0:
                 continue
 
-            composite = (clicks * (risk / 100) + risk) / max(hours, 0.5)
+            _sev_weights = {"Critical": 100, "Warning": 50, "Observation": 10}
+            sev_weight = _sev_weights.get(str(severity or ""), 10)
+            composite = (
+                (sev_weight * (1.0 / max(hours, 0.5)))
+                + (clicks / 10.0)
+                + (risk / 100.0)
+            )
             rows.append(
                 {
                     "Priority Score": round(composite, 1),
@@ -1001,7 +1018,12 @@ def build_quick_wins_rows(
                     "Recommended Fix": fp.get("Recommended Fix", ""),
                     "Sprint": fp.get("Aging/Priority", ""),
                     "Revenue Risk": fp.get("Revenue Risk", ""),
-                    "Jump to FixPlan": fp.get("Jump to Details", ""),
+                    "Jump to FixPlan": (
+                        "=IFERROR(HYPERLINK(\"#'FixPlan'!A\"&MATCH(\""
+                        + str(rule_name).replace('"', '""')
+                        + "\",'FixPlan'!B:B,0),\"Open in FixPlan\"),"
+                        "HYPERLINK(\"#'FixPlan'!A1\",\"Open in FixPlan\"))"
+                    ),
                 }
             )
 

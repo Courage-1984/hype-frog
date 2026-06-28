@@ -665,6 +665,38 @@ def owner_for_issue(issue_name: str, severity: str | None = None) -> str:
         "Mixed Content",
         "Missing FAQ/QA Schema",
         "Uses URL Parameters",
+        # Redirect issues
+        "302 Redirect (Temporary)",
+        "Mixed 301/302 Chain",
+        "Redirect Loop",
+        "Canonical Chain (>1 hop)",
+        "Canonical Loop",
+        "Canonical Points to Broken URL",
+        "Canonical Points to Redirect",
+        # Core Web Vitals / Lab performance
+        "CWV LCP Above 4.0s (Field Data)",
+        "CWV CLS Above 0.1 (Field Data)",
+        "CWV INP Above 200ms (Field Data)",
+        "Lab LCP Above 4.0s (Mobile)",
+        "Lab LCP 2.5s–4.0s (Mobile)",
+        "Lab TBT Above 300ms (Mobile)",
+        "Lab TBT 150ms–300ms (Mobile)",
+        "Lab CLS Above 0.1 (Mobile)",
+        # Lighthouse / page quality
+        "Low Lighthouse Performance Mobile (<50)",
+        "Low Lighthouse Accessibility (<80)",
+        "Low Lighthouse Best Practices (<80)",
+        "Moderate Lighthouse Performance Mobile (50–89)",
+        # Page weight / scripts
+        "High Third-Party Script Count (>10)",
+        "Third-Party Scripts Blocking Render",
+        "Large Page Size (>1MB)",
+        "Large DOM Size (>1500 nodes)",
+        "High JS Execution Time (>2000ms)",
+        "Render Blocking Resources",
+        # Origin CrUX (site-level)
+        "Origin CrUX LCP Above 4.0s (per-URL data unavailable — re-run with PSI key for URL-level data)",
+        "Origin CrUX INP Above 200ms (per-URL data unavailable)",
     }
     server_host_issues = {
         "Non-200 Status",
@@ -672,6 +704,7 @@ def owner_for_issue(issue_name: str, severity: str | None = None) -> str:
         "No Compression Header",
         "No Cache-Control Header",
         "No ETag Header",
+        "Lab TTFB Above 600ms",
     }
 
     if issue in copy_writer_issues:
@@ -681,6 +714,59 @@ def owner_for_issue(issue_name: str, severity: str | None = None) -> str:
     if issue in dev_issues:
         return "Dev"
     return DEFAULT_OWNER_BY_SEVERITY.get(str(severity or ""), "Dev")
+
+
+def effort_for_issue(issue_name: str, severity: str, affected_count: int = 0) -> str:
+    """Return effort band S/M/L based on issue class rather than severity alone."""
+    _config_fixes = {
+        "Non-200 Status", "Robots.txt Disallow Root", "302 Redirect (Temporary)",
+        "Mixed 301/302 Chain", "No Compression Header", "No Cache-Control Header",
+        "No ETag Header", "Redirect Chains", "Canonical Missing",
+        "Canonical Points Elsewhere", "Canonical Loop", "Canonical Chain (>1 hop)",
+    }
+    _performance_fixes = {
+        "CWV LCP Above 4.0s (Field Data)", "CWV CLS Above 0.1 (Field Data)",
+        "CWV INP Above 200ms (Field Data)", "Lab LCP Above 4.0s (Mobile)",
+        "Lab LCP 2.5s–4.0s (Mobile)", "Lab TBT Above 300ms (Mobile)",
+        "Lab TBT 150ms–300ms (Mobile)", "Lab CLS Above 0.1 (Mobile)",
+        "Low Lighthouse Performance Mobile (<50)", "Low Lighthouse Accessibility (<80)",
+        "Low Lighthouse Best Practices (<80)", "Moderate Lighthouse Performance Mobile (50–89)",
+        "High Third-Party Script Count (>10)", "Third-Party Scripts Blocking Render",
+        "Large DOM Size (>1500 nodes)", "High JS Execution Time (>2000ms)",
+        "Render Blocking Resources",
+        "Origin CrUX LCP Above 4.0s (per-URL data unavailable — re-run with PSI key for URL-level data)",
+        "Origin CrUX INP Above 200ms (per-URL data unavailable)",
+    }
+    _schema_fixes = {
+        "Missing FAQ/QA Schema", "No Schema Markup", "Schema Parse Error",
+        "Schema Validation Errors", "Missing Event Schema", "Missing Article Schema",
+    }
+    _large_page_issues = {
+        "Large Page Size (>1MB)",
+    }
+    _per_page_content = {
+        "Missing Title", "Missing Meta Description", "Missing H1",
+        "No 40-60 Word Answer Paragraphs", "No Question Headings",
+        "Thin Content", "Thin Content (<200 words)", "Low AEO Readiness Score",
+        "Low Image Alt Coverage", "Missing OG Title", "Missing OG Description",
+        "Missing OG Image", "No Answer-Friendly Structure",
+    }
+
+    if issue_name in _config_fixes:
+        return "S"
+    if issue_name in _performance_fixes:
+        return "M"
+    if issue_name in _schema_fixes:
+        return "M"
+    if issue_name in _large_page_issues:
+        return "M"
+    if issue_name in _per_page_content:
+        if affected_count > 50:
+            return "L"
+        if affected_count > 10:
+            return "M"
+        return "S"
+    return DEFAULT_EFFORT_BY_SEVERITY.get(severity, "S")
 
 
 def workflow_metrics_for_issue(severity: str, effort: str | None = None) -> dict[str, Any]:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from typing import Any
-from urllib.parse import urlparse
 
 import aiohttp
 
@@ -22,6 +21,7 @@ logger = get_logger(__name__)
 
 IMAGE_INVENTORY_COLUMNS: tuple[str, ...] = (
     "Image URL",
+    "Image Category",
     "Status Code",
     "Size (KB)",
     "Width",
@@ -29,10 +29,43 @@ IMAGE_INVENTORY_COLUMNS: tuple[str, ...] = (
     "Is Broken",
     "Is Oversized",
     "Alt Text",
+    "Alt Source",
     "File Extension",
     "Found On Pages",
     "Found On Pages (first 5)",
 )
+
+_TRACKING_PIXEL_PATTERNS: tuple[str, ...] = (
+    "facebook.com/tr",
+    "google-analytics.com",
+    "doubleclick.net",
+    "googletagmanager.com",
+    "pixel.twitter.com",
+    "analytics.twitter.com",
+    "bat.bing.com",
+    "snap.licdn.com",
+    "px.ads.linkedin.com",
+    "ct.pinterest.com",
+    "tiktok.com/i18n/pixel",
+)
+
+_AVATAR_PATTERNS: tuple[str, ...] = (
+    "gravatar.com",
+    "avatars.githubusercontent.com",
+    "secure.gravatar.com",
+)
+
+
+def _image_category(url: str) -> str:
+    lower = url.lower()
+    if any(p in lower for p in _TRACKING_PIXEL_PATTERNS):
+        return "Tracking"
+    if any(p in lower for p in _AVATAR_PATTERNS):
+        return "Avatar"
+    ext = image_extension(url)
+    if ext in {"ico", "svg"}:
+        return "Icon"
+    return "Content"
 
 
 def _normalise_images(raw: object) -> list[dict[str, str]]:
@@ -198,20 +231,29 @@ def build_image_inventory_rows(
         pages = sorted(data.get("pages") or [])
         ext = image_extension(url)
         status = probe.get("status_code")
+        category = _image_category(url)
+        alt_text = data.get("alt") or ""
+        alt_source = "HTML attribute" if alt_text else "None"
         rows.append(
             {
                 "Image URL": url,
+                "Image Category": category,
                 "Status Code": status if status is not None else "",
                 "Size (KB)": probe.get("size_kb"),
                 "Width": probe.get("width"),
                 "Height": probe.get("height"),
                 "Is Broken": bool(probe.get("broken")),
                 "Is Oversized": bool(probe.get("oversized")),
-                "Alt Text": data.get("alt") or "",
+                "Alt Text": alt_text,
+                "Alt Source": alt_source,
                 "File Extension": ext,
                 "Found On Pages": len(pages),
                 "Found On Pages (first 5)": " | ".join(pages[:5]),
             }
         )
-    rows.sort(key=lambda item: (-int(item.get("Found On Pages") or 0), str(item["Image URL"])))
+    rows.sort(key=lambda item: (
+        item.get("Image Category") == "Tracking",
+        -int(item.get("Found On Pages") or 0),
+        str(item["Image URL"]),
+    ))
     return rows

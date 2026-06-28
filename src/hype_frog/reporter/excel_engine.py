@@ -22,10 +22,6 @@ from hype_frog.reporter.engine_guardrails import (
     refresh_toc_descriptions_dynamic,
 )
 from hype_frog.reporter.engine_io import (
-    _normalize_url_for_match,
-    _safe_sheet_name,
-    _sanitize_excel_url,
-    _sanitize_excel_value,
     build_core_dataframes,
     load_cached_rows,
     write_cached_sheet_chunked,

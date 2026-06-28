@@ -75,6 +75,11 @@ def get_hf_output_filename() -> str | None:
     return _env_str("HF_OUTPUT_FILENAME") or None
 
 
+def get_hf_test_sitemap_url(default: str) -> str:
+    """Override the sitemap URL used by --quick-test / --full-smoke-test."""
+    return _env_str("HF_TEST_SITEMAP_URL") or default
+
+
 def get_hf_full_smoke_url_count(default: int) -> int:
     raw = _env_str("HF_FULL_SMOKE_URL_COUNT")
     if not raw:
@@ -216,3 +221,8 @@ def get_playwright_browsers_path() -> str | None:
 
 def get_local_app_data() -> str | None:
     return os.environ.get("LOCALAPPDATA")
+
+
+def set_playwright_browsers_path(path: str) -> None:
+    """Set PLAYWRIGHT_BROWSERS_PATH — the only permitted env write outside config_loader."""
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = path

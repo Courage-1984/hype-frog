@@ -6,7 +6,9 @@ from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.worksheet import Worksheet
 
+from hype_frog.core import get_logger
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload, SummaryMetricsPayload
+from hype_frog.core.numeric_utils import safe_float
 from hype_frog.reporter.dashboard_logic import (
     FixPlanRowPayload,
     compute_dashboard_metrics,
@@ -55,6 +57,8 @@ from hype_frog.pipeline.broken_links import (
 from hype_frog.reporter.sheets.conditional import (
     apply_dashboard_metric_conditional_rules,
 )
+
+logger = get_logger(__name__)
 
 # Technical Diagnostics URL denominators: see ``_technical_url_row_denominator``.
 _MAIN_DYNAMIC_COLUMN = (
@@ -127,18 +131,12 @@ def _technical_url_row_denominator() -> str:
     return f"MAX(1,COUNTA({_technical_diagnostics_data_column('URL')}))"
 
 
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value or default)
-    except (TypeError, ValueError):
-        return default
-
-
 def _technical_sheet_rows(writer: Any) -> list[dict[str, Any]]:
     """Return data rows from Technical Diagnostics (preferred) or legacy Technical sheet."""
     try:
         names = list(writer.book.sheetnames)
-    except Exception:
+    except Exception as exc:
+        logger.debug("Could not list workbook sheets for dashboard feed: %s", exc)
         return []
     for sheet_title in _TECHNICAL_SOURCE_SHEET_NAMES:
         if sheet_title in names:
@@ -232,27 +230,31 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         )
         try:
             pass_rate_pct = float(pass_raw or 0.0)
-        except Exception:
+        except Exception as exc:
+            logger.debug("Could not parse SEO pass rate %r: %s", pass_raw, exc)
             pass_rate_pct = 0.0
         seo_pass_rate_from_run = pass_rate_pct
         try:
             if "Health Score %" in metric_to_value:
                 health_from_feed = float(metric_to_value.get("Health Score %") or 0.0)
-        except Exception:
+        except Exception as exc:
+            logger.debug("Could not parse Health Score %% feed: %s", exc)
             health_from_feed = None
         try:
             if "Projected Health Score %" in metric_to_value:
                 projected_health_from_feed = float(
                     metric_to_value.get("Projected Health Score %") or 0.0
                 )
-        except Exception:
+        except Exception as exc:
+            logger.debug("Could not parse Projected Health Score %% feed: %s", exc)
             projected_health_from_feed = None
         try:
             if "Projected Pass Rate %" in metric_to_value:
                 projected_pass_from_feed = float(
                     metric_to_value.get("Projected Pass Rate %") or 0.0
                 )
-        except Exception:
+        except Exception as exc:
+            logger.debug("Could not parse Projected Pass Rate %% feed: %s", exc)
             projected_pass_from_feed = None
 
         title = worksheet["A1"]
@@ -506,8 +508,8 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
 
     summary_metrics = SummaryMetricsPayload(
         urls_crawled=max(0, total_urls),
-        seo_pass_rate_pct=max(0.0, min(100.0, _safe_float(seo_pass_rate_from_run, 0.0))),
-        health_score_pct=max(0.0, min(100.0, _safe_float(health_from_feed, 0.0))),
+        seo_pass_rate_pct=max(0.0, min(100.0, safe_float(seo_pass_rate_from_run, 0.0))),
+        health_score_pct=max(0.0, min(100.0, safe_float(health_from_feed, 0.0))),
         critical_url_count=max(0, to_int(metric_to_value.get("Critical URL Count"), 0))
         if metric_col and value_col
         else 0,
@@ -515,10 +517,10 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         if metric_col and value_col
         else 0,
         projected_health_score_pct=max(
-            0.0, min(100.0, _safe_float(projected_health_from_feed, 0.0))
+            0.0, min(100.0, safe_float(projected_health_from_feed, 0.0))
         ),
         projected_pass_rate_pct=max(
-            0.0, min(100.0, _safe_float(projected_pass_from_feed, 0.0))
+            0.0, min(100.0, safe_float(projected_pass_from_feed, 0.0))
         ),
     )
 

@@ -7,7 +7,7 @@ from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
-from hype_frog.core.url_normalization import normalize_url
+from hype_frog.core.url_normalization import normalize_url_key
 from hype_frog.reporter.engine_rows import content_hub_column_letter
 from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 from hype_frog.reporter.sheets.layout import main_sheet_url_column_letter
@@ -55,10 +55,6 @@ def _reference_tab_jump_formula(ref_letter: str, url_letter: str, row: int) -> s
         f'MATCH({url_letter}{row},INDIRECT("\'"&{q}&"\'!A:A"),0),"Open"),'
         f'HYPERLINK("#\'"&{q}&"\'!A1","Open"))'
     )
-
-
-def normalize_url_key(url: object, keep_query: bool = True) -> str:
-    return normalize_url(url, keep_query=keep_query)
 
 
 def is_safe_hyperlink_target(

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from typing import Any
+
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.views import Selection
 
+from hype_frog.core import get_logger
 from hype_frog.reporter.engine_guardrails import friendly_toc_description
 from hype_frog.reporter.sheets.config import (
     AIOSEO_RECOMMENDATIONS_SHEET,
@@ -12,8 +15,6 @@ from hype_frog.reporter.sheets.config import (
     EXECUTIVE_DASHBOARD_SHEET,
     REDIRECT_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
-    STD_NAVY,
-    STD_WHITE,
 )
 from hype_frog.reporter.sheets.workbook_layout import (
     ADVANCED_WORKBOOK_TAB_ORDER,
@@ -34,9 +35,11 @@ __all__ = [
 
 _PREFERRED_TAB_SET = frozenset(PREFERRED_WORKBOOK_TAB_ORDER)
 
+logger = get_logger(__name__)
+
 
 def apply_workbook_toc_and_links(
-    writer,
+    writer: Any,
     *,
     debug_excel_isolation_mode: bool,
     disable_non_core_freeze_panes: bool,
@@ -47,8 +50,8 @@ def apply_workbook_toc_and_links(
     def _clear_orphaned_selection(ws) -> None:
         try:
             ws.views.sheetView[0].selection = []
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Could not clear orphaned selection on %s: %s", ws.title, exc)
 
     def _set_freeze_panes_safe(ws, value: str | None) -> None:
         view = ws.views.sheetView[0]

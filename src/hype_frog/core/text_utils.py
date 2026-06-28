@@ -6,16 +6,19 @@ from urllib.parse import urlparse
 
 
 def normalize_text_hash(value: str | None) -> str:
+    """Collapse whitespace and lowercase for stable deduplication keys."""
     return re.sub(r"\s+", " ", (value or "").strip().lower())
 
 
 def status_class(status_code: object) -> str:
+    """Return HTTP status family string (e.g. 200 → '2xx', 404 → '4xx')."""
     if isinstance(status_code, int):
         return f"{status_code // 100}xx"
     return str(status_code)
 
 
 def word_count_band(count: int) -> str:
+    """Bucket a word count into 'Thin' / 'OK' / 'Strong' content tiers."""
     if count < 300:
         return "Thin"
     if count < 800:
@@ -24,6 +27,7 @@ def word_count_band(count: int) -> str:
 
 
 def image_extension(src_url: str) -> str:
+    """Extract the normalised image format from a URL path (e.g. 'webp', 'jpg', 'other')."""
     path = urlparse(src_url).path.lower()
     for ext in [".webp", ".avif", ".jpg", ".jpeg", ".png", ".gif", ".svg"]:
         if path.endswith(ext):

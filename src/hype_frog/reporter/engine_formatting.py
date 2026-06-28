@@ -5,6 +5,7 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
+from hype_frog.core import get_logger
 from hype_frog.reporter.sheets.config import (
     CONTENT_OPTIMISATION_HUB_SHEET,
     DATA_BAR_BLUE,
@@ -14,6 +15,8 @@ from hype_frog.reporter.sheets.config import (
     RAG_GREEN,
     RAG_RED,
 )
+
+logger = get_logger(__name__)
 
 
 def apply_fixplan_workflow_formatting(worksheet: Worksheet) -> None:
@@ -37,9 +40,12 @@ def apply_fixplan_workflow_formatting(worksheet: Worksheet) -> None:
                     cell.fill = warning_fill
                 else:
                     cell.fill = edge_fill
-            except Exception:
-                pass
-        if points_col:
+            except Exception as exc:
+                logger.debug(
+                    "FixPlan priority score formatting skipped at row %s: %s",
+                    row_idx,
+                    exc,
+                )
             cell = worksheet.cell(row=row_idx, column=points_col)
             try:
                 points = int(cell.value or 0)
@@ -49,8 +55,12 @@ def apply_fixplan_workflow_formatting(worksheet: Worksheet) -> None:
                     cell.fill = warning_fill
                 else:
                     cell.fill = good_fill
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(
+                    "FixPlan sprint points formatting skipped at row %s: %s",
+                    row_idx,
+                    exc,
+                )
         if aging_col:
             cell = worksheet.cell(row=row_idx, column=aging_col)
             value = str(cell.value or "").lower()
@@ -89,8 +99,8 @@ def ensure_auto_filter(worksheet: Worksheet) -> None:
 def _clear_orphaned_selection(worksheet: Worksheet) -> None:
     try:
         worksheet.views.sheetView[0].selection = []
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Could not clear worksheet selection for %s: %s", worksheet.title, exc)
 
 
 def ensure_freeze_header(worksheet: Worksheet) -> None:

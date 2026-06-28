@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from hype_frog.core.url_normalization import normalize_url as normalize_url_key
+from hype_frog.core.url_normalization import normalize_url_key
 
 GSC_INSPECTION_LIMIT_DEFAULT = 50
 

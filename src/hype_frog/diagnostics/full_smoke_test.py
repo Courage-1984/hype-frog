@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import subprocess
 import time
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Literal
 
 from rich.table import Table

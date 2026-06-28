@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from hype_frog.analysis.delta_engine import (
+from hype_frog.analysis.delta_engine import (  # noqa: F401 — re-exported public API
     BASELINE_DELTA_NOTE,
     IssueRecord,
     RunSnapshot,
@@ -22,7 +22,7 @@ from hype_frog.core.models import ExtraRowPayload
 from hype_frog.core.status_codes import is_success_status
 from hype_frog.rules import IssueRule
 from hype_frog.core.text_utils import normalize_text_hash
-from hype_frog.core.url_normalization import normalize_url
+from hype_frog.core.url_normalization import normalize_url_key
 from hype_frog.orchestration.crawl_runner import (
     ExcludedCmsActionUrl,
     cms_action_exclusion_keys,
@@ -59,10 +59,6 @@ from hype_frog.reporter.sheets.merged_builders import (
     TECHNICAL_DIAGNOSTICS_COLUMNS,
     TEMPLATE_DUPLICATION_RISKS_COLUMNS,
 )
-
-def normalize_url_key(url: object, keep_query: bool = True) -> str:
-    return normalize_url(url, keep_query=keep_query)
-
 
 @dataclass(frozen=True)
 class ExportRegistryConfig:
@@ -512,7 +508,6 @@ def build_delta_and_trend_rows(
             issue_inventory_df=issue_inventory_df,
             main_rows=main_rows or [],
             extra_rows=extra_rows or [],
-            typed_extra_rows=typed_extra_rows,
             summary_rules=summary_rules,
             previous_snapshot=previous_snapshot,
             baseline_report=baseline_report,
@@ -681,6 +676,7 @@ def build_sitemapqa_rows(
         "Discovery Source": "",
         "In Sitemap but Non-200": "",
         "Sitemap URL Redirects": "",
+        "Redirect Type": "",
         "In Sitemap but Canonicalized Elsewhere": "",
         "Missing <lastmod>": "",
         "Missing <changefreq>": "",
@@ -737,6 +733,7 @@ def build_sitemapqa_rows(
                 "Discovery Source": "Sitemap",
                 "In Sitemap but Non-200": "",
                 "Sitemap URL Redirects": "",
+                "Redirect Type": "",
                 "In Sitemap but Canonicalized Elsewhere": "",
                 "Missing <lastmod>": "",
                 "Missing <changefreq>": "",
@@ -778,6 +775,7 @@ def build_sitemapqa_rows(
                 "Sitemap URL Redirects": (
                     matched.get("Redirect Chain Length", 0) > 0 if matched else None
                 ),
+                "Redirect Type": matched.get("Redirect SEO Risk") if matched else None,
                 "In Sitemap but Canonicalized Elsewhere": (
                     matched.get("Canonical Type") == "cross-canonical" if matched else None
                 ),
@@ -819,6 +817,7 @@ def build_sitemapqa_rows(
                 "Discovery Source": "Crawl",
                 "In Sitemap but Non-200": False,
                 "Sitemap URL Redirects": row.get("Redirect Chain Length", 0) > 0,
+                "Redirect Type": row.get("Redirect SEO Risk"),
                 "In Sitemap but Canonicalized Elsewhere": (
                     row.get("Canonical Type") == "cross-canonical"
                 ),

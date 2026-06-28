@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from hype_frog.core.env_vars import get_hf_gsc_url_inspection
 from hype_frog.core.run_config import RunConfig, quick_test_run_config
+from hype_frog.core.cli import UserConfig
 from hype_frog.orchestration import run_setup
 from hype_frog.orchestration.run_setup import (
     _parse_competitor_domains,
@@ -77,21 +78,25 @@ def test_resolve_run_setup_preset_carries_competitors() -> None:
     assert setup.full_suite_preset is False
 
 
+def _interactive_user_config() -> UserConfig:
+    return UserConfig(
+        target_input="https://interactive.test/",
+        max_urls=20,
+        max_psi_urls=3,
+        high_value_slugs=["pricing"],
+        crawl_mode="fast",
+        render_wait_ms=4000,
+        selector_wait_ms=3000,
+        check_external_link_status=True,
+        check_og_images=False,
+    )
+
+
 def test_resolve_run_setup_interactive_reads_env(monkeypatch) -> None:
     monkeypatch.setattr(
         run_setup,
         "get_user_config",
-        lambda: (
-            "https://interactive.test/",
-            20,
-            3,
-            ["pricing"],
-            "fast",
-            4000,
-            3000,
-            True,
-            False,
-        ),
+        _interactive_user_config,
     )
     monkeypatch.setenv("CHECK_OG_IMAGES", "1")
     monkeypatch.setenv("HF_STREAMING", "yes")
@@ -109,3 +114,37 @@ def test_resolve_run_setup_interactive_reads_env(monkeypatch) -> None:
     assert setup.competitor_domains == ("rival.com",)
     assert setup.resume_checkpoint_mode == "prompt"
     assert setup.workers_preset is None
+
+
+def test_resolve_run_setup_cli_overrides_take_priority(monkeypatch) -> None:
+    monkeypatch.setattr(
+        run_setup,
+        "get_user_config",
+        _interactive_user_config,
+    )
+    monkeypatch.delenv("CHECK_OG_IMAGES", raising=False)
+    monkeypatch.delenv("HF_STREAMING", raising=False)
+    monkeypatch.delenv("HF_COMPETITORS", raising=False)
+
+    from hype_frog.core.run_config import CliRunOverrides
+
+    setup = resolve_run_setup(
+        None,
+        cli_overrides=CliRunOverrides(
+            competitors="rival.com,other.org",
+            export_pdf=True,
+            check_og_images=True,
+            streaming=True,
+            previous_run="/tmp/prior.xlsx",
+            gsc_url_inspection="limited",
+            max_memory_mb=1024,
+        ),
+    )
+
+    assert setup.competitor_domains == ("rival.com", "other.org")
+    assert setup.export_pdf is True
+    assert setup.check_og_images is True
+    assert setup.streaming is True
+    assert setup.previous_audit_path_preset == "/tmp/prior.xlsx"
+    assert setup.gsc_url_inspection == "limited"
+    assert setup.max_memory_mb == 1024

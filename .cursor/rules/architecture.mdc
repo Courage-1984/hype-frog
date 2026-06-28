@@ -12,12 +12,12 @@ alwaysApply: true
 Preserve separation. All paths below are relative to `src/hype_frog/`. Dependency direction: **core** and **config** are foundations; **crawler** and **extractors** consume them; **validators** and **analysis** enrich row dicts; **orchestration** drives the crawl loop and export sequence; **pipeline** assembles rows and scoring glue; **rules** encodes scoring and issue logic; **reporter** builds workbook/HTML/PDF output; **checkpoint** persists resume state.
 
 - `config.py` / `config_defaults.py` / `config_loader.py` — Runtime configuration, env-var resolution, default constants (frozen sets, thresholds). Single source of truth for all tunable values. See `.cursor/rules/config.mdc`.
-- `core/` — Logging (`logger.py`), CLI helpers (`cli.py`), URL normalization, Pydantic contracts (`models.py`), run config (`run_config.py`), status codes, memory guard, crawl log, text/file utils shared across all layers.
-- `crawler/` — HTTP sessions, fetching, optional rendered capture, sitemap, PSI (`psi_engine.py`), GSC (`gsc_engine.py`) integrations, redirect chains, robots mapping, data assembly (`data_assembler.py`). See `.cursor/rules/crawler_engine.mdc`.
+- `core/` — Logging (`logger.py`), CLI helpers (`cli.py`), URL normalization, Pydantic contracts (`models.py`), run config (`run_config.py`), status codes, memory guard, crawl log, text/file utils shared across all layers. Also: `env_vars.py` (the single module permitted to read `os.environ` directly for HF_* and third-party API keys) and `discovery_order.py` (URL discovery ranking by BFS/sitemap sequence).
+- `crawler/` — HTTP sessions, fetching, optional rendered capture, sitemap, PSI (`psi_engine.py` entry point + `psi_batch.py` async batch fetching + `psi_cache.py` SQLite TTL cache + `psi_merge.py` payload parsing), GSC (`gsc_engine.py`) integrations, redirect chains, robots mapping, data assembly (`data_assembler.py`, `data_assembler_phases.py`). See `.cursor/rules/crawler_engine.mdc`.
 - `extractors/` — HTML and metadata parsing (page, schema, eeat, og_social, freshness, semantic engine); no direct workbook writing.
 - `validators/` — JSON-LD schema validation (`schema_validator.py`).
-- `analysis/` — Post-crawl domain passes (canonical/hreflang chains, link equity, third-party scripts, snippets, topical authority, content similarity, competitor benchmarks, delta engine, content hub recommendations). See `.cursor/rules/analysis.mdc`.
-- `orchestration/` — Drives the BFS crawl loop (`crawl_runner.py`), batched enrichment (`enrichment_flow.py`), export sequencing (`export_flow.py`), run setup (`run_setup.py`), and export registry (`export_registry.py`). See `.cursor/rules/orchestration.mdc`.
+- `analysis/` — Post-crawl domain passes (canonical/hreflang chains, link equity, third-party scripts, snippets, topical authority, content similarity, competitor benchmarks, delta engine `delta_engine.py`, delta loader `delta_loader.py`, delta models `delta_models.py`, delta sheet builder `delta_sheet_builder.py`, content hub recommendations). See `.cursor/rules/analysis.mdc`.
+- `orchestration/` — Drives the BFS crawl loop (`crawl_runner.py` → `crawl_runner_bfs.py` core loop, `crawl_runner_frontier.py` URL eligibility, `crawl_runner_interactive.py` runtime prompts), batched enrichment (`enrichment_flow.py`), export sequencing (`export_flow.py`, `export_executive_reports.py`), workbook assembly (`export_workbook.py`, `export_row_builders.py`, `export_workbook_constants.py`), run setup (`run_setup.py`), and export registry (`export_registry.py`). See `.cursor/rules/orchestration.mdc`.
 - `pipeline/` — Row assembly (`assemble.py`), sanitization helpers, scoring glue, graph engine, GSC coverage/inspection, image inventory, broken links, OG image validation, content duplicates/clusters/hubs.
 - `rules/` — `IssueRule` definitions, scoring, stable identifiers, playbook entries. See `.cursor/rules/rules_engine.mdc`.
 - `reporter/` — Spreadsheet construction, tabs, conditional formats, navigation, view state, HTML report, PDF export. See `.cursor/rules/excel_engine.mdc`.
@@ -82,7 +82,7 @@ Treat pipeline row dictionaries (including **`main_data` / main row keys**) as *
 
 All env vars for hype-frog are documented in `.env.example`. When adding a new runtime knob:
 1. Add the var to `.env.example` with a comment block explaining its purpose, accepted values, and defaults.
-2. Wire it through `config_loader.py` / `config_defaults.py` — never read `os.environ` directly in domain modules.
+2. Add the accessor to `core/env_vars.py` — the **only** module permitted to call `os.environ` directly; wire the value through `config_loader.py` / `config_defaults.py` into the rest of the application.
 3. Update `docs/system_architecture.md` if the var affects pipeline behaviour.
 
 See `.cursor/rules/config.mdc` for naming conventions and loading precedence.

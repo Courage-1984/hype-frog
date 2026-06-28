@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from datetime import date
 from typing import Any
 
-from hype_frog.core.url_normalization import normalize_url as normalize_url_key
+from hype_frog.core.url_normalization import normalize_url_key
 
 _LOW_IMPRESSIONS_CTR_THRESHOLD = 10
 

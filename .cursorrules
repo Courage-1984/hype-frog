@@ -4,12 +4,12 @@
 
 1. **Architecture ownership is strict.**
 
-* **Foundations:** `src/hype_frog/core/` and shared `config`.
-* **Engines:** `src/hype_frog/crawler/`, `src/hype_frog/pipeline/`, `src/hype_frog/reporter/`.
-* **Domain analysis:** `src/hype_frog/analysis/` (post-crawl enrichments: hreflang, equity, snippets, etc.).
+* **Foundations:** `src/hype_frog/core/` (including `env_vars.py` for centralised env-var access and `discovery_order.py` for URL ranking) and shared `config`.
+* **Engines:** `src/hype_frog/crawler/` (including `psi_batch.py`, `psi_cache.py`, `psi_merge.py` for PSI split, and `data_assembler_phases.py`), `src/hype_frog/pipeline/`, `src/hype_frog/reporter/`.
+* **Domain analysis:** `src/hype_frog/analysis/` (post-crawl enrichments: hreflang, equity, snippets, delta comparison via `delta_loader.py`, `delta_models.py`, `delta_sheet_builder.py`, etc.).
 * **Validation:** `src/hype_frog/validators/` (schema validation; no workbook I/O).
 * **Rules:** `src/hype_frog/rules/` (`IssueRule` registry and playbook metadata).
-* **Flows:** `src/hype_frog/orchestration/`.
+* **Flows:** `src/hype_frog/orchestration/` (BFS loop split: `crawl_runner_bfs.py`, `crawl_runner_frontier.py`, `crawl_runner_interactive.py`; export split: `export_executive_reports.py`, `export_workbook.py`, `export_row_builders.py`, `export_workbook_constants.py`).
 * Keep logic in owning layer; do not collapse modules into new junk-drawer helpers.
 
 2. **Typed chain-of-trust is mandatory.**
@@ -53,12 +53,12 @@
 * User-facing copy and workbook text use British English.
 * **Continuous documentation sync:** Whenever architecture, contracts, crawl/AEO/ROI behaviour, or reporting invariants change, update the matching canonical file immediately. Ensure README, `docs/*.md`, and `.cursor/rules/*.mdc` remain in sync.
 
-9. **Consolidated layout (Strict 10-file cap).**
+9. **Consolidated layout.**
 
 * **`./docs/`** (Exactly 3): `system_architecture.md`, `data_contracts.md`, `excel_reporting_standards.md`.
-* **`.cursor/rules/`** (Exactly 4): `architecture.mdc`, `auto_documentation.mdc`, `crawler_engine.mdc`, `excel_engine.mdc`.
+* **`.cursor/rules/`** (Exactly 8): `architecture.mdc`, `auto_documentation.mdc`, `crawler_engine.mdc`, `excel_engine.mdc`, `analysis.mdc`, `orchestration.mdc`, `rules_engine.mdc`, `config.mdc`.
 * **Roots:** `README.md`, `.cursorrules`.
-* **Excluded from cap:** operational logs (`AUDIT_FIX_LOG.md`), backlog prompts, `reports/` output — not governance canon.
+* **Excluded from cap:** operational logs, backlog prompts, `reports/` output — not governance canon.
 
 10. **Advanced Tooling (MCP Integration).**
 

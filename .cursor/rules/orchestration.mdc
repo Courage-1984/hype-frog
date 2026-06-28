@@ -14,15 +14,22 @@ Canonical narrative: [`docs/system_architecture.md`](../../docs/system_architect
 
 ## Module ownership
 
-- `crawl_runner.py` — BFS crawl loop, concurrency scheduling, CMS action URL filtering, checkpoint integration.
-- `enrichment_flow.py` — Batched PSI and GSC enrichment after the crawl phase; dispatches to `crawler/psi_engine.py` and `crawler/gsc_engine.py`.
-- `export_flow.py` — Sequencing of xlsx, HTML, and PDF export; calls into `reporter/`; non-fatal on individual export failures.
+- `crawl_runner.py` — BFS crawl loop entry point; delegates to split modules below.
+- `crawl_runner_bfs.py` — Core BFS loop: checkpoint resume, memory-guard enforcement, Rich progress bars, semantic intent enrichment, `CrawlExecutionResult` dataclass. Calls `apply_search_intent()` with fallback to `"Unknown"`.
+- `crawl_runner_frontier.py` — URL eligibility: `candidate_internal_links()`, `_NON_HTML_PATH_EXTENSIONS` frozenset (60+ file types), `ExcludedCmsActionUrl` dataclass, `cms_action_exclusion_keys()`, `normalize_url_key()`.
+- `crawl_runner_interactive.py` — Runtime prompts: `CrawlRuntimeOptions` dataclass (`workers`, `request_delay`, `full_suite`, `previous_audit_path`, `checkpoint_every`), `prompt_crawl_options_sync()` with three crawl safety profiles (Gentle / Balanced / Faster).
+- `enrichment_flow.py` — Batched PSI and GSC enrichment after the crawl phase; dispatches to `crawler/psi_engine.py` (and its batch/cache/merge split) and `crawler/gsc_engine.py`.
+- `export_flow.py` — Sequencing of xlsx, HTML, and PDF export; calls into `reporter/` and `export_executive_reports.py`; non-fatal on individual export failures.
+- `export_executive_reports.py` — Non-fatal HTML and PDF report generation; builds shared `ReportContext` once; passes to both HTML and PDF renderers with consistent branding.
+- `export_workbook.py` — `build_standard_sheets()` drives all 20+ tab builders and integrates delta engine (`snapshot_from_current_run()`, `build_delta_workbook_output()`).
+- `export_row_builders.py` — Sheet-specific row builders: `build_aeo_rows()`, `build_aioseo_rows()`, pattern rows, template risk rows.
+- `export_workbook_constants.py` — `PLAYBOOK_LEGEND_ROWS` and `PLAYBOOK_QUICK_REFERENCE_ROWS` constant tables.
 - `export_registry.py` — Registry of named export artefacts produced during a run; used for delta comparison and run history.
 - `run_setup.py` — Initialises run context (config validation, output path resolution, logging bootstrap) before the crawl starts.
 
 ## CMS action URL filtering
 
-`crawl_runner.py` enforces `config_defaults.EXCLUDED_CMS_ACTION_QUERY_PARAMS` to drop WooCommerce/CMS action URLs from the BFS queue and internal-link discovery. Extend the frozenset in `config_defaults.py` when new CMS action patterns appear — do not hard-code patterns in `crawl_runner.py`.
+`crawl_runner_frontier.py` enforces `config_defaults.EXCLUDED_CMS_ACTION_QUERY_PARAMS` to drop WooCommerce/CMS action URLs from the BFS queue and internal-link discovery. Extend the frozenset in `config_defaults.py` when new CMS action patterns appear — do not hard-code patterns in the frontier module.
 
 ## BFS budget
 

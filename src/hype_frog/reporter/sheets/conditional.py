@@ -15,6 +15,7 @@ from openpyxl.formatting.rule import (
     FormulaRule,
 )
 
+from hype_frog.core import get_logger
 from hype_frog.reporter.engine_formatting import apply_global_conditional_formatting
 from hype_frog.reporter.sheets.config import (
     CONTENT_HUB_FREEZE_PANES,
@@ -35,16 +36,16 @@ from hype_frog.reporter.sheets.config import (
     RAG_RED,
     RAG_RED_FONT,
     STD_NAVY,
-    STD_WHITE,
 )
 from hype_frog.reporter.sheets.layout import CONTENT_HUB_ROW2_HEADER_COMMENTS
 from hype_frog.reporter.sheets.links import (
     is_safe_hyperlink_target,
-    normalize_url_for_match,
     sanitize_excel_url,
 )
 from hype_frog.reporter.sheets.style_helpers import header_index
 from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
+
+logger = get_logger(__name__)
 
 
 def apply_wrapped_row_heights(worksheet: Worksheet) -> None:
@@ -119,7 +120,7 @@ def apply_sheet_text_wrap_columns(worksheet: Worksheet, sheet_name: str) -> None
         for _name, col_idx in headers.items():
             if _name not in _hub_wrap and "proposed" not in str(_name).lower():
                 continue
-            for row_idx in range(3, worksheet.max_row + 1):
+            for row_idx in range(4, worksheet.max_row + 1):
                 cell = worksheet.cell(row=row_idx, column=col_idx)
                 prev = cell.alignment
                 cell.alignment = Alignment(
@@ -261,8 +262,15 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
                         row_has_issue = True
                     else:
                         cell.fill = warn_fill
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug(
+                        "Percent CF skipped at %s!%s (%s=%r): %s",
+                        worksheet.title,
+                        cell.coordinate,
+                        h,
+                        val,
+                        exc,
+                    )
             if h in {"Status Code", "Target Status (if crawled)"} and isinstance(
                 val, int
             ):
@@ -296,8 +304,15 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
                         row_has_issue = True
                     else:
                         cell.fill = good_fill
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug(
+                        "Count CF skipped at %s!%s (%s=%r): %s",
+                        worksheet.title,
+                        cell.coordinate,
+                        h,
+                        val,
+                        exc,
+                    )
             if h in {"Word Count Band"} and isinstance(val, str):
                 band = val.lower()
                 if band == "thin":
@@ -336,8 +351,15 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
                         row_has_issue = True
                     else:
                         cell.fill = good_fill
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug(
+                        "Score CF skipped at %s!%s (%s=%r): %s",
+                        worksheet.title,
+                        cell.coordinate,
+                        h,
+                        val,
+                        exc,
+                    )
             if h == "Status" and isinstance(val, str):
                 st = val.strip().lower()
                 if st in {"to do", "todo", "open"}:
@@ -429,7 +451,10 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
         if cell.value
     }
     status_col = headers.get("Status")
-    start_row = 3
+    # Row 1 = banner (inserted above), row 2 = headers, row 3 = scope-note row
+    # (merged across all columns by the exporter before this function runs).
+    # Actual data starts at row 4.
+    start_row = 4
     end_row = worksheet.max_row
 
     if status_col and not DISABLE_DATA_VALIDATION and end_row >= start_row:

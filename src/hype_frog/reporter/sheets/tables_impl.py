@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -317,7 +319,7 @@ def _link_hub_scores_from_main(worksheet: Worksheet) -> None:
             )
 
 
-def adjust_sheet_format(writer, sheet_name):
+def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
     worksheet = writer.sheets[sheet_name]
     if sheet_name == EXECUTIVE_DASHBOARD_SHEET:
         set_freeze_panes_safe(worksheet, "A8")
@@ -452,7 +454,7 @@ def adjust_sheet_format(writer, sheet_name):
     audit_freeze_merge_conflicts(worksheet)
 
 
-def apply_tab_hyperlinks(writer):
+def apply_tab_hyperlinks(writer: Any) -> None:
     apply_workbook_toc_and_links(
         writer,
         debug_excel_isolation_mode=DEBUG_EXCEL_ISOLATION_MODE,

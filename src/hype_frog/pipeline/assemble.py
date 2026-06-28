@@ -18,13 +18,12 @@ from hype_frog.pipeline.content_cluster import compute_content_cluster_id
 from hype_frog.pipeline.enrich import value_or_default
 from hype_frog.pipeline.graph_engine import CLICK_DEPTH_UNREACHABLE, build_inlinks_map
 from hype_frog.rules import (
-    get_summary_rules,
     owner_for_issue,
     score_url_health,
     stable_issue_id,
 )
 from hype_frog.core.text_utils import normalize_text_hash, to_bool
-from hype_frog.core.url_normalization import normalize_url
+from hype_frog.core.url_normalization import normalize_url_key
 
 TOP8_MAIN_MERGE_KEYS: tuple[str, ...] = (
     "Schema Present",
@@ -173,10 +172,6 @@ A6_MAIN_MERGE_KEYS: tuple[str, ...] = (
     "Hreflang Reciprocal Status",
     "Hreflang Code Valid",
 )
-
-
-def normalize_url_key(url: object, keep_query: bool = True) -> str:
-    return normalize_url(url, keep_query=keep_query)
 
 
 def _psi_lighthouse_projection(psi: Mapping[str, Any]) -> dict[str, object]:

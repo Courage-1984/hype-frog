@@ -15,7 +15,7 @@ from hype_frog.core.env_vars import (
     get_hf_max_memory_mb,
     get_hf_streaming,
 )
-from hype_frog.core.run_config import ResumeCheckpointMode, RunConfig
+from hype_frog.core.run_config import CliRunOverrides, ResumeCheckpointMode, RunConfig
 
 logger = get_logger(__name__)
 
@@ -55,9 +55,14 @@ class RunSetup:
     max_memory_mb: int | None = None
     streaming: bool = False
     competitor_domains: tuple[str, ...] = ()
+    output_filename: str | None = None
+    export_pdf: bool = False
 
 
-def resolve_run_setup(run: RunConfig | None) -> RunSetup:
+def resolve_run_setup(
+    run: RunConfig | None,
+    cli_overrides: CliRunOverrides | None = None,
+) -> RunSetup:
     """Resolve startup configuration for interactive and preset runs."""
     configure_logging()
     load_dotenv()
@@ -86,44 +91,65 @@ def resolve_run_setup(run: RunConfig | None) -> RunSetup:
             max_memory_mb=run.max_memory_mb,
             streaming=run.streaming,
             competitor_domains=tuple(run.competitor_domains),
+            output_filename=run.output_filename,
+            export_pdf=run.export_pdf,
         )
 
-    (
-        target_input,
-        max_urls,
-        max_psi_urls,
-        high_value_slugs,
-        crawl_mode,
-        render_wait_ms,
-        selector_wait_ms,
-        check_external_link_status,
-        check_og_images,
-    ) = get_user_config()
+    user = get_user_config()
+    check_og_images = user.check_og_images
     if not check_og_images:
         check_og_images = get_check_og_images()
     check_content_images = get_check_content_images()
+    gsc_url_inspection = get_hf_gsc_url_inspection()
+    max_memory_mb = _resolve_max_memory_mb()
+    streaming = get_hf_streaming()
+    competitor_domains = _resolve_competitor_domains_env()
+    previous_audit_path_preset: str | None = None
+    export_pdf = False
+
+    if cli_overrides is not None:
+        if cli_overrides.check_og_images:
+            check_og_images = True
+        if cli_overrides.check_content_images:
+            check_content_images = True
+        if cli_overrides.previous_run:
+            previous_audit_path_preset = cli_overrides.previous_run
+        if cli_overrides.gsc_url_inspection:
+            gsc_url_inspection = cli_overrides.gsc_url_inspection
+        if cli_overrides.max_memory_mb is not None and cli_overrides.max_memory_mb > 0:
+            max_memory_mb = cli_overrides.max_memory_mb
+        if cli_overrides.streaming:
+            streaming = True
+        if cli_overrides.export_pdf:
+            export_pdf = True
+        if cli_overrides.competitors is not None:
+            competitor_domains = _parse_competitor_domains(cli_overrides.competitors)
+        elif cli_overrides.benchmarks:
+            competitor_domains = ()
+
     return RunSetup(
-        target_input=target_input,
-        max_urls=max_urls,
-        max_psi_urls=max_psi_urls,
-        high_value_slugs=high_value_slugs,
-        crawl_mode=crawl_mode,
-        render_wait_ms=render_wait_ms,
-        selector_wait_ms=selector_wait_ms,
+        target_input=user.target_input,
+        max_urls=user.max_urls,
+        max_psi_urls=user.max_psi_urls,
+        high_value_slugs=user.high_value_slugs,
+        crawl_mode=user.crawl_mode,
+        render_wait_ms=user.render_wait_ms,
+        selector_wait_ms=user.selector_wait_ms,
         workers_preset=None,
         request_delay_preset=None,
         full_suite_preset=None,
-        previous_audit_path_preset=None,
+        previous_audit_path_preset=previous_audit_path_preset,
         checkpoint_every_preset=None,
         resume_checkpoint_mode="prompt",
-        check_external_link_status=check_external_link_status,
+        check_external_link_status=user.check_external_link_status,
         check_og_images=check_og_images,
         check_content_images=check_content_images,
         bfs_max_depth=None,
-        gsc_url_inspection=get_hf_gsc_url_inspection(),
-        max_memory_mb=_resolve_max_memory_mb(),
-        streaming=get_hf_streaming(),
-        competitor_domains=_resolve_competitor_domains_env(),
+        gsc_url_inspection=gsc_url_inspection,
+        max_memory_mb=max_memory_mb,
+        streaming=streaming,
+        competitor_domains=competitor_domains,
+        export_pdf=export_pdf,
     )
 
 

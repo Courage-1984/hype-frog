@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from openpyxl.comments import Comment
-from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.reporter.sheets.validation import (

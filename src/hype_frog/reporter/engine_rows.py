@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -8,7 +7,9 @@ from urllib.parse import urlparse
 from openpyxl.utils import get_column_letter
 
 from hype_frog.checkpoint.cache import AuditCache
+from hype_frog.core import get_logger
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
+from hype_frog.core.numeric_utils import round2, round4
 from hype_frog.core.scoring import calculate_executive_roi
 from hype_frog.pipeline.content_hub_metrics import resolve_content_hub_metrics
 from hype_frog.analysis.content_hub_recommendations import (
@@ -25,46 +26,23 @@ from hype_frog.reporter.engine_io import (
     _safe_sheet_name,
     _sanitize_excel_url,
 )
-from hype_frog.rules import IssueRule, owner_for_issue, workflow_metrics_for_issue
+from hype_frog.rules import IssueRule, owner_for_issue, workflow_metrics_for_issue, effort_for_issue
 from hype_frog.reporter.sheets.layout import (
     content_optimisation_hub_ordered_headers,
     main_sheet_url_column_letter,
 )
 from hype_frog.reporter.summary_builder import reference_tab_for_merged_workbook
 
+logger = get_logger(__name__)
+
 
 def _hub_score_value(raw: object) -> float:
     """Normalize numeric SEO / Technical / Copy scores for Content Hub export."""
-    if raw is None or raw == "":
-        return 0.0
-    try:
-        x = float(raw)
-    except (TypeError, ValueError):
-        return 0.0
-    if math.isnan(x) or math.isinf(x):
-        return 0.0
-    return round(x, 2)
+    return round2(raw, 0.0)
 
 
-def _round2(raw: object, default: float = 0.0) -> float:
-    try:
-        val = float(raw)
-    except (TypeError, ValueError):
-        return default
-    if math.isnan(val) or math.isinf(val):
-        return default
-    return round(val, 2)
-
-
-def _round4(raw: object, default: float = 0.0) -> float:
-    try:
-        val = float(raw)
-    except (TypeError, ValueError):
-        return default
-    if math.isnan(val) or math.isinf(val):
-        return default
-    return round(val, 4)
-
+_round2 = round2
+_round4 = round4
 
 _HUB_INVISIBLE_CHARS_RE = re.compile(r"[\u200b-\u200d\ufeff]")
 
@@ -269,7 +247,7 @@ def build_fixplan_rows(
         if affected_count <= 0:
             continue
         root_cause, recommended_fix = root_cause_resolver(issue_name)
-        effort = default_effort_by_severity.get(severity, "S")
+        effort = effort_for_issue(issue_name, severity, affected_count)
         workflow = workflow_metrics_for_issue(severity, effort)
         legacy_reference = (
             "Indexability"
@@ -323,6 +301,11 @@ def build_fixplan_rows(
             "Likely Root Cause": root_cause,
             "Recommended Fix": recommended_fix,
             "Owner": owner_for_issue(issue_name, severity),
+            "Agency Owner": {
+                "Dev": "Agency Dev",
+                "Copy Writer": "Agency SEO",
+                "Server/Host": "Agency Dev",
+            }.get(owner_for_issue(issue_name, severity), "Agency Dev"),
             "URL": affected[0].values.get("URL") if affected else "",
             "Affected URLs": (
                 f"SEE DETAILS IN {reference_tab}"
@@ -342,7 +325,6 @@ def build_fixplan_rows(
                 if severity == "Critical" and workflow["Priority Score"] >= 100
                 else "Medium Risk" if severity == "Warning" else "Monitor"
             ),
-            "Agency Owner": owner_for_issue(issue_name, severity),
             "Jump to Details": "Open in Main Tab",
             "Est. Sprint Points": workflow["Est. Sprint Points"],
             "Est. Hours": workflow["Est. Hours"],
@@ -567,7 +549,8 @@ def build_content_optimisation_hub_rows(
                 continue
             try:
                 score = float(row_values.get("SEO Health Score") or 0.0)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Could not parse SEO Health Score for %s: %s", raw_url, exc)
                 score = 0.0
             scored_urls.append((round(score, 2), raw_url))
         scored_urls.sort(key=lambda item: item[0])
@@ -614,7 +597,8 @@ def build_content_optimisation_hub_rows(
         post_id = e.get("WordPress Post ID")
         try:
             post_id = int(post_id) if post_id is not None else None
-        except Exception:
+        except Exception as exc:
+            logger.debug("Could not parse WordPress Post ID %r: %s", post_id, exc)
             post_id = None
         elementor_link = None
         if post_id:
@@ -698,7 +682,7 @@ def build_content_optimisation_hub_rows(
 
         metrics_rows.append(
             {
-                "URL": _hyperlink_url_formula(raw_url),
+                "URL": str(raw_url or "").strip(),
                 "JS Dependent": hub_metrics.js_dependent,
                 "Raw Words": hub_metrics.raw_words,
                 "Rendered Words": hub_metrics.rendered_words,

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from bs4 import BeautifulSoup
+
 from hype_frog.extractors.page import (
     extract_aeo_snippets,
     has_valid_hreflang_reciprocity,
     parse_html_signals,
+    parse_html_signals_from_soup,
 )
 from hype_frog.extractors.robots import resolve_indexability_directive
 from hype_frog.extractors.schema import parse_jsonld_summary
@@ -37,6 +40,14 @@ def test_malformed_schema_fails_gracefully(malformed_schema_html: str) -> None:
     assert parsed["schema_parse_errors"] >= 1
     assert "QAPage" in parsed["schema_types"]
     assert parsed["schema_types_count"] >= 1
+
+
+def test_parse_html_signals_from_soup_reuses_tree(aeo_content_html: str) -> None:
+    soup = BeautifulSoup(aeo_content_html, "lxml")
+    parsed = parse_html_signals_from_soup(soup)
+    full = parse_html_signals(aeo_content_html)
+    assert parsed["title"] == full["title"]
+    assert parsed["meta_description"] == full["meta_description"]
 
 
 def test_empty_missing_data_defaults(empty_page_html: str) -> None:

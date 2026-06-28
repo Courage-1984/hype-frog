@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import math
-import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -62,7 +61,7 @@ from hype_frog.pipeline.enrich import (
 )
 from hype_frog.rules import get_summary_rules
 from hype_frog.core.status_codes import is_success_status
-from hype_frog.core.url_normalization import normalize_url
+from hype_frog.core.url_normalization import normalize_url_key
 from hype_frog.pipeline.content_duplicates import enrich_content_duplicate_signals
 
 logger = get_logger(__name__)
@@ -83,10 +82,6 @@ def _is_psi_eligible_url(url: str) -> bool:
     if dot_idx > slash_idx:
         return clean[dot_idx + 1:] not in _PSI_SKIP_EXTENSIONS
     return True
-
-
-def normalize_url_key(url: object, keep_query: bool = True) -> str:
-    return normalize_url(url, keep_query=keep_query)
 
 
 def _extra_status_is_200(status: object) -> bool:

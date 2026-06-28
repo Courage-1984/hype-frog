@@ -18,11 +18,11 @@ This document is the **single canonical narrative** for modular layout, runtime 
 ## Staged async pipeline
 
 1. `hype_frog.orchestration.run_setup` resolves configuration and environment.
-2. `hype_frog.orchestration.crawl_runner.execute_crawl` owns URL scheduling, checkpoints, cache writes, crawl concurrency.
+2. `hype_frog.orchestration.crawl_runner.execute_crawl` owns URL scheduling, checkpoints, cache writes, crawl concurrency; internally delegates BFS loop to `crawl_runner_bfs.py`, URL eligibility to `crawl_runner_frontier.py`, and interactive prompts to `crawl_runner_interactive.py`.
 3. `hype_frog.crawler.fetcher.fetch_and_parse` fetches HTTP/rendered content, assembles row payloads, records extraction state.
-4. `hype_frog.crawler.data_assembler.assemble_from_html` parses HTML into additive `main` and `extra` row dictionaries.
-5. `hype_frog.orchestration.enrichment_flow.run_enrichment` runs five phases: GSC analytics context, optional GSC URL Inspection batch, PSI batch, link/image/OG probes and canonical/robots passes, then scoring/graph/issue assembly (including `analysis/*` enrichments and Main merge via `pipeline/assemble.py`).
-6. `hype_frog.orchestration.export_flow.execute_export` builds workbook tabs through the reporter layer and merged sheet builders.
+4. `hype_frog.crawler.data_assembler.assemble_from_html` parses HTML into additive `main` and `extra` row dictionaries; phase-level assembly logic lives in `data_assembler_phases.py`.
+5. `hype_frog.orchestration.enrichment_flow.run_enrichment` runs five phases: GSC analytics context, optional GSC URL Inspection batch, PSI batch (dispatched via `crawler/psi_batch.py` with `psi_cache.py` TTL caching and `psi_merge.py` payload parsing), link/image/OG probes and canonical/robots passes, then scoring/graph/issue assembly (including `analysis/*` enrichments and Main merge via `pipeline/assemble.py`).
+6. `hype_frog.orchestration.export_flow.execute_export` sequences xlsx (via `export_workbook.py` and `export_row_builders.py`), HTML, and PDF (via `export_executive_reports.py`) through the reporter layer and merged sheet builders.
 
 ## BFS spider
 
@@ -30,9 +30,23 @@ The crawler uses a **breadth-first queue**. Seeds (sitemap or single URL) enter 
 
 `fetch_and_parse` receives the live `depth` and passes it into `assemble_from_html`, which writes **`Crawl Depth`** so diagnostics distinguish seeds from deeper pages.
 
+The BFS loop is split across three modules:
+
+- `crawl_runner_bfs.py` — Core loop: checkpoint resume, memory-guard enforcement, Rich progress bars, semantic intent enrichment, `CrawlExecutionResult` dataclass.
+- `crawl_runner_frontier.py` — URL eligibility: `candidate_internal_links()`, `_NON_HTML_PATH_EXTENSIONS` exclusions (60+ file types), `ExcludedCmsActionUrl` metadata, CMS query-param detection.
+- `crawl_runner_interactive.py` — Runtime prompts: `CrawlRuntimeOptions` dataclass, `prompt_crawl_options_sync()` with three crawl safety profiles (Gentle / Balanced / Faster), audit depth, previous audit path, and checkpoint interval.
+
 ### CMS action URL exclusion
 
-URLs whose query string contains CMS/WooCommerce action parameters are **not** enqueued for crawl or internal-link discovery. The canonical list lives in `config_defaults.EXCLUDED_CMS_ACTION_QUERY_PARAMS` (`add-to-cart`, `wc-ajax`, `preview`, etc.) and is enforced via `orchestration/crawl_runner.cms_action_exclusion_keys`. Excluded URLs discovered from inlinks are listed on the **CMS Action URLs** sheet during full-suite export.
+URLs whose query string contains CMS/WooCommerce action parameters are **not** enqueued for crawl or internal-link discovery. The canonical list lives in `config_defaults.EXCLUDED_CMS_ACTION_QUERY_PARAMS` (`add-to-cart`, `wc-ajax`, `preview`, etc.) and is enforced via `orchestration/crawl_runner_frontier.cms_action_exclusion_keys`. Excluded URLs discovered from inlinks are listed on the **CMS Action URLs** sheet during full-suite export.
+
+## URL discovery ordering
+
+After crawl completion, `core/discovery_order.py` ranks each URL by its BFS discovery sequence and sitemap position:
+
+- `build_url_rank_index()` — maps normalised URLs to integer discovery rank.
+- `order_main_and_extra_rows()` — reorders assembled rows so the final workbook reflects sitemap/BFS discovery order rather than insertion order.
+- Populates the **`Discovery Rank`** field on Main rows.
 
 ## Async model
 
@@ -87,9 +101,13 @@ Runtime rows are dictionary pairs wrapped by Pydantic models (details: [data_con
 
 ## PSI, Lighthouse, and CrUX
 
-`crawler/psi_engine.py` fetches PageSpeed Insights for **mobile** and **desktop** strategies with all four Lighthouse categories: **performance**, **accessibility**, **best-practices**, **seo**.
+`crawler/psi_engine.py` is the entry point for PageSpeed Insights fetching for **mobile** and **desktop** strategies with all four Lighthouse categories: **performance**, **accessibility**, **best-practices**, **seo**. The implementation is split across three supporting modules:
 
-- Responses are cached in SQLite (`psi_cache`) with TTL from config.
+- `psi_batch.py` — Async batch HTTP fetching with `PsiRequestPacer` (minimum request spacing), jitter-aware delays (`jittered_seconds`), and exponential backoff (up to 6 retries). Detects API key errors and rate-limit signals via regex.
+- `psi_cache.py` — SQLite TTL cache (`CACHE_TTL_SECONDS = 86400`) for raw PSI responses. `open_cache_db()` uses WAL mode; `cache_get()` / `cache_put()` auto-evict expired rows.
+- `psi_merge.py` — Payload parsing: `PSI_LIGHTHOUSE_EXPORT_KEYS` (48 keys), `lab_strategy_metrics()`, `category_score()`, `merge_url_results()`, `psi_index_key()`.
+
+Resulting data:
 - Lab metrics project to `PSI_LIGHTHOUSE_EXPORT_KEYS` on extra rows; network items support third-party script inventory.
 - **CrUX level:** URL-level field data when `loadingExperience` is present; otherwise **origin** fallback when `originLoadingExperience` is available (`CrUX Level` = `URL` | `Origin`).
 - **`PSI Data Status`**, **`Field vs Lab`**, and **`CWV Data Source`** are derived in `_resolve_cwv_labelling` (for example `PSI + CrUX Field (URL)`, `PSI Lab`, `Not available`).
@@ -186,14 +204,16 @@ Non-crawl entrypoints in `core/` provide preflight and regression gates (wired t
 
 | Module | Flag(s) | Behaviour |
 |--------|---------|-----------|
-| `core/integration_validator.py` | `--validate` (`--validate-url`, `--psi-probe-url`) | Checks `.env`, GSC OAuth files + Search Console API, PSI key + one live probe, Playwright/Chromium, semantic engine, optional LLM keys. `IntegrationCheck` carries `CheckStatus` (`PASS`/`WARN`/`FAIL`/`SKIP`); exit `1` on any `FAIL`. |
-| `core/quick_test.py` | `--quick-test` (+ `--quick-test-fast`, `--quick-test-skip-{preflight,pytest,audit}`) | Preflight (no live PSI) → focused pytest subset → live 10-URL BFS crawl (accurate mode, depth 2, full suite) → post-export workbook audit. |
-| `core/full_smoke_test.py` + `core/full_smoke_fixtures.py` | `--full-smoke-test` (+ `--full-smoke-test-fast`, `--full-smoke-test-skip-{preflight,pytest,audit}`) | Strict preflight (incl. live PSI) → pytest subset → ~80 synthetic-URL **mocked** crawl (timeout/404/redirect status mix) → real enrichment + export → workbook audit. Output under `reports/full_smoke_test/`; volume via `HF_FULL_SMOKE_URL_COUNT`. |
+| `diagnostics/integration_validator.py` | `--validate` (`--validate-url`, `--psi-probe-url`) | Checks `.env`, GSC OAuth files + Search Console API, PSI key + one live probe, Playwright/Chromium, semantic engine, optional LLM keys. `IntegrationCheck` carries `CheckStatus` (`PASS`/`WARN`/`FAIL`/`SKIP`); exit `1` on any `FAIL`. |
+| `diagnostics/quick_test.py` | `--quick-test` (+ `--quick-test-fast`, `--quick-test-skip-{preflight,pytest,audit}`) | Preflight (no live PSI) → focused pytest subset → live 10-URL BFS crawl (accurate mode, depth 2, full suite) → post-export workbook audit. |
+| `diagnostics/full_smoke_test.py` + `diagnostics/full_smoke_fixtures.py` | `--full-smoke-test` (+ `--full-smoke-test-fast`, `--full-smoke-test-skip-{preflight,pytest,audit}`) | Strict preflight (incl. live PSI) → pytest subset → ~80 synthetic-URL **mocked** crawl (timeout/404/redirect status mix) → real enrichment + export → workbook audit. Output under `reports/full_smoke_test/`; volume via `HF_FULL_SMOKE_URL_COUNT`. |
 | `core/run_config.py` | — | Frozen `RunConfig` presets (`quick_test_run_config`, `full_smoke_run_config`) and `ResumeCheckpointMode` consumed by `orchestration/run_setup.resolve_run_setup` for non-interactive runs. |
 
 `reporter/workbook_audit.py` (`audit_workbook`, `count_main_rows`) backs the audit phase: TOC at index 0, tab order, freeze panes, Main `Extraction State` contract, Content Hub literals, merged-diagnostic sheet presence.
 
 Sheet ordering, column registries, and shared row builders for export live in `orchestration/export_registry.py` (`get_sheet_sequence`, `get_standard_sheet_columns`, `get_finalization_steps`, `build_*_rows`), consumed by `orchestration/export_flow.execute_export`.
+
+Full workbook sheet assembly is orchestrated by `orchestration/export_workbook.py` (`build_standard_sheets()`), which integrates the delta engine and drives all 20+ tab builders. AEO, AIOSEO, and pattern sheet rows are built in `orchestration/export_row_builders.py`. Playbook legend/reference rows are constants in `orchestration/export_workbook_constants.py`.
 
 ## Out of scope for automation
 

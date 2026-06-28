@@ -169,7 +169,7 @@ def build_robots_analysis_rows(
         return rows
 
     for domain, entry in sorted(robots_by_domain.items()):
-        robots_text = str(entry.get("robots_text") or "")
+        robots_text = str(entry.get("robots_text") or "").replace("\r\n", "\n").replace("\r", "\n")
         accessible = bool(entry.get("robots_accessible"))
         rows.append(
             {

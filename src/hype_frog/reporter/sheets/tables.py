@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import math
 
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -127,7 +129,7 @@ __all__ = [
 ]
 
 
-def adjust_sheet_format(writer, sheet_name):
+def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
     """Backward-compatible facade for legacy import paths.
 
     Args:
@@ -139,7 +141,7 @@ def adjust_sheet_format(writer, sheet_name):
     return _impl(writer, sheet_name)
 
 
-def apply_tab_hyperlinks(writer):
+def apply_tab_hyperlinks(writer: Any) -> None:
     """Backward-compatible facade for legacy import paths.
 
     Args:

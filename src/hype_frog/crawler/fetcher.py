@@ -39,13 +39,9 @@ from hype_frog.crawler.network_engine import (
 from hype_frog.core.models import CrawlRowPayload
 from hype_frog.pipeline.content_hub_metrics import backfill_extra_content_hub_metrics
 from hype_frog.core.text_utils import status_class
-from hype_frog.core.url_normalization import normalize_url
+from hype_frog.core.url_normalization import normalize_url_key
 
 logger = get_logger(__name__)
-
-
-def normalize_url_key(url: object, keep_query: bool = True) -> str:
-    return normalize_url(url, keep_query=keep_query)
 
 
 _AEO_ENGINE_BOTS: tuple[str, ...] = ("gptbot", "perplexitybot", "ccbot")
@@ -129,7 +125,8 @@ async def _populate_robots_cache(
     try:
         async with session.get(f"{domain_key}/llms.txt", timeout=timeout) as llms_resp:
             llms_present = llms_resp.status == 200
-    except Exception:
+    except Exception as exc:
+        logger.debug("llms.txt probe failed for %s: %s", domain_key, exc)
         llms_present = False
     try:
         async with session.get(f"{domain_key}/robots.txt", timeout=timeout) as robots_resp:
@@ -140,7 +137,8 @@ async def _populate_robots_cache(
                 ai_allowed = all(bot in robots_lower for bot in _LEGACY_AI_BOTS)
                 hits = sum(1 for bot in _AEO_ENGINE_BOTS if bot in robots_lower)
                 aeo_engine_bot_coverage = hits / float(len(_AEO_ENGINE_BOTS))
-    except Exception:
+    except Exception as exc:
+        logger.debug("robots.txt probe failed for %s: %s", domain_key, exc)
         ai_allowed = None
         aeo_engine_bot_coverage = None
     robots_cache[domain_key] = prepare_robots_domain_entry(
@@ -453,7 +451,11 @@ def configure_playwright_browsers_path() -> str | None:
     import sys
     from pathlib import Path
 
-    from hype_frog.core.env_vars import get_local_app_data, get_playwright_browsers_path
+    from hype_frog.core.env_vars import (
+        get_local_app_data,
+        get_playwright_browsers_path,
+        set_playwright_browsers_path,
+    )
 
     existing = get_playwright_browsers_path()
     if existing:
@@ -467,8 +469,7 @@ def configure_playwright_browsers_path() -> str | None:
         target.mkdir(parents=True, exist_ok=True)
     except OSError:
         return None
-    # Intentional write: Playwright requires this env var to locate its browser binaries.
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(target)
+    set_playwright_browsers_path(str(target))
     return str(target)
 
 

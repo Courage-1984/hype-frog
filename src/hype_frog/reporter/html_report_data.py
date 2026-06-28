@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 if TYPE_CHECKING:
-    from hype_frog.core.models import SummaryMetricsPayload
+    pass
 
 
 @dataclass

@@ -1,5 +1,7 @@
 from .api_clients import parse_gsc_row, parse_http_crawl_result, parse_psi_response
-from .cli import get_user_config
+from .numeric_utils import clamp_pct, round2, round4, safe_float, safe_int
+from .url_normalization import get_row_url, normalize_url, normalize_url_key
+from .cli import UserConfig, get_user_config
 from .console import log_completion_panel, log_phase_banner, log_stage_timer, log_startup_panel
 from .logger import configure_logging, console, get_logger
 from .models import (
@@ -26,6 +28,7 @@ __all__ = [
     "log_stage_timer",
     "log_startup_panel",
     "get_user_config",
+    "UserConfig",
     "CheckpointPayload",
     "CrawlResult",
     "CrawlResultModel",
@@ -41,4 +44,12 @@ __all__ = [
     "parse_gsc_row",
     "parse_http_crawl_result",
     "parse_psi_response",
+    "normalize_url",
+    "normalize_url_key",
+    "get_row_url",
+    "safe_float",
+    "safe_int",
+    "round2",
+    "round4",
+    "clamp_pct",
 ]

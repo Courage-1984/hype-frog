@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +20,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from hype_frog.config import load_environment  # noqa: E402
 from hype_frog.core import configure_logging, get_logger  # noqa: E402
 from hype_frog.diagnostics.quick_test import _run_pipeline  # noqa: E402
+from hype_frog.core.env_vars import get_psi_api_key  # noqa: E402
 from hype_frog.core.run_config import RunConfig  # noqa: E402
 from hype_frog.reporter.workbook_audit import audit_workbook, count_main_rows  # noqa: E402
 
@@ -103,7 +103,7 @@ def _base_config(**overrides: Any) -> RunConfig:
 
 
 def _scenarios() -> list[Scenario]:
-    psi_urls = 2 if os.getenv("PSI_API_KEY", "").strip() else 0
+    psi_urls = 2 if get_psi_api_key() else 0
     return [
         Scenario(
             name="fast_minimal",
@@ -311,22 +311,13 @@ async def _run_scenario(scenario: Scenario) -> dict[str, Any]:
     out_path = OUT_DIR / f"matrix_{scenario.name}.xlsx"
     if out_path.exists():
         out_path.unlink()
-    os.environ["HF_OUTPUT_FILENAME"] = str(out_path)
-    if scenario.config.bfs_max_depth is not None:
-        os.environ["HF_MAX_DEPTH"] = str(scenario.config.bfs_max_depth)
-    if scenario.config.gsc_url_inspection:
-        os.environ["GSC_URL_INSPECTION"] = scenario.config.gsc_url_inspection
-    else:
-        os.environ.pop("GSC_URL_INSPECTION", None)
-    if scenario.config.streaming:
-        os.environ["HF_STREAMING"] = "1"
-    else:
-        os.environ.pop("HF_STREAMING", None)
+
+    config = replace(scenario.config, output_filename=str(out_path))
 
     started = time.perf_counter()
     logger.info("=== Scenario %s ===", scenario.name)
     try:
-        crawl_result = await _run_pipeline(scenario.config)
+        crawl_result = await _run_pipeline(config)
     except Exception as exc:
         return {
             "scenario": scenario.name,

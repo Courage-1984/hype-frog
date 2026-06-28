@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 
 from openpyxl import load_workbook
-from openpyxl.workbook.workbook import Workbook
 
 from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 from hype_frog.reporter.sheets.toc import PREFERRED_WORKBOOK_TAB_ORDER
@@ -145,7 +144,8 @@ def audit_workbook(
         if action_col is None:
             errors.append(f"{hub_name} missing Action Required column")
         else:
-            for r in range(3, hub.max_row + 1):
+            # Row 3 is the scope-note row (merged); data starts at row 4.
+            for r in range(4, hub.max_row + 1):
                 val = hub.cell(row=r, column=action_col).value
                 if val is None or str(val).strip() == "":
                     errors.append(

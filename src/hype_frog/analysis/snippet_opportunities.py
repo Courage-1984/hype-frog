@@ -93,26 +93,25 @@ def gsc_position_opportunity(row: dict[str, Any], readiness: int) -> bool:
     return 4.0 <= position <= 20.0 and readiness > 5
 
 
-def _restructuring_advice(snippet_type: str) -> tuple[str, str]:
-    mapping = {
-        "Definition": (
-            "Lead with a concise 'X is a…' definition block directly under the H1.",
-            "S",
-        ),
-        "List": (
-            "Convert steps into a numbered list with imperative verbs in each line.",
-            "S",
-        ),
-        "Table": (
-            "Add a comparison table with clear column headers and scannable rows.",
-            "M",
-        ),
-        "FAQ": (
-            "Mirror each question heading with a 40–60 word direct answer paragraph.",
-            "S",
-        ),
+def _restructuring_advice(
+    snippet_type: str, readiness: int = 6, word_count: int = 0
+) -> tuple[str, str]:
+    advice_map = {
+        "Definition": "Lead with a concise 'X is a…' definition block directly under the H1.",
+        "List": "Convert steps into a numbered list with imperative verbs in each line.",
+        "Table": "Add a comparison table with clear column headers and scannable rows.",
+        "FAQ": "Mirror each question heading with a 40–60 word direct answer paragraph.",
     }
-    return mapping.get(snippet_type, ("Add structured answer blocks under question headings.", "M"))
+    advice = advice_map.get(snippet_type, "Add structured answer blocks under question headings.")
+    if readiness >= 8 and word_count < 500:
+        effort = "S"
+    elif snippet_type == "Table" or (readiness < 7 and word_count > 1500):
+        effort = "L"
+    elif readiness >= 7 or word_count < 1000:
+        effort = "S"
+    else:
+        effort = "M"
+    return advice, effort
 
 
 def enrich_snippet_opportunity_fields(extra_rows: list[Any]) -> None:
@@ -120,7 +119,8 @@ def enrich_snippet_opportunity_fields(extra_rows: list[Any]) -> None:
         values = row if isinstance(row, dict) else row.values
         snippet_type = detect_featured_snippet_type(values)
         readiness = compute_snippet_readiness(values, snippet_type)
-        advice, _effort = _restructuring_advice(snippet_type)
+        word_count = int(values.get("Word Count") or 0)
+        advice, _effort = _restructuring_advice(snippet_type, readiness, word_count)
         values["Featured Snippet Type"] = snippet_type
         values["Featured Snippet Readiness"] = readiness
         values["GSC Position Opportunity"] = gsc_position_opportunity(values, readiness)
@@ -136,7 +136,8 @@ def build_snippet_opportunity_rows(extra_rows: list[dict[str, Any]]) -> list[dic
         if not row.get("GSC Position Opportunity"):
             continue
         snippet_type = str(row.get("Featured Snippet Type") or "None")
-        advice, effort = _restructuring_advice(snippet_type)
+        word_count = int(row.get("Word Count") or 0)
+        advice, effort = _restructuring_advice(snippet_type, readiness, word_count)
         position = _gsc_position(row)
         rows.append(
             {

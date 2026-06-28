@@ -7,7 +7,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from hype_frog.config_defaults import (
+from hype_frog.config_defaults import (  # noqa: F401 — re-exported public API
     CHECKPOINT_EVERY_N_PAGES,
     CONNECT_TIMEOUT_SECONDS,
     CONTENT_AGE_AGEING_DAYS,
@@ -63,7 +63,7 @@ from hype_frog.config_defaults import (
     get_request_jitter_seconds,
     get_thin_content_word_threshold,
 )
-from hype_frog.config_loader import apply_user_config, load_user_config
+from hype_frog.config_loader import apply_user_config, load_user_config  # noqa: F401 — re-exported
 
 # --- Repository layout ---
 # When running as a PyInstaller frozen exe, PROJECT_ROOT is the directory containing

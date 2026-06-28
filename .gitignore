@@ -49,3 +49,6 @@ build/
 # NOTICE: .cursor/ and uv.lock are NOT ignored!
 # We version control our Cursor rules and dependency lockfile.
 
+# Claude Code: project settings are committed; local/user settings are not.
+.claude/settings.local.json
+

@@ -1,4 +1,11 @@
-"""Centralised tuning defaults for crawl, enrichment, scoring, and reporting."""
+"""Centralised tuning defaults for crawl, enrichment, scoring, and reporting.
+
+This is the SINGLE SOURCE OF TRUTH for all numeric and string defaults.
+- env_vars.py accessors may fall back to constants defined here — never use
+  raw literals in env_vars.py.
+- Domain modules that need a threshold must import the named constant from
+  here; never define the same value inline in the module.
+"""
 
 from __future__ import annotations
 

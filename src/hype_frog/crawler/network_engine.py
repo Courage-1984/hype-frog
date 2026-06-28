@@ -517,8 +517,8 @@ async def fetch_rendered_with_diagnostics(
 
                 try:
                     await page.wait_for_timeout(_HYDRATION_SETTLE_MS)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Hydration settle wait failed: %s", exc)
 
                 for selector in (
                     "title",
@@ -552,8 +552,8 @@ async def fetch_rendered_with_diagnostics(
             finally:
                 try:
                     await page.close()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Playwright page close failed: %s", exc)
 
             extraction_source = "rendered_browser" if rendered_html else "raw_http"
             return _compute_render_diagnostics(

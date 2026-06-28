@@ -1,8 +1,25 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from hype_frog.core.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class UserConfig:
+    """Interactive CLI prompts resolved to typed crawl/export settings."""
+
+    target_input: str
+    max_urls: int | None
+    max_psi_urls: int | None
+    high_value_slugs: list[str]
+    crawl_mode: str
+    render_wait_ms: int
+    selector_wait_ms: int
+    check_external_link_status: bool
+    check_og_images: bool
 
 
 def _resolve_crawl_engine(raw: str) -> str:
@@ -17,9 +34,7 @@ def _resolve_crawl_engine(raw: str) -> str:
     return "accurate"
 
 
-def get_user_config() -> tuple[
-    str, int | None, int | None, list[str], str, int, int, bool, bool
-]:
+def get_user_config() -> UserConfig:
     target_input = input("Target URL or Sitemap Path: ").strip()
     max_urls_raw = input(
         "Crawl Limit (Max URLs) [leave blank for No Limit]: "
@@ -70,7 +85,11 @@ def get_user_config() -> tuple[
             logger.warning("Invalid PSI limit '%s'. Checking all crawled URLs.", psi_limit_raw)
 
     if high_value_slugs_raw and high_value_slugs_raw.strip() != "0":
-        high_value_slugs = [slug.strip().lower() for slug in high_value_slugs_raw.split(",") if slug.strip()]
+        high_value_slugs = [
+            slug.strip().lower()
+            for slug in high_value_slugs_raw.split(",")
+            if slug.strip()
+        ]
 
     if render_wait_raw:
         try:
@@ -81,16 +100,19 @@ def get_user_config() -> tuple[
         try:
             selector_wait_ms = max(500, int(selector_wait_raw))
         except ValueError:
-            logger.warning("Invalid selector wait '%s'. Using default 3000ms.", selector_wait_raw)
+            logger.warning(
+                "Invalid selector wait '%s'. Using default 3000ms.",
+                selector_wait_raw,
+            )
 
-    return (
-        target_input,
-        max_urls,
-        max_psi_urls,
-        high_value_slugs,
-        crawl_mode,
-        render_wait_ms,
-        selector_wait_ms,
-        check_external_link_status,
-        check_og_images,
+    return UserConfig(
+        target_input=target_input,
+        max_urls=max_urls,
+        max_psi_urls=max_psi_urls,
+        high_value_slugs=high_value_slugs,
+        crawl_mode=crawl_mode,
+        render_wait_ms=render_wait_ms,
+        selector_wait_ms=selector_wait_ms,
+        check_external_link_status=check_external_link_status,
+        check_og_images=check_og_images,
     )

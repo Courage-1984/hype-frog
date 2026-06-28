@@ -35,11 +35,11 @@ New extractor or fetch outcomes must map into **complete** / **partial** / **ski
 
 ## URL parameter exclusion
 
-CMS/WooCommerce action query parameters block crawl-queue and internal-link discovery (`config_defaults.EXCLUDED_CMS_ACTION_QUERY_PARAMS`, enforced in `orchestration/crawl_runner.py`). Extend the frozenset in `config_defaults.py` when new CMS actions appear.
+CMS/WooCommerce action query parameters block crawl-queue and internal-link discovery (`config_defaults.EXCLUDED_CMS_ACTION_QUERY_PARAMS`, enforced in `orchestration/crawl_runner_frontier.py`). Extend the frozenset in `config_defaults.py` when new CMS actions appear. The `ExcludedCmsActionUrl` dataclass (also in `crawl_runner_frontier.py`) carries per-exclusion metadata for the **CMS Action URLs** sheet.
 
 ## Data assembler contract
 
-`crawler/data_assembler.py` (`DataAssembler`) owns the merge of raw HTTP and rendered signals into a single row dict:
+`crawler/data_assembler.py` (`DataAssembler`) owns the merge of raw HTTP and rendered signals into a single row dict; phase-level assembly helpers live in `crawler/data_assembler_phases.py`:
 - `finalize_row_state` maps non-integer `Status Code` values (`timeout`, `connection error`, `dns error`, etc.) to indexable string codes before scoring.
 - Never call `DataAssembler` methods from outside `crawler/`; pipeline consumers receive the already-assembled row dict.
 - Any new signal source (new fetcher, new extractor) must wire its output through `DataAssembler` — not merged ad hoc in `crawl_runner.py` or `pipeline/`.
@@ -58,11 +58,17 @@ CMS/WooCommerce action query parameters block crawl-queue and internal-link disc
 
 ## PSI Lighthouse categories and CrUX
 
-`psi_engine._PSI_CATEGORIES` requests **performance**, **accessibility**, **best-practices**, and **seo** for each mobile/desktop PSI call.
+`psi_engine.py` is the entry point; the implementation is split:
+
+- `psi_batch.py` — `PsiRequestPacer` serialises minimum spacing between requests; `batch_fetch_psi()` runs concurrent requests with exponential backoff (up to 6 retries) and jitter. Detects API key errors (`_API_KEY_ERROR_RE`) and retryable errors (`_RETRYABLE_ERROR_RE`).
+- `psi_cache.py` — SQLite WAL-mode cache (`CACHE_TTL_SECONDS = 86400`). `open_cache_db()`, `cache_get()`, `cache_put()`; auto-evicts expired rows.
+- `psi_merge.py` — `PSI_LIGHTHOUSE_EXPORT_KEYS` (48 keys), `lab_strategy_metrics()`, `category_score()`, `merge_url_results()`, `strategy_ok()`, `store_psi_result()`, `psi_index_key()`.
+
+`psi_engine._PSI_CATEGORIES` requests **performance**, **accessibility**, **best-practices**, and **seo** for each mobile/desktop call.
 
 - **Rate limits:** PSI quota is per API key per day. Log a warning and skip remaining PSI calls (marking affected rows with a `PSI Data Status` value indicating quota exhaustion) rather than hard-failing the crawl.
 - **CrUX data:** CrUX field data may be absent (new page / low traffic). Treat absent CrUX as `None`/blank — never substitute a synthetic value.
-- **Response caching:** PSI results for a URL must not be re-fetched within the same run unless the user explicitly resets the run. Cache responses in the checkpoint or in-memory for the run duration.
+- **Response caching:** handled by `psi_cache.py`; do not re-fetch within TTL. Delete `.cache/*.sqlite` when breaking PSI schema changes ship.
 - **Timeout:** every PSI HTTP call must respect the global LLM/API timeout policy from `architecture.mdc` (≈5 s hard cap unless documented otherwise).
 
 ## Skipped with reason (dead-letter policy)

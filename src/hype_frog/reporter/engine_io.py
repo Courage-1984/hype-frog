@@ -11,22 +11,18 @@ from openpyxl.utils import get_column_letter
 from hype_frog.checkpoint.cache import AuditCache
 from hype_frog.core import get_logger
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
-from hype_frog.core.url_normalization import normalize_url
+from hype_frog.core.url_normalization import normalize_url_key
 from hype_frog.pipeline.broken_links import link_inventory_broken_per_source_formula
 
 logger = get_logger(__name__)
 
-_ILLEGAL_XLSX_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
+_ILLEGAL_XLSX_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]")
 _INVALID_SHEET_CHARS_RE = re.compile(r"[:\\/*?\[\]]")
 
 # Chunks at or above this size trigger an explicit ``gc.collect()`` after
 # their rows are flushed. Tuned to balance teardown cost against the cost of
 # 10k+ row audits keeping deserialised JSON dicts alive for too long.
 _GC_COLLECT_CHUNK_THRESHOLD: int = 1000
-
-
-def normalize_url_key(url: object, keep_query: bool = True) -> str:
-    return normalize_url(url, keep_query=keep_query)
 
 
 def _safe_sheet_name(name: str) -> str:
@@ -73,7 +69,8 @@ def apply_link_intelligence_summary_broken_formulas(workbook: Any) -> None:
     """Set Broken Internal Links Count and Actionable Fixes on Summary rows from Link Inventory."""
     try:
         names = list(workbook.sheetnames)
-    except Exception:
+    except Exception as exc:
+        logger.debug("Could not read workbook sheet names: %s", exc)
         return
     if "Link Intelligence" not in names or "Link Inventory" not in names:
         return
@@ -135,7 +132,8 @@ def _sanitize_excel_url(url_value: Any) -> str:
         return urlunsplit(
             (parts.scheme, parts.netloc, cleaned_path, cleaned_query, cleaned_fragment)
         )
-    except Exception:
+    except Exception as exc:
+        logger.debug("Could not sanitise Excel URL %r: %s", raw, exc)
         return raw
 
 

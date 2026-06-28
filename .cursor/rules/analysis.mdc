@@ -30,6 +30,9 @@ Analysis modules receive assembled row dicts (or the full crawl result set) and 
 - `content_similarity.py` — Computes pairwise or cluster-level content similarity (TF-IDF or equivalent); no live ML inference.
 - `competitor_benchmarks.py` — Compares crawled metrics against pre-loaded competitor data (never live-fetches competitor pages during a run).
 - `delta_engine.py` — Compares the current run against a prior export to surface changed, new, and removed URLs.
+- `delta_loader.py` — Loads prior run snapshots: `load_run_snapshot()`, `load_snapshot_json()` (from `_delta_summary.json`), `load_snapshot_xlsx()` (legacy xlsx via pandas).
+- `delta_models.py` — Dataclasses and constants for delta comparison: `SNAPSHOT_VERSION = 1`, `DELTA_SUMMARY_SUFFIX`, `METRIC_FIELDS` tuple (SEO Health, AEO Readiness, Mobile PSI, Technical Health), `DELTA_SHEET_COLUMNS` (14-column spec), `RunSnapshot` dataclass, utility helpers (`direction_for_change`, `utc_now_iso`, `parse_run_timestamp`, `safe_int`, `optional_float`).
+- `delta_sheet_builder.py` — `build_delta_sheet_rows()` (multi-section: Summary, New Issues, Resolved Issues, Health Trend); `build_health_trend_section()` (three-run trend visualisation); calls `snapshot_from_current_run()`.
 - `content_hub_recommendations.py` — Derives content-hub gap and pillar recommendations from the crawled URL set.
 
 ## Delta engine semantics
@@ -38,6 +41,7 @@ Analysis modules receive assembled row dicts (or the full crawl result set) and 
 - URL matching uses **normalised URL identity** from `core/url_normalization.py` — never raw strings.
 - Missing-from-current rows are tagged as **`removed`**; new rows as **`new`**; changed rows carry a `delta_fields` list.
 - Delta output must be backward-compatible for reporters that do not yet consume it (additive keys only).
+- Snapshot persistence: each full-suite run writes `{basename}_delta_summary.json` via `delta_models.DELTA_SUMMARY_SUFFIX`. Pass `--previous-run PATH` (xlsx or JSON) to activate the delta sheet builders.
 
 ## Concurrency
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 from hype_frog.core.logger import get_logger
@@ -25,4 +26,14 @@ def normalize_url(url: object, keep_query: bool = True) -> str:
     except Exception as exc:
         logger.debug("normalize_url failed for %r: %s", raw, exc)
         return raw.rstrip("/")
+
+
+def normalize_url_key(url: object, keep_query: bool = True) -> str:
+    """Canonical thin wrapper — import this everywhere instead of redefining it."""
+    return normalize_url(url, keep_query=keep_query)
+
+
+def get_row_url(row: dict[str, Any]) -> str:
+    """Return the effective URL for a crawl row, preferring the post-redirect 'Final URL'."""
+    return normalize_url(row.get("Final URL") or row.get("URL") or "")
 

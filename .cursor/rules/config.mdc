@@ -9,7 +9,8 @@ alwaysApply: false
 ## Module ownership
 
 - `config_defaults.py` — **Single source of truth** for all default values (thresholds, frozen sets, timeouts, category lists). No env-var reads here; pure constants only.
-- `config_loader.py` — Reads env vars (via `os.environ` / `python-dotenv`) and merges them with defaults. This is the **only** module permitted to call `os.environ` directly. Domain modules must receive resolved config, not read env vars themselves.
+- `config_loader.py` — Merges env-var values (resolved via `core/env_vars.py`) with defaults. Domain modules must receive resolved config, not read env vars themselves.
+- `core/env_vars.py` — The **only** module permitted to call `os.environ` directly. Houses all `HF_*` and third-party API key accessors. `config_loader.py` delegates to this module rather than calling `os.environ` inline. Domain modules outside `core/env_vars.py` must **never** call `os.environ`.
 - `config.py` — Top-level config dataclass (or `RunConfig` if in `core/run_config.py`). Assembles config from `config_loader` and validates ranges. Exposes a single config object to the rest of the application.
 
 ## Loading precedence

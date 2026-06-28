@@ -161,7 +161,18 @@ Full-suite exports add **Robots.txt Analysis** (raw file, rules, blocked URLs, s
 
 ## Delta tracking (C1)
 
-Each full-suite export writes `{workbook_basename}_delta_summary.json` alongside the xlsx. Pass `--previous-run PATH` (xlsx or JSON) to populate `DeltaFromPreviousRun` and `ResolvedIssues` with new/resolved issue rows, KPI deltas, and up to three SEO Health trend points per URL. See `analysis/delta_engine.py`.
+Each full-suite export writes `{workbook_basename}_delta_summary.json` alongside the xlsx. Pass `--previous-run PATH` (xlsx or JSON) to populate `DeltaFromPreviousRun` and `ResolvedIssues` with new/resolved issue rows, KPI deltas, and up to three SEO Health trend points per URL.
+
+The delta system is split across four modules:
+
+| Module | Role |
+|--------|------|
+| `analysis/delta_engine.py` | Compares current run against prior export; tags URLs as new / changed / removed |
+| `analysis/delta_loader.py` | Loads prior run snapshots from `_delta_summary.json` or legacy xlsx via `load_run_snapshot()`, `load_snapshot_json()`, `load_snapshot_xlsx()` |
+| `analysis/delta_models.py` | Dataclasses and constants: `SNAPSHOT_VERSION = 1`, `DELTA_SUMMARY_SUFFIX`, `METRIC_FIELDS` (SEO Health, AEO Readiness, Mobile PSI, Technical Health), `DELTA_SHEET_COLUMNS` (14 columns: Section, URL, Issue, Severity, Previous/Current Value, Change, Direction, First/Last Seen, Days Open, Trend Runs, Notes), `RunSnapshot` dataclass, utility helpers (`direction_for_change`, `utc_now_iso`, `parse_run_timestamp`) |
+| `analysis/delta_sheet_builder.py` | Builds `DeltaFromPreviousRun` sheet rows via `build_delta_sheet_rows()` (multi-section: Summary, New Issues, Resolved Issues, Health Trend) and `build_health_trend_section()` (three-run trend visualisation) |
+
+URL matching in `delta_engine.py` uses **normalised URL identity** from `core/url_normalization.py` — never raw strings. Delta output is additive-key only for backward reporter compatibility.
 
 ## Third-party scripts (A2)
 

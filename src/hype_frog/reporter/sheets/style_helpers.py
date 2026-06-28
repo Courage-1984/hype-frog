@@ -4,6 +4,10 @@ from typing import Any
 
 from openpyxl.worksheet.worksheet import Worksheet
 
+from hype_frog.core import get_logger
+
+logger = get_logger(__name__)
+
 
 def header_index(worksheet: Worksheet) -> dict[str, int]:
     return {
@@ -24,7 +28,8 @@ def header_exists_in_worksheet(worksheet: Worksheet, header_name: str) -> bool:
 def to_int(value: Any, default: int = 0) -> int:
     try:
         return int(float(value))
-    except Exception:
+    except Exception as exc:
+        logger.debug("Could not coerce %r to int: %s", value, exc)
         return default
 
 

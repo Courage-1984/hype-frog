@@ -11,6 +11,16 @@ Excel reporting no longer relies on a single monolithic engine file. Responsibil
 
 `src/hype_frog/reporter/excel_engine.py` remains a compatibility facade/re-export layer, not a monolithic behaviour owner.
 
+### Orchestration-layer workbook builders
+
+Full workbook assembly and delta integration are coordinated from the orchestration layer (not the reporter layer) via:
+
+- `src/hype_frog/orchestration/export_workbook.py` — `build_standard_sheets()` drives all 20+ tab builders (Main, Summary, Priority, FixPlan, Quick Wins, Content Optimisation Hub, Link Equity Map, Anchor Text Audit, Script Inventory, Image Inventory, Crawl Log, DeltaFromPreviousRun, etc.) and integrates `snapshot_from_current_run()` / `build_delta_workbook_output()` from the analysis layer.
+- `src/hype_frog/orchestration/export_row_builders.py` — Sheet-specific row builders: `build_aeo_rows()`, `build_aioseo_rows()`, pattern rows, template risk rows.
+- `src/hype_frog/orchestration/export_workbook_constants.py` — `PLAYBOOK_LEGEND_ROWS` and `PLAYBOOK_QUICK_REFERENCE_ROWS` constant tables.
+
+These modules call into `reporter/` for formatting and write operations but own the sheet-assembly logic and data-selection decisions.
+
 ## Integrity first
 
 Workbooks are end-user artifacts. Prefer conservative openpyxl operations: valid merges, freezes compatible with selection panes, and sanitized cell text so worksheet XML remains valid in common desktop clients.

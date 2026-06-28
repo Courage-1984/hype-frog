@@ -5,14 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from hype_frog.core.env_vars import get_hf_full_smoke_url_count, get_psi_api_key
+from hype_frog.core.env_vars import (
+    get_hf_full_smoke_url_count,
+    get_hf_test_sitemap_url,
+    get_psi_api_key,
+)
 
 ResumeCheckpointMode = Literal["prompt", "yes", "no"]
 
 # Fixed smoke target: page sitemap on a stable public property (10 URL cap in preset).
-QUICK_TEST_SITEMAP_URL: str = (
+# Override with HF_TEST_SITEMAP_URL env var to avoid flaky CI when the default site is down.
+_DEFAULT_SMOKE_SITEMAP_URL: str = (
     "https://africanmarketingconfederation.org/page-sitemap.xml"
 )
+QUICK_TEST_SITEMAP_URL: str = get_hf_test_sitemap_url(_DEFAULT_SMOKE_SITEMAP_URL)
 QUICK_TEST_MAX_URLS: int = 10
 QUICK_TEST_BFS_MAX_DEPTH: int = 2
 QUICK_TEST_MAX_PSI_URLS: int = 3
@@ -48,6 +54,23 @@ class RunConfig:
     max_memory_mb: int | None = None
     streaming: bool = False
     competitor_domains: tuple[str, ...] = ()
+    output_filename: str | None = None
+    export_pdf: bool = False
+
+
+@dataclass(frozen=True)
+class CliRunOverrides:
+    """Explicit CLI flag overrides for interactive runs (avoids os.environ mutation)."""
+
+    competitors: str | None = None
+    benchmarks: bool = False
+    export_pdf: bool = False
+    check_og_images: bool = False
+    check_content_images: bool = False
+    previous_run: str | None = None
+    gsc_url_inspection: str | None = None
+    max_memory_mb: int | None = None
+    streaming: bool = False
 
 
 def _quick_test_max_psi_urls() -> int:

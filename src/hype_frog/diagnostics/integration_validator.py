@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from hype_frog.config import PROJECT_ROOT, load_environment
+from hype_frog.core.logger import console
 from hype_frog.core.api_clients import parse_psi_response
 from hype_frog.core.env_vars import get_anthropic_api_key, get_openai_api_key
 from hype_frog.crawler.gsc_engine import (
@@ -444,7 +445,7 @@ def run_validation_cli(
             psi_probe_url=psi_probe_url,
         )
     )
-    print(format_validation_report(checks))
+    console.print(format_validation_report(checks))
     failed = any(check.status == CheckStatus.FAIL for check in checks)
     return 1 if failed else 0
 

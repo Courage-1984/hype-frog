@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.worksheet import Worksheet
 
 
 def collapse_technical_deep_dive_columns(
-    worksheet, sheet_name: str, *, header_index_fn
+    worksheet: Worksheet,
+    sheet_name: str,
+    *,
+    header_index_fn: Callable[[Worksheet], dict[str, int]],
 ) -> None:
     if sheet_name != "Technical" or worksheet.max_column <= 1:
         return

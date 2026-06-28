@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import os
 
 from hype_frog.config import apply_runtime_override, load_environment
 from hype_frog.core.logger import console
-from hype_frog.core.run_config import FULL_SMOKE_SYNTHETIC_URL_COUNT
+from hype_frog.core.run_config import CliRunOverrides, FULL_SMOKE_SYNTHETIC_URL_COUNT
 from hype_frog.diagnostics.integration_validator import run_validation_cli
 from hype_frog.diagnostics.quick_test import QuickTestOptions, run_quick_test_gate
 from hype_frog.diagnostics.full_smoke_test import FullSmokeOptions, run_full_smoke_gate
@@ -253,27 +252,23 @@ def run(argv: list[str] | None = None) -> None:
             skip_workbook_audit=args.quick_test_skip_audit,
         )
         raise SystemExit(asyncio.run(run_quick_test_gate(options)))
-    if args.competitors:
-        os.environ["HF_COMPETITORS"] = args.competitors
-    elif args.benchmarks:
-        os.environ.setdefault("HF_COMPETITORS", "")
-    if args.export_pdf:
-        os.environ["HF_EXPORT_PDF"] = "1"
-    if args.check_og_images:
-        os.environ["CHECK_OG_IMAGES"] = "1"
-    if args.check_images:
-        os.environ["CHECK_CONTENT_IMAGES"] = "1"
-    if args.previous_run:
-        os.environ["HF_PREVIOUS_AUDIT_PATH"] = args.previous_run
+    gsc_inspection: str | None = None
     if args.gsc_url_inspection_full:
-        os.environ["GSC_URL_INSPECTION"] = "full"
+        gsc_inspection = "full"
     elif args.gsc_url_inspection:
-        os.environ["GSC_URL_INSPECTION"] = "limited"
-    if args.max_memory_mb is not None and args.max_memory_mb > 0:
-        os.environ["HF_MAX_MEMORY_MB"] = str(args.max_memory_mb)
-    if args.streaming:
-        os.environ["HF_STREAMING"] = "1"
-    asyncio.run(_async_main(None))
+        gsc_inspection = "limited"
+    cli_overrides = CliRunOverrides(
+        competitors=args.competitors,
+        benchmarks=args.benchmarks,
+        export_pdf=args.export_pdf,
+        check_og_images=args.check_og_images,
+        check_content_images=args.check_images,
+        previous_run=args.previous_run,
+        gsc_url_inspection=gsc_inspection,
+        max_memory_mb=args.max_memory_mb,
+        streaming=args.streaming,
+    )
+    asyncio.run(_async_main(None, cli_overrides=cli_overrides))
 
 
 if __name__ == "__main__":

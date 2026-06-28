@@ -78,18 +78,25 @@ def is_redirect_loop(
 ) -> bool:
     if not hop_records or not final_url:
         return False
+    src = source_url.strip()
+    dst = final_url.strip()
+    if src == dst:
+        return True
+    # Differ only by trailing slash → trailing-slash redirect, never a loop
+    if src.rstrip("/") == dst.rstrip("/"):
+        return False
     try:
-        return normalize_url(source_url, keep_query=True) == normalize_url(
-            final_url, keep_query=True
-        )
+        return normalize_url(src, keep_query=True) == normalize_url(dst, keep_query=True)
     except Exception:
-        return source_url.strip() == final_url.strip()
+        return False
 
 
 def redirect_seo_risk(
     *,
     hop_records: list[RedirectHopRecord],
     redirect_loop: bool,
+    source_url: str = "",
+    final_url: str | None = None,
 ) -> str:
     if redirect_loop:
         return "Redirect loop"
@@ -100,6 +107,13 @@ def redirect_seo_risk(
     if len(hop_records) > 1:
         return "Multi-hop chain"
     if hop_records:
+        if (
+            source_url
+            and final_url
+            and hop_records[0].status in PERMANENT_REDIRECT_STATUSES
+            and source_url.strip().rstrip("/") == final_url.strip().rstrip("/")
+        ):
+            return "Trailing slash redirect (301)"
         return "Single redirect"
     return ""
 
@@ -131,9 +145,12 @@ def build_redirect_chain_fields(
         "Redirect Loop Flag": loop_flag,
         "Redirect Hops": legacy_hops,
         "Redirect Target": final_url if hop_records else None,
-        "Final URL": normalize_url_key_safe(final_url) if final_url else None,
+        "Final URL": final_url.strip() if final_url else None,
         "Redirect SEO Risk": redirect_seo_risk(
-            hop_records=hop_records, redirect_loop=loop_flag
+            hop_records=hop_records,
+            redirect_loop=loop_flag,
+            source_url=source_url,
+            final_url=final_url,
         ),
     }
 

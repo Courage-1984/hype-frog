@@ -7,7 +7,10 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
+from hype_frog.core import get_logger
 from hype_frog.rules import IssueRule, owner_for_issue, stable_issue_id
+
+logger = get_logger(__name__)
 
 _LEGACY_TO_MERGED_REFERENCE_TAB: dict[str, str] = {
     "Technical": "Technical Diagnostics",
@@ -28,7 +31,8 @@ def reference_tab_for_merged_workbook(legacy_tab: str) -> str:
 def safe_rule(rule_fn: Callable[..., Any], row: Mapping[str, Any]) -> bool:
     try:
         return bool(rule_fn(row))
-    except Exception:
+    except Exception as exc:
+        logger.debug("Issue rule evaluation failed: %s", exc)
         return False
 
 

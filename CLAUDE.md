@@ -23,12 +23,12 @@ diagnostics/ provides CLI gates (--quick-test, --full-smoke-test, --validate)
 ## Module map
 | Package | Ownership |
 |---|---|
-| `core/` | Logging, URL normalisation, Pydantic models (`models.py`), run config (`run_config.py`), CLI helpers |
-| `config.py` / `config_defaults.py` / `config_loader.py` | Config loading; only `config_loader.py` reads `os.environ` |
-| `crawler/` | HTTP sessions, PSI (`psi_engine.py`), GSC (`gsc_engine.py`), row assembly (`data_assembler.py`) |
+| `core/` | Logging, URL normalisation, Pydantic models (`models.py`), run config (`run_config.py`), CLI helpers, centralised env var accessors (`env_vars.py`), URL discovery ranking (`discovery_order.py`) |
+| `config.py` / `config_defaults.py` / `config_loader.py` | Config loading; only `config_loader.py` and `core/env_vars.py` read `os.environ` |
+| `crawler/` | HTTP sessions, PSI (`psi_engine.py` + `psi_batch.py` batch fetching + `psi_cache.py` SQLite TTL cache + `psi_merge.py` payload parsing), GSC (`gsc_engine.py`), row assembly (`data_assembler.py`, `data_assembler_phases.py`) |
 | `extractors/` | HTML/metadata parsing — no workbook writes |
-| `analysis/` | Post-crawl domain passes — read-only consumers of row dicts |
-| `orchestration/` | BFS loop (`crawl_runner.py`), enrichment batching, export sequencing (`export_flow.py`) |
+| `analysis/` | Post-crawl domain passes — read-only consumers of row dicts; delta comparison (`delta_engine.py`, `delta_loader.py`, `delta_models.py`, `delta_sheet_builder.py`) |
+| `orchestration/` | BFS loop (`crawl_runner.py` → `crawl_runner_bfs.py` core loop, `crawl_runner_frontier.py` URL eligibility, `crawl_runner_interactive.py` runtime prompts), enrichment batching (`enrichment_flow.py`), export sequencing (`export_flow.py`, `export_executive_reports.py`), workbook assembly (`export_workbook.py`, `export_row_builders.py`, `export_workbook_constants.py`), export registry (`export_registry.py`) |
 | `pipeline/` | Row assembly (`assemble.py`), scoring glue, graph engine |
 | `rules/` | `IssueRule` registry (99 rules), scoring, playbook entries — pure functions only |
 | `reporter/` | Excel/HTML/PDF output — do not mutate pipeline dicts here |
@@ -48,15 +48,15 @@ diagnostics/ provides CLI gates (--quick-test, --full-smoke-test, --validate)
 - All hype-frog knobs are prefixed `HF_` (e.g. `HF_EXPORT_HTML=1`, `HF_OUTPUT_FILENAME`)
 - Third-party keys use vendor convention without prefix (`PSI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`)
 - **Canonical list**: `.env.example` — update it whenever a new var is added
-- **Never** read `os.environ` directly in domain modules — wire through `config_loader.py`
+- **Never** read `os.environ` directly in domain modules — wire through `core/env_vars.py` (the single env-accessor module) via `config_loader.py`
 
 ## Canonical docs
 | Doc | Covers |
 |---|---|
-| `docs/system_architecture.md` | Pipeline stages, BFS, AEO, PSI/CrUX, orchestration layers |
-| `docs/data_contracts.md` | Row shapes, Pydantic, IssueRule scope, GSC null semantics |
-| `docs/excel_reporting_standards.md` | Workbook integrity, TOC, view state, conditional formatting |
-| `commands.md` | CLI command cheat sheet (PowerShell + bash) |
+| `docs/system_architecture.md` | Pipeline stages, BFS spider split, PSI/CrUX split, AEO, discovery ordering, orchestration layers |
+| `docs/data_contracts.md` | Row shapes, Pydantic, IssueRule scope, GSC null semantics, delta models and sheet columns |
+| `docs/excel_reporting_standards.md` | Workbook integrity, TOC, view state, conditional formatting, orchestration export builders, Mocha theme |
+| `commands.md` | CLI command cheat sheet (PowerShell + bash), delta/previous-run flags |
 | `.env.example` | All env vars with purpose and defaults |
 
 ## Cursor governance rules

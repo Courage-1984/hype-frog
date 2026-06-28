@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from hype_frog.core import get_logger
 from hype_frog.core.status_codes import is_redirect_status, is_success_status
 from hype_frog.core.url_normalization import normalize_url
+
+logger = get_logger(__name__)
 
 MAX_CANONICAL_CHAIN_DEPTH = 5
 
@@ -15,7 +18,8 @@ def _norm(url: object) -> str:
         return ""
     try:
         return normalize_url(str(url), keep_query=True)
-    except Exception:
+    except Exception as exc:
+        logger.debug("Could not normalise canonical URL %r: %s", url, exc)
         return str(url).strip().rstrip("/")
 
 

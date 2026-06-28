@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Callable, Iterable
 
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.core.url_normalization import normalize_url
@@ -13,7 +13,7 @@ _FALLBACK_RANK = 10**9
 def build_url_rank_index(
     crawl_urls: Iterable[str],
     *,
-    normalize_fn=normalize_url,
+    normalize_fn: Callable[[object], str] = normalize_url,
 ) -> dict[str, int]:
     """Map normalised URL keys to zero-based discovery sequence ranks."""
     ranks: dict[str, int] = {}

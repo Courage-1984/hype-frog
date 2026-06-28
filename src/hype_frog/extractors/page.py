@@ -292,6 +292,17 @@ def extract_heading_outline(html: str) -> HeadingOutline:
     return _outline_from_discovered(discovered)
 
 
+def parse_html_signals_from_soup(soup: BeautifulSoup) -> dict[str, Any]:
+    """Extract title and meta description from an existing BeautifulSoup tree."""
+    title = soup.title.string.strip() if soup.title and soup.title.string else None
+    meta = soup.find("meta", attrs={"name": "description"})
+    meta_desc = meta.get("content", "").strip() if meta else None
+    return {
+        "title": title,
+        "meta_description": meta_desc,
+    }
+
+
 def parse_html_signals(html: str) -> dict[str, Any]:
     """
     Pure HTML parser module boundary.
@@ -299,15 +310,10 @@ def parse_html_signals(html: str) -> dict[str, Any]:
     crawler->extractor handoff is progressively deepened.
     """
     soup = BeautifulSoup(html, "lxml")
-    title = soup.title.string.strip() if soup.title and soup.title.string else None
-    meta = soup.find("meta", attrs={"name": "description"})
-    meta_desc = meta.get("content", "").strip() if meta else None
+    parsed = parse_html_signals_from_soup(soup)
     outline = extract_heading_outline(html)
-    return {
-        "title": title,
-        "meta_description": meta_desc,
-        "h1_count": outline.h1_count,
-    }
+    parsed["h1_count"] = outline.h1_count
+    return parsed
 
 
 def extract_hreflang_cluster(html: str, page_url: str) -> list[str]:
