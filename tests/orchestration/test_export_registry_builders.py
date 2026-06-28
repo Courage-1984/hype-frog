@@ -13,6 +13,7 @@ from hype_frog.orchestration.export_registry import (
     get_sheet_sequence,
     get_standard_sheet_columns,
 )
+from hype_frog.reporter.sheets.config import CONTENT_PLANNER_SHEET
 
 
 def _value_or_default(value: object, default: float) -> float:
@@ -30,6 +31,11 @@ def test_get_sheet_sequence_main_only_vs_full_suite() -> None:
     assert "Main" in full
     assert "Dashboard" in full
     assert len(full) > 30
+
+
+def test_content_planner_in_full_suite_sequence() -> None:
+    full = get_sheet_sequence(ExportRegistryConfig(full_suite=True))
+    assert CONTENT_PLANNER_SHEET in full
 
 
 def test_get_finalization_steps_order_is_stable() -> None:

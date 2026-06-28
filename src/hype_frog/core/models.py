@@ -570,6 +570,7 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "Internal Links List Full": [],
     "Internal Links List": [],
     "Link Details": [],
+    "Nav Footer Link Details": [],
     "aeo_snippets": [],
     # Sprint 3 — semantic / answer-engine readiness columns. These are
     # additive workbook fields populated by

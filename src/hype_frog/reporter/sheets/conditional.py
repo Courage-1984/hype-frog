@@ -1393,6 +1393,218 @@ def apply_dashboard_metric_conditional_rules(worksheet: Worksheet) -> None:
     )
 
 
+_CONTENT_PLANNER_COL_WIDTHS: dict[str, float] = {
+    "Primary": 24.0,
+    "Secondary": 24.0,
+    "Tertiary": 24.0,
+    "Page link": 52.0,
+    "Copy Doc": 30.0,
+    "Copywriter Sign off": 20.0,
+    "Copy First Check": 18.0,
+    "2nd Revisions": 16.0,
+    "Client copy sign off": 20.0,
+    "Web design off": 18.0,
+    "UXI sign off": 16.0,
+    "Visual Design sign off": 20.0,
+    "Client final sign off": 20.0,
+    "Optimisations": 16.0,
+    "Desktop": 14.0,
+    "Tablet": 14.0,
+    "Mobile": 14.0,
+    "SEO": 14.0,
+    "Performance": 16.0,
+}
+
+# Teal accent used for the hierarchy (Primary/Secondary/Tertiary) header cells.
+_PLANNER_TEAL: str = "BFE9E4"
+_PLANNER_TEAL_FONT: str = "1A4A47"
+# Soft amber for the Copy Doc workflow column header.
+_PLANNER_COPYDOC_HDR: str = "FFF3CD"
+_PLANNER_COPYDOC_HDR_FONT: str = "7A5C00"
+# Soft indigo band for sign-off / QA column headers.
+_PLANNER_SIGNOFF_HDR: str = "E8EAF6"
+_PLANNER_SIGNOFF_HDR_FONT: str = "1A237E"
+_CONTENT_PLANNER_SIGNOFF_STATUS: str = "Not signed off"
+_CONTENT_PLANNER_SIGNOFF_FIRST_COL: int = 6
+_CONTENT_PLANNER_SIGNOFF_LAST_COL: int = 19
+
+
+def _apply_content_planner_header_accents(
+    worksheet: Worksheet, headers: dict[str, int]
+) -> None:
+    """Reapply section header colours after mock table styling."""
+    for hier_name in ("Primary", "Secondary", "Tertiary"):
+        col_idx = headers.get(hier_name)
+        if not col_idx:
+            continue
+        hdr = worksheet.cell(row=1, column=col_idx)
+        hdr.fill = PatternFill(
+            start_color=_PLANNER_TEAL, end_color=_PLANNER_TEAL, fill_type="solid"
+        )
+        hdr.font = Font(color=_PLANNER_TEAL_FONT, bold=True)
+
+    copy_doc_col = headers.get("Copy Doc")
+    if copy_doc_col:
+        hdr = worksheet.cell(row=1, column=copy_doc_col)
+        hdr.fill = PatternFill(
+            start_color=_PLANNER_COPYDOC_HDR,
+            end_color=_PLANNER_COPYDOC_HDR,
+            fill_type="solid",
+        )
+        hdr.font = Font(color=_PLANNER_COPYDOC_HDR_FONT, bold=True)
+
+    for col_idx in range(_CONTENT_PLANNER_SIGNOFF_FIRST_COL, _CONTENT_PLANNER_SIGNOFF_LAST_COL + 1):
+        hdr = worksheet.cell(row=1, column=col_idx)
+        hdr.fill = PatternFill(
+            start_color=_PLANNER_SIGNOFF_HDR,
+            end_color=_PLANNER_SIGNOFF_HDR,
+            fill_type="solid",
+        )
+        hdr.font = Font(color=_PLANNER_SIGNOFF_HDR_FONT, bold=True)
+
+
+def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
+    """Column widths, row heights, hyperlinks, and RAG sign-off formatting.
+
+    Column layout: A=Primary, B=Secondary, C=Tertiary, D=Page link, E=Copy Doc,
+    F-S = 14 sign-off/QA columns (Copywriter Sign off … Performance).
+    Freeze panes at ``E2`` lock columns A–D while scrolling the workflow grid.
+    """
+    if worksheet.max_row <= 1:
+        return
+
+    headers = header_index(worksheet)
+    last_row = worksheet.max_row
+    signoff_col_indices = list(
+        range(_CONTENT_PLANNER_SIGNOFF_FIRST_COL, _CONTENT_PLANNER_SIGNOFF_LAST_COL + 1)
+    )
+
+    # ── Column widths ────────────────────────────────────────────────────────
+    for col_name, width in _CONTENT_PLANNER_COL_WIDTHS.items():
+        col_idx = headers.get(col_name)
+        if col_idx:
+            worksheet.column_dimensions[get_column_letter(col_idx)].width = width
+
+    # ── Header row: height + center alignment ────────────────────────────────
+    worksheet.row_dimensions[1].height = 42
+    for col_idx in range(1, worksheet.max_column + 1):
+        cell = worksheet.cell(row=1, column=col_idx)
+        cell.alignment = Alignment(
+            horizontal="center", vertical="center", wrap_text=True
+        )
+    _apply_content_planner_header_accents(worksheet, headers)
+
+    # ── Hierarchy columns: bold populated labels ─────────────────────────────
+    for hier_name in ("Primary", "Secondary", "Tertiary"):
+        col_idx = headers.get(hier_name)
+        if not col_idx:
+            continue
+        for row_idx in range(2, last_row + 1):
+            cell = worksheet.cell(row=row_idx, column=col_idx)
+            cell.alignment = Alignment(horizontal="left", vertical="center")
+            if cell.value:
+                cell.font = Font(bold=True)
+
+    # ── Page link column: hyperlinks + shrink-to-fit ────────────────────────
+    page_link_col = headers.get("Page link")
+    if page_link_col:
+        link_font = Font(color="0563C1", underline="single")
+        for row_idx in range(2, last_row + 1):
+            cell = worksheet.cell(row=row_idx, column=page_link_col)
+            url_val = str(cell.value or "").strip()
+            if url_val.startswith(("http://", "https://")):
+                cell.hyperlink = url_val
+                cell.font = link_font
+            cell.alignment = Alignment(
+                wrap_text=False, shrink_to_fit=True, vertical="center"
+            )
+
+    # ── Copy Doc column: left-aligned placeholder hint ─────────────────────
+    copy_doc_col = headers.get("Copy Doc")
+    if copy_doc_col:
+        placeholder_font = Font(color="808080", italic=True)
+        for row_idx in range(2, last_row + 1):
+            cell = worksheet.cell(row=row_idx, column=copy_doc_col)
+            if cell.value is None or str(cell.value).strip() == "":
+                cell.value = "Paste doc link"
+                cell.font = placeholder_font
+            cell.alignment = Alignment(horizontal="left", vertical="center")
+
+    # ── Sign-off data cells: default status + centre alignment ───────────────
+    for row_idx in range(2, last_row + 1):
+        worksheet.row_dimensions[row_idx].height = 22
+        for col_idx in signoff_col_indices:
+            cell = worksheet.cell(row=row_idx, column=col_idx)
+            if cell.value is None or str(cell.value).strip() == "":
+                cell.value = _CONTENT_PLANNER_SIGNOFF_STATUS
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    # ── DataValidation for sign-off columns F–S ───────────────────────────────
+    if not DISABLE_DATA_VALIDATION:
+        dv = DataValidation(
+            type="list",
+            formula1='"Signed off,In progress,Not signed off"',
+            allow_blank=False,
+        )
+        dv.showErrorMessage = True
+        dv.errorTitle = "Invalid status"
+        dv.error = "Select: Signed off, In progress, or Not signed off."
+        worksheet.add_data_validation(dv)
+        for col_idx in signoff_col_indices:
+            letter = get_column_letter(col_idx)
+            dv.add(f"{letter}2:{letter}{last_row}")
+
+    # ── Conditional formatting: RAG for F2:S{last_row} ───────────────────────
+    if not DISABLE_CONDITIONAL_FORMATTING:
+        cf_range = (
+            f"{get_column_letter(_CONTENT_PLANNER_SIGNOFF_FIRST_COL)}2:"
+            f"{get_column_letter(_CONTENT_PLANNER_SIGNOFF_LAST_COL)}{last_row}"
+        )
+        signed_off_fill = PatternFill(
+            start_color=RAG_GREEN, end_color=RAG_GREEN, fill_type="solid"
+        )
+        in_progress_fill = PatternFill(
+            start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid"
+        )
+        not_signed_off_fill = PatternFill(
+            start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"
+        )
+        first_signoff_letter = get_column_letter(_CONTENT_PLANNER_SIGNOFF_FIRST_COL)
+        worksheet.conditional_formatting.add(
+            cf_range,
+            FormulaRule(
+                formula=[f'LOWER({first_signoff_letter}2)="signed off"'],
+                fill=signed_off_fill,
+                font=Font(color=RAG_GREEN_FONT),
+                stopIfTrue=True,
+            ),
+        )
+        worksheet.conditional_formatting.add(
+            cf_range,
+            FormulaRule(
+                formula=[f'LOWER({first_signoff_letter}2)="in progress"'],
+                fill=in_progress_fill,
+                font=Font(color=RAG_AMBER_FONT),
+                stopIfTrue=True,
+            ),
+        )
+        worksheet.conditional_formatting.add(
+            cf_range,
+            FormulaRule(
+                formula=[f'LOWER({first_signoff_letter}2)="not signed off"'],
+                fill=not_signed_off_fill,
+                font=Font(color=RAG_RED_FONT),
+                stopIfTrue=True,
+            ),
+        )
+
+    # ── Autofilter + freeze (columns A–D pinned) ────────────────────────────
+    worksheet.auto_filter.ref = (
+        f"A1:{get_column_letter(worksheet.max_column)}{last_row}"
+    )
+    set_freeze_panes_safe(worksheet, "E2")
+
+
 __all__ = [
     "apply_wrapped_row_heights",
     "apply_sheet_text_wrap_columns",
@@ -1403,4 +1615,5 @@ __all__ = [
     "apply_merged_tabs_conditional_formatting",
     "apply_main_sheet_heatmaps",
     "apply_dashboard_metric_conditional_rules",
+    "apply_content_planner_signoff_rules",
 ]

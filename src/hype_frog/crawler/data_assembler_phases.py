@@ -419,6 +419,32 @@ def apply_schema_signals(ctx: HtmlAssemblyContext) -> None:
 def apply_link_inventory(ctx: HtmlAssemblyContext) -> None:
     assert ctx.soup is not None
     source_netloc = urlparse(ctx.resolved_url).netloc.lower()
+
+    nav_footer_links: list[dict[str, object]] = []
+    for nav_el in ctx.soup.select(
+        "nav, footer, [role='navigation'], [role='contentinfo']"
+    ):
+        for anchor in nav_el.find_all("a", href=True):
+            href_raw = (anchor.get("href") or "").strip()
+            if not href_raw or href_raw.startswith(("#", "mailto:", "tel:", "javascript:")):
+                continue
+            target_abs = normalize_url_key(urljoin(ctx.resolved_url, href_raw))
+            if not target_abs:
+                continue
+            is_footer = bool(
+                anchor.find_parent("footer")
+                or anchor.find_parent(attrs={"role": "contentinfo"})
+            )
+            nav_footer_links.append(
+                {
+                    "Source URL": normalize_url_key(ctx.resolved_url),
+                    "Target URL": target_abs,
+                    "Anchor Text": anchor.get_text(" ", strip=True) or None,
+                    "Link Location": "footer" if is_footer else "nav",
+                }
+            )
+    ctx.extra_values["Nav Footer Link Details"] = nav_footer_links
+
     internal_links: list[str] = []
     internal_anchor_texts: list[str] = []
     external_links_count = 0

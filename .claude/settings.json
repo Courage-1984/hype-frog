@@ -5,6 +5,7 @@
   "defaultShell": "powershell",
   "permissions": {
     "allow": [
+      "PowerShell(uv run *)",
       "Bash(uv run *)",
       "Bash(uv sync *)",
       "Bash(uv add *)",

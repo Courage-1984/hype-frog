@@ -8,6 +8,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from hype_frog.reporter.sheets.config import (
     CONTENT_HUB_FREEZE_PANES,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    CONTENT_PLANNER_SHEET,
 )
 
 
@@ -89,9 +90,12 @@ def apply_optimal_view_state(worksheet: Worksheet, sheet_name: str) -> None:
         sheet_name: Canonical sheet name for rule selection.
     """
     two_dimensional_freeze_sheets: set[str] = {"Main", "Content", "Technical"}
-    should_clear_freeze = sheet_name not in {"Main", "Dashboard"} and (
-        worksheet.max_row < 10 or worksheet.max_column < 5
+    bespoke_freeze_sheets: frozenset[str] = frozenset(
+        {CONTENT_OPTIMISATION_HUB_SHEET, CONTENT_PLANNER_SHEET}
     )
+    should_clear_freeze = sheet_name not in (
+        {"Main", "Dashboard"} | bespoke_freeze_sheets
+    ) and (worksheet.max_row < 10 or worksheet.max_column < 5)
 
     if should_clear_freeze:
         set_freeze_panes_safe(worksheet, None)
@@ -100,6 +104,11 @@ def apply_optimal_view_state(worksheet: Worksheet, sheet_name: str) -> None:
 
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
         set_freeze_panes_safe(worksheet, CONTENT_HUB_FREEZE_PANES)
+        sanitize_sheet_view_selection(worksheet)
+        return
+
+    if sheet_name == CONTENT_PLANNER_SHEET:
+        set_freeze_panes_safe(worksheet, "E2")
         sanitize_sheet_view_selection(worksheet)
         return
 

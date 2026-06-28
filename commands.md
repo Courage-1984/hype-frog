@@ -208,3 +208,9 @@ cd dist
 .\hype-frog.exe --validate             # all checks should PASS
 .\hype-frog.exe                        # interactive audit
 ```
+
+
+https://africanmarketingconfederation.org/page-sitemap.xml
+https://ticonafrica.org/page-sitemap.xml
+
+

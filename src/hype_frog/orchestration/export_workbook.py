@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 import pandas as pd
 from openpyxl.styles import Alignment, Font
@@ -78,6 +79,10 @@ from hype_frog.reporter.excel_engine import (
     build_fixplan_rows,
     write_dict_rows_sheet,
 )
+from hype_frog.orchestration.content_planner import (
+    CONTENT_PLANNER_COLUMNS,
+    build_content_planner_rows,
+)
 from hype_frog.reporter.sheets.config import (
     AIOSEO_RECOMMENDATIONS_SHEET,
     ANCHOR_TEXT_AUDIT_SHEET,
@@ -85,6 +90,7 @@ from hype_frog.reporter.sheets.config import (
     COMPETITOR_BENCHMARKS_SHEET,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    CONTENT_PLANNER_SHEET,
     CRAWL_LOG_SHEET,
     IMAGE_INVENTORY_SHEET,
     LINK_EQUITY_MAP_SHEET,
@@ -410,6 +416,15 @@ def write_full_suite_workbook(
     _ws_met["A2"].font = Font(italic=True, size=9, color="666666")
     _ws_met["A2"].alignment = Alignment(horizontal="left", vertical="center")
     _ws_met.row_dimensions[2].height = 18
+    _parsed = urlparse(setup.target_input)
+    _root_url = f"{_parsed.scheme}://{_parsed.netloc}/"
+    content_planner_rows = build_content_planner_rows(typed_extra_rows, root_url=_root_url)
+    write_dict_rows_sheet(
+        writer,
+        CONTENT_PLANNER_SHEET,
+        list(CONTENT_PLANNER_COLUMNS),
+        content_planner_rows,
+    )
     # Remaining dashboard/delta/report tabs preserved from prior flow
     priority_rows = build_priority_rows(
         extra_rows,

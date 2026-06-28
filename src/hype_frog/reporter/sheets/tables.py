@@ -11,6 +11,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from hype_frog.reporter.sheets.config import (
     CONTENT_HUB_FREEZE_PANES,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    CONTENT_PLANNER_SHEET,
     STD_NAVY,
     STD_WHITE,
 )
@@ -116,7 +117,7 @@ def apply_mock_table_styling(
     if max_row >= min_row:
         if worksheet.title == CONTENT_OPTIMISATION_HUB_SHEET:
             set_freeze_panes_safe(worksheet, CONTENT_HUB_FREEZE_PANES)
-        else:
+        elif worksheet.title != CONTENT_PLANNER_SHEET:
             set_freeze_panes_safe(worksheet, "A2")
 
 

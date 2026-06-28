@@ -38,6 +38,7 @@ DATA_BAR_BLUE: str = "638EC6"  # canonical data-bar colour
 
 # Canonical UK spelling for the Content Hub worksheet title (must match workbook-wide).
 CONTENT_OPTIMISATION_HUB_SHEET: str = "Content Optimisation Hub"
+CONTENT_PLANNER_SHEET: str = "Content Planner"
 # Companion sheet: per-URL crawl metrics and executive ROI fields split from the Hub.
 CONTENT_HUB_METRICS_SHEET: str = "Content Hub Metrics"
 AIOSEO_RECOMMENDATIONS_SHEET: str = "AIOSEO Recommendations"
@@ -123,6 +124,7 @@ __all__ = [
     "HEATMAP_HIGH",
     "DATA_BAR_BLUE",
     "CONTENT_OPTIMISATION_HUB_SHEET",
+    "CONTENT_PLANNER_SHEET",
     "CONTENT_HUB_METRICS_SHEET",
     "AIOSEO_RECOMMENDATIONS_SHEET",
     "AUDIT_RUN_DETAILS_SHEET",

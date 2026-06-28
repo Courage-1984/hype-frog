@@ -10,6 +10,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from hype_frog.reporter.sheets.config import (
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    CONTENT_PLANNER_SHEET,
     CRAWL_LOG_SHEET,
     EXECUTIVE_DASHBOARD_SHEET,
     RAG_AMBER,
@@ -39,6 +40,10 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     ),
     CONTENT_OPTIMISATION_HUB_SHEET: (
         "Diagnostic command center: live title, meta, and H1–H6 health plus on-page score."
+    ),
+    CONTENT_PLANNER_SHEET: (
+        "Page-level workflow tracker: nav/footer site structure with "
+        "copywriting, design, and client sign-off status columns."
     ),
     CONTENT_HUB_METRICS_SHEET: (
         "Per-URL crawl metrics (JS/rendered words, field CWV), anchor diversity, "
@@ -406,11 +411,13 @@ def refresh_toc_descriptions_dynamic(wb: Workbook) -> None:
 
 #: Sheets whose bespoke freeze contracts must survive the final C2 normalisation:
 #: the Table of Contents (``A3``), the Content Optimisation Hub (banner-aware freeze),
+#: the Content Planner (``E2`` — columns A–D locked for hierarchy + page link),
 #: and the Executive Dashboard (``A8`` above the chart band).
 FREEZE_C2_EXEMPT_SHEETS: frozenset[str] = frozenset(
     {
         "Table of Contents",
         CONTENT_OPTIMISATION_HUB_SHEET,
+        CONTENT_PLANNER_SHEET,
         EXECUTIVE_DASHBOARD_SHEET,
     }
 )

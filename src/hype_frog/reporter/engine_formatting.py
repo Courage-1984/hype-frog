@@ -8,6 +8,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from hype_frog.core import get_logger
 from hype_frog.reporter.sheets.config import (
     CONTENT_OPTIMISATION_HUB_SHEET,
+    CONTENT_PLANNER_SHEET,
     DATA_BAR_BLUE,
     DISABLE_CONDITIONAL_FORMATTING,
     RAG_AMBER,
@@ -81,6 +82,15 @@ def _legacy_sheet_header_index(worksheet: Worksheet) -> dict[str, int]:
 
 
 def ensure_auto_filter(worksheet: Worksheet) -> None:
+    if worksheet.title == CONTENT_PLANNER_SHEET:
+        if worksheet.max_row >= 2 and worksheet.max_column >= 1:
+            worksheet.auto_filter.ref = (
+                f"A1:{get_column_letter(worksheet.max_column)}{worksheet.max_row}"
+            )
+        else:
+            worksheet.auto_filter.ref = None
+        return
+
     if worksheet.title not in {"Main", "Dashboard", "Link Inventory"} and (
         worksheet.max_row < 10 or worksheet.max_column < 5
     ):
@@ -104,7 +114,7 @@ def _clear_orphaned_selection(worksheet: Worksheet) -> None:
 
 
 def ensure_freeze_header(worksheet: Worksheet) -> None:
-    if worksheet.title == CONTENT_OPTIMISATION_HUB_SHEET:
+    if worksheet.title in {CONTENT_OPTIMISATION_HUB_SHEET, CONTENT_PLANNER_SHEET}:
         return
     if worksheet.title not in {"Main", "Dashboard", "Link Inventory"} and (
         worksheet.max_row < 10 or worksheet.max_column < 5

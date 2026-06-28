@@ -11,6 +11,7 @@ from hype_frog.reporter.sheets.config import (
     AIOSEO_RECOMMENDATIONS_SHEET,
     CONTENT_HUB_FREEZE_PANES,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    CONTENT_PLANNER_SHEET,
     CRAWL_LOG_SHEET,
     EXECUTIVE_DASHBOARD_SHEET,
     REDIRECT_MAP_SHEET,
@@ -254,6 +255,8 @@ def apply_workbook_toc_and_links(
                 else None
             )
             _set_freeze_panes_safe(ws, target_freeze)
+        elif tab_name == CONTENT_PLANNER_SHEET:
+            _set_freeze_panes_safe(ws, "E2")
         elif tab_name in standard_data_sheets:
             target_freeze = "B2" if ws.max_row >= 2 and ws.max_column >= 2 else None
             _set_freeze_panes_safe(ws, target_freeze)

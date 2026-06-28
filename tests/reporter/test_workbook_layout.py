@@ -10,6 +10,7 @@ from hype_frog.reporter.sheets.config import (
     AUDIT_RUN_DETAILS_SHEET,
     COMPETITOR_BENCHMARKS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    CONTENT_PLANNER_SHEET,
     IMAGE_INVENTORY_SHEET,
     LINK_EQUITY_MAP_SHEET,
     SCRIPT_INVENTORY_SHEET,
@@ -37,12 +38,24 @@ def test_visible_tab_order_matches_workflow_spec() -> None:
         "Quick Wins",
         CONTENT_OPTIMISATION_HUB_SHEET,
     ]
-    assert visible[8] == "Main"
-    assert visible[10] == "Link Inventory"
-    assert visible[11] == "Broken Link Impact"
-    assert visible[12] == "SitemapQA"
+    assert visible[9] == "Main"
+    assert visible[11] == "Link Inventory"
+    assert visible[12] == "Broken Link Impact"
+    assert visible[13] == "SitemapQA"
     assert AIOSEO_RECOMMENDATIONS_SHEET in visible
+    assert CONTENT_PLANNER_SHEET in visible
     assert visible[-1] == "Playbook"
+
+
+def test_content_planner_positioned_after_content_optimisation_hub() -> None:
+    visible = list(VISIBLE_WORKBOOK_TAB_ORDER)
+    hub_idx = visible.index(CONTENT_OPTIMISATION_HUB_SHEET)
+    planner_idx = visible.index(CONTENT_PLANNER_SHEET)
+    assert planner_idx == hub_idx + 1
+
+
+def test_content_planner_has_tab_colour() -> None:
+    assert CONTENT_PLANNER_SHEET in _SHEET_TAB_COLORS
 
 
 def test_advanced_tabs_hidden_by_default() -> None:

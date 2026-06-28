@@ -20,6 +20,7 @@ from hype_frog.reporter.engine_guardrails import apply_header_tooltips
 from hype_frog.reporter.sheets.toc import apply_workbook_toc_and_links
 from hype_frog.reporter.sheets.conditional import (
     apply_content_hub_conditional_rules,
+    apply_content_planner_signoff_rules,
     apply_generic_sheet_coloring,
     apply_main_sheet_heatmaps,
     apply_merged_tabs_conditional_formatting,
@@ -33,6 +34,7 @@ from hype_frog.reporter.sheets.config import (
     EXECUTIVE_DASHBOARD_SHEET,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    CONTENT_PLANNER_SHEET,
     DATA_HEAVY_TABS,
     DEBUG_EXCEL_ISOLATION_MODE,
     DISABLE_DATA_VALIDATION,
@@ -437,6 +439,8 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
             _apply_diagnostic_header_tooltips(worksheet, header_row=header_row)
         if sheet_name == "Link Inventory":
             _apply_link_inventory_client_polish(worksheet)
+    if sheet_name == CONTENT_PLANNER_SHEET:
+        apply_content_planner_signoff_rules(worksheet)
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
         finalize_content_hub_after_normalized_headers(worksheet)
         apply_display_header_aliases(worksheet, header_row=2)
