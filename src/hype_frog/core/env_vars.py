@@ -127,6 +127,32 @@ def get_check_content_images() -> bool:
     return _env_flag("CHECK_CONTENT_IMAGES")
 
 
+def get_hf_regen_report() -> bool:
+    return _env_flag("HF_REGEN_REPORT")
+
+
+def get_hf_snapshot_id() -> str | None:
+    value = _env_str("HF_SNAPSHOT_ID")
+    return value or None
+
+
+def get_hf_snapshot_retention_per_domain() -> int:
+    from hype_frog.config_defaults import SNAPSHOT_RETENTION_PER_DOMAIN_DEFAULT
+
+    raw = _env_str("HF_SNAPSHOT_RETENTION_PER_DOMAIN")
+    if not raw:
+        return SNAPSHOT_RETENTION_PER_DOMAIN_DEFAULT
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return SNAPSHOT_RETENTION_PER_DOMAIN_DEFAULT
+
+
+def get_hf_snapshots_db_path() -> str | None:
+    value = _env_str("HF_SNAPSHOTS_DB_PATH")
+    return value or None
+
+
 # ---------------------------------------------------------------------------
 # Reporter / branding
 # ---------------------------------------------------------------------------

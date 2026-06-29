@@ -90,7 +90,7 @@ Override preset BFS depth: `HF_MAX_DEPTH=1 uv run hype-frog --quick-test-fast`
 
 Useful crawl flags (see `uv run hype-frog --help`):
 
-`--check-images` · `--check-og-images` · `--gsc-url-inspection` · `--gsc-url-inspection-full` · `--competitors domain.com` · `--previous-run path.xlsx` · `--streaming` · `--export-pdf` · `--psi-delay 2.5`
+`--check-images` · `--check-og-images` · `--gsc-url-inspection` · `--gsc-url-inspection-full` · `--competitors domain.com` · `--previous-run path.xlsx` · `--regen-report` · `--snapshot-id <uuid>` · `--streaming` · `--export-pdf` · `--psi-delay 2.5`
 
 Output defaults to `reports/latest/` unless `HF_OUTPUT_FILENAME` is set.
 
@@ -161,6 +161,52 @@ Populates `DeltaFromPreviousRun` and `ResolvedIssues` sheets with new/resolved i
 
 ---
 
+## Report-only regeneration (crawl replay)
+
+Re-export workbook/HTML/PDF from a **stored crawl snapshot** — no HTTP, PSI, or GSC. Use after reporter or rules changes to avoid a full re-crawl.
+
+**Always activate the venv first** (see [Session bootstrap](#session-bootstrap-every-new-terminal)):
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+
+# Latest snapshot for the configured target domain (interactive target prompt):
+hype-frog --regen-report
+
+# Non-interactive regen test harness (AMC page-sitemap target baked in):
+python scripts\_run_regen_report_test.py
+python scripts\_run_regen_report_test.py <snapshot-uuid>
+
+# Full crawl + regen validation (long — PSI enabled):
+.\scripts\run_full_crawl_and_regen_test.ps1
+
+# Regen tests only (after a completed crawl saved a snapshot):
+.\scripts\run_regen_test.ps1
+```
+
+| Flag / env | Effect |
+|------------|--------|
+| `--regen-report` | Skip crawl + enrichment; replay stored rows through `export_flow` |
+| `HF_REGEN_REPORT=1` | Env equivalent of `--regen-report` |
+| `--snapshot-id <uuid>` | Load that snapshot instead of latest for domain |
+| `HF_SNAPSHOT_ID=<uuid>` | Env equivalent of `--snapshot-id` |
+| `HF_SNAPSHOT_RETENTION_PER_DOMAIN` | Snapshots kept per domain (default **10**) |
+| `HF_SNAPSHOTS_DB_PATH` | Override `.cache/crawl_snapshots.sqlite` |
+
+**Live runs** auto-save a snapshot after enrichment (before export). Output path: `.cache/crawl_snapshots.sqlite`. Replay writes a **new** file under `reports/latest/` with `_regen_{id}_{timestamp}` in the name — it never overwrites the original crawl workbook.
+
+List stored snapshots (PowerShell):
+
+```powershell
+sqlite3 .cache/crawl_snapshots.sqlite "SELECT snapshot_id, domain, run_timestamp, row_count FROM crawl_snapshots ORDER BY created_at DESC LIMIT 10;"
+```
+
+Mutually exclusive with `--quick-test`, `--full-smoke-test`, and `--validate`.
+
+**Manual regression workflow:** crawl once → change reporter/rules → `--regen-report` → diff xlsx outputs or point `--previous-run` at an earlier regen workbook for delta sheets.
+
+---
+
 ## Nuclear reset (local env artefacts)
 
 **PowerShell:**
@@ -210,7 +256,21 @@ cd dist
 ```
 
 
+
+
+
 https://africanmarketingconfederation.org/page-sitemap.xml
 https://ticonafrica.org/page-sitemap.xml
+
+
+
+Set-Location c:\Users\Dr0sera\Github\hype-frog
+.\.venv\Scripts\Activate.ps1
+
+# Optional: confirm a snapshot exists
+python scripts\_check_snapshot_state.py
+
+
+hype-frog --regen-report
 
 

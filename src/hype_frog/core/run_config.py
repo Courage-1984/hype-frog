@@ -71,6 +71,8 @@ class CliRunOverrides:
     gsc_url_inspection: str | None = None
     max_memory_mb: int | None = None
     streaming: bool = False
+    regen_report: bool = False
+    snapshot_id: str | None = None
 
 
 def _quick_test_max_psi_urls() -> int:

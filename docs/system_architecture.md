@@ -12,8 +12,9 @@ This document is the **single canonical narrative** for modular layout, runtime 
 6. **Pipeline** — `hype_frog/pipeline/` owns enrichment glue, graph intelligence, scoring helpers, image/OG probes, export-safe transforms.
 7. **Rules** — `hype_frog/rules/` owns `IssueRule` definitions, severity/priority, stable identifiers, playbook metadata.
 8. **Reporter** — `hype_frog/reporter/` owns workbook construction (sheets, formatting, guardrails, TOC, navigation, view-state safety).
-9. **Checkpoint** — `hype_frog/checkpoint/` persists resumable crawl state for long runs (`store.py`).
-10. **Core and config** — `hype_frog/core/` and shared config: logging, URL normalisation, Pydantic contracts, cross-layer helpers.
+9. **Checkpoint** — `hype_frog/checkpoint/` persists resumable crawl state for long runs (`store.py`, `cache.py`).
+10. **Snapshots** — `hype_frog/snapshots/` persists post-enrichment crawl payloads for report-only replay (`store.py`, `models.py`, `replay.py`). Distinct from checkpoint resume and from the compact delta sidecar (`_delta_summary.json`).
+11. **Core and config** — `hype_frog/core/` and shared config: logging, URL normalisation, Pydantic contracts, cross-layer helpers.
 
 ## Staged async pipeline
 
@@ -22,7 +23,20 @@ This document is the **single canonical narrative** for modular layout, runtime 
 3. `hype_frog.crawler.fetcher.fetch_and_parse` fetches HTTP/rendered content, assembles row payloads, records extraction state.
 4. `hype_frog.crawler.data_assembler.assemble_from_html` parses HTML into additive `main` and `extra` row dictionaries; phase-level assembly logic lives in `data_assembler_phases.py`.
 5. `hype_frog.orchestration.enrichment_flow.run_enrichment` runs five phases: GSC analytics context, optional GSC URL Inspection batch, PSI batch (dispatched via `crawler/psi_batch.py` with `psi_cache.py` TTL caching and `psi_merge.py` payload parsing), link/image/OG probes and canonical/robots passes, then scoring/graph/issue assembly (including `analysis/*` enrichments and Main merge via `pipeline/assemble.py`).
-6. `hype_frog.orchestration.export_flow.execute_export` sequences xlsx (via `export_workbook.py` and `export_row_builders.py`), HTML, and PDF (via `export_executive_reports.py`) through the reporter layer and merged sheet builders.
+6. **`hype_frog.snapshots`** — on successful live runs, `app_orchestrator` builds a `CrawlReplaySnapshot` from post-enrichment state and appends it to `.cache/crawl_snapshots.sqlite` (retention per domain via `HF_SNAPSHOT_RETENTION_PER_DOMAIN`, default 10). This is **not** written during `--regen-report` replay.
+7. `hype_frog.orchestration.export_flow.execute_export` sequences xlsx (via `export_workbook.py` and `export_row_builders.py`), HTML, and PDF (via `export_executive_reports.py`) through the reporter layer and merged sheet builders.
+
+### Report-only replay (`--regen-report`)
+
+When `HF_REGEN_REPORT=1` or `--regen-report` is set, `app_orchestrator.main` **short-circuits before** `execute_crawl` and `run_enrichment`:
+
+1. Resolve the target domain from `RunSetup.target_input`.
+2. Load the latest `CrawlReplaySnapshot` for that domain from `crawl_snapshots.sqlite`, or a specific row when `--snapshot-id` / `HF_SNAPSHOT_ID` is set (domain must match).
+3. Reconstruct `CrawlExecutionResult` and `EnrichmentResult` via `snapshots/replay.py` (read-only row dicts; typed payloads validated through existing Pydantic models).
+4. Assign a fresh output path with `_regen_{snapshot_id_short}_{timestamp}` so the original crawl workbook is never overwritten.
+5. Call the same `execute_export` path as a live run (xlsx first, then optional HTML/PDF).
+
+No HTTP, PSI, GSC, BFS, Playwright, or checkpoint I/O runs on this path. Mutually exclusive with `--quick-test`, `--full-smoke-test`, and `--validate`.
 
 ## BFS spider
 
@@ -208,6 +222,7 @@ Non-crawl entrypoints in `core/` provide preflight and regression gates (wired t
 | `diagnostics/quick_test.py` | `--quick-test` (+ `--quick-test-fast`, `--quick-test-skip-{preflight,pytest,audit}`) | Preflight (no live PSI) → focused pytest subset → live 10-URL BFS crawl (accurate mode, depth 2, full suite) → post-export workbook audit. |
 | `diagnostics/full_smoke_test.py` + `diagnostics/full_smoke_fixtures.py` | `--full-smoke-test` (+ `--full-smoke-test-fast`, `--full-smoke-test-skip-{preflight,pytest,audit}`) | Strict preflight (incl. live PSI) → pytest subset → ~80 synthetic-URL **mocked** crawl (timeout/404/redirect status mix) → real enrichment + export → workbook audit. Output under `reports/full_smoke_test/`; volume via `HF_FULL_SMOKE_URL_COUNT`. |
 | `core/run_config.py` | — | Frozen `RunConfig` presets (`quick_test_run_config`, `full_smoke_run_config`) and `ResumeCheckpointMode` consumed by `orchestration/run_setup.resolve_run_setup` for non-interactive runs. |
+| `app_orchestrator.py` | `--regen-report` (`--snapshot-id`, `HF_REGEN_REPORT`, `HF_SNAPSHOT_ID`) | Skips crawl/enrichment; loads `CrawlReplaySnapshot` from `snapshots/store.py`; re-exports via `export_flow.execute_export`. Live runs persist snapshots after enrichment. |
 
 `reporter/workbook_audit.py` (`audit_workbook`, `count_main_rows`) backs the audit phase: TOC at index 0, tab order, freeze panes, Main `Extraction State` contract, Content Hub literals, merged-diagnostic sheet presence.
 

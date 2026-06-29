@@ -1,4 +1,4 @@
-"""Content Planner sheet: nav/footer hierarchy + workflow sign-off columns."""
+"""Content Planner sheet: site URL inventory + workflow sign-off columns."""
 
 from __future__ import annotations
 
@@ -45,42 +45,35 @@ def _level_columns(url: str) -> dict[str, str | None]:
     }
 
 
+def _planner_row(url: str) -> dict[str, object]:
+    return {
+        **_level_columns(url),
+        "Page link": url,
+        "Copy Doc": None,
+        **{col: "Not signed off" for col in CONTENT_PLANNER_SIGNOFF_COLUMNS},
+    }
+
+
 def build_content_planner_rows(
     typed_extra_rows: list[ExtraRowPayload],
     root_url: str,
 ) -> list[dict[str, object]]:
-    root_key = normalize_url_key(root_url)
-    homepage_row = next(
-        (r for r in typed_extra_rows if normalize_url_key(r.values.get("URL") or "") == root_key),
-        None,
-    )
-    if homepage_row is None:
-        return []
-
-    nav_footer: list[dict[str, object]] = homepage_row.values.get("Nav Footer Link Details") or []
+    """Build one planner row per crawled URL (full domain inventory)."""
+    del root_url  # retained for export API stability
     seen: set[str] = set()
-    unique_links: list[dict[str, object]] = []
-    for link in nav_footer:
-        target = str(link.get("Target URL") or "")
-        if target and target not in seen:
-            seen.add(target)
-            unique_links.append(link)
+    urls: list[str] = []
+    for row in typed_extra_rows:
+        url = str(row.values.get("URL") or "").strip()
+        if not url:
+            continue
+        key = normalize_url_key(url)
+        if key in seen:
+            continue
+        seen.add(key)
+        urls.append(url)
 
-    unique_links.sort(key=lambda lnk: urlparse(str(lnk.get("Target URL") or "")).path)
-
-    rows: list[dict[str, object]] = []
-    for link in unique_links:
-        url = str(link.get("Target URL") or "")
-        cols = _level_columns(url)
-        rows.append(
-            {
-                **cols,
-                "Page link": url,
-                "Copy Doc": None,
-                **{col: "Not signed off" for col in CONTENT_PLANNER_SIGNOFF_COLUMNS},
-            }
-        )
-    return rows
+    urls.sort(key=lambda item: urlparse(item).path)
+    return [_planner_row(url) for url in urls]
 
 
 __all__ = [

@@ -58,18 +58,47 @@ This distinguishes “not in export” from a measured zero. `GSC Coverage Note`
 
 Checkpoint payloads store completed URL lists and serialized crawl results. Any change to on-disk checkpoint schema must remain backward compatible or be version-guarded.
 
+**Checkpoint vs crawl replay snapshots** — do not conflate the two:
+
+| Store | Path / module | Lifecycle | Payload |
+|-------|----------------|-----------|---------|
+| BFS resume checkpoint | `{workbook}_checkpoint.json`, `checkpoint/store.py` | Per in-progress run; deleted on completion | Raw `CrawlResult` pairs + BFS queue state |
+| Post-crawl replay snapshot | `.cache/crawl_snapshots.sqlite`, `snapshots/store.py` | Retained across runs (per-domain cap) | Post-enrichment `main_rows` + `extra_rows` + export context |
+| Delta sidecar | `{workbook}_delta_summary.json`, `analysis/delta_loader.py` | One JSON per export | Compact `RunSnapshot` (metrics + issues only) |
+
 If a change to **`MainRowPayload`** or **`ExtraRow`** is **not** purely additive, the developer or agent must either **explicitly instruct the user to delete `.cache/*.sqlite`** before the next run, or **implement a `CACHE_VERSION` increment** (or equivalent invalidation) so SQLite-backed resume paths cannot load stale JSON that causes corruption or crashes during replay.
 
 ## SQLite cache versioning and invalidation
 
-The runtime uses **SQLite** for durable caches and intermediate stores (for example crawl **audit cache** under `checkpoint/`, **PSI** and **GSC** metric caches under `crawler/`). Treat on-disk SQLite files as part of the **data contract surface**:
+The runtime uses **SQLite** for durable caches and intermediate stores (for example crawl **audit cache** under `checkpoint/`, **crawl replay snapshots** under `snapshots/` (`.cache/crawl_snapshots.sqlite`), **PSI** and **GSC** metric caches under `crawler/`). Treat on-disk SQLite files as part of the **data contract surface**:
 
 - **Schema or semantics change** — If table layout, column meaning, or JSON payload shape written into a cache row changes incompatibly, **bump a cache version** (dedicated metadata row/table, filename suffix, or documented constant) and **invalidate or migrate** existing rows. Do not silently read stale rows that deserialize into wrong-shaped dicts or scores.
 - **TTL and eviction** — Where a cache is time-bounded (for example “fresh for N hours”), document and honour that TTL in code; avoid serving expired blobs as if current without explicit caller awareness.
 - **Additive JSON in crawl cache** — Extra keys in cached `main_json` / `extra_json` can remain additive when consumers tolerate `extra="allow"`; **removals or renames** of cached keys require version bump or migration so resumed runs do not emit corrupted workbook rows.
 - **Operational hygiene** — Prefer explicit **delete/rebuild** of a cache file when a breaking change ships rather than leaving incompatible databases on disk without detection.
 
-> **Current state:** no `CACHE_VERSION` constant is implemented yet. Today the only invalidation path is **manual deletion** of `.cache/*.sqlite` (crawl audit cache via `checkpoint/cache.py`, plus PSI/GSC metric caches under `crawler/`). When a non-additive contract change ships, instruct the user to delete the cache, or introduce a version sentinel as described above.
+> **Current state:** no `CACHE_VERSION` constant is implemented yet. Today the only invalidation path is **manual deletion** of `.cache/*.sqlite` (crawl audit cache via `checkpoint/cache.py`, crawl replay store via `snapshots/store.py`, plus PSI/GSC metric caches under `crawler/`). When a non-additive contract change ships, instruct the user to delete the cache, or introduce a version sentinel as described above.
+
+## Crawl replay snapshots (`CrawlReplaySnapshot`)
+
+Full post-enrichment row payloads for `--regen-report`. **Not** the same contract as `analysis/delta_models.RunSnapshot` (delta compare uses four summary metrics + issue inventory only).
+
+| Constant / field | Value / type | Notes |
+|------------------|--------------|-------|
+| `CRAWL_SNAPSHOT_SCHEMA_VERSION` | `1` | Separate from `delta_models.SNAPSHOT_VERSION` |
+| `snapshot_id` | `str` (UUID4) | Primary key in SQLite |
+| `domain` | `str` | Normalised host from crawl target (e.g. `example.com`) |
+| `run_timestamp` | `str` | UTC `YYYY-MM-DD HH:MM:SS` |
+| `source_output_path` | `str \| null` | Original crawl workbook path |
+| `main_rows` | `list[dict]` | Post-enrichment main row dicts (append-only key contract) |
+| `extra_rows` | `list[dict]` | Post-enrichment extra row dicts |
+| `crawl_context` | `dict` | Serialised `CrawlExecutionResult` fields required for export |
+| `enrichment_context` | `dict` | Serialised `EnrichmentResult` fields (`status_by_url`, `graph_metrics`, etc.) |
+| `setup_context` | `dict` | Export-relevant `RunSetup` subset (`high_value_slugs`, `competitor_domains`, …) |
+
+SQLite table `crawl_snapshots` indexes `domain` + `created_at` for “latest for domain” queries. Retention: `HF_SNAPSHOT_RETENTION_PER_DOMAIN` (default **10**). Override DB path: `HF_SNAPSHOTS_DB_PATH`.
+
+On load, if `schema_version` exceeds the runtime supported version, replay aborts with a logged error. Replay reconstructs `MainRowPayload` / `ExtraRowPayload` via `model_validate`; reporters treat rows as read-only (same as live crawl).
 
 ## Runtime configuration (D6)
 

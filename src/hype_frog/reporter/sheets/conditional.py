@@ -450,10 +450,21 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
         for idx, cell in enumerate(worksheet[2], start=1)
         if cell.value
     }
+    # Row 1 = banner, row 2 = headers, row 3 = scope-note row (merged here so row 2
+    # stays unmerged — merging before banner insert hid header labels in Excel).
+    scope_row = 3
+    if max_col > 1 and worksheet.max_row >= scope_row:
+        scope_end = get_column_letter(max_col)
+        for merged in list(worksheet.merged_cells.ranges):
+            if merged.min_row <= 2 <= merged.max_row:
+                worksheet.unmerge_cells(str(merged))
+        worksheet.merge_cells(f"A{scope_row}:{scope_end}{scope_row}")
+        scope_cell = worksheet.cell(row=scope_row, column=1)
+        scope_cell.font = Font(italic=True, size=9, color="666666")
+        scope_cell.alignment = Alignment(horizontal="left", vertical="center")
+        worksheet.row_dimensions[scope_row].height = 18
     status_col = headers.get("Status")
-    # Row 1 = banner (inserted above), row 2 = headers, row 3 = scope-note row
-    # (merged across all columns by the exporter before this function runs).
-    # Actual data starts at row 4.
+    # Actual hub data starts at row 4.
     start_row = 4
     end_row = worksheet.max_row
 

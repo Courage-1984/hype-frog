@@ -399,11 +399,6 @@ def write_full_suite_workbook(
     write_dict_rows_sheet(
         writer, CONTENT_OPTIMISATION_HUB_SHEET, content_hub_cols, hub_base_rows
     )
-    _ws_hub = writer.book[CONTENT_OPTIMISATION_HUB_SHEET]
-    _ws_hub.merge_cells(f"A2:{get_column_letter(len(content_hub_cols))}2")
-    _ws_hub["A2"].font = Font(italic=True, size=9, color="666666")
-    _ws_hub["A2"].alignment = Alignment(horizontal="left", vertical="center")
-    _ws_hub.row_dimensions[2].height = 18
     _metrics_cols = list(CONTENT_HUB_METRICS_EXPORT_COLUMNS)
     write_dict_rows_sheet(
         writer,

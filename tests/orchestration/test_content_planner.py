@@ -61,23 +61,47 @@ def test_all_signoff_columns_present_in_main_tuple() -> None:
 # build_content_planner_rows — happy path
 # ---------------------------------------------------------------------------
 
-def test_empty_nav_footer_returns_empty_list() -> None:
+def test_empty_crawl_returns_empty_list() -> None:
+    assert build_content_planner_rows([], root_url="https://example.com/") == []
+
+
+def test_all_crawled_urls_included_not_only_nav_footer() -> None:
+    home = _make_extra("https://example.com/")
+    about = _make_extra("https://example.com/about/")
+    blog = _make_extra("https://example.com/blog/post-one/")
+    contact = _make_extra("https://example.com/contact/")
+    rows = build_content_planner_rows(
+        [home, about, blog, contact], root_url="https://example.com/"
+    )
+    page_links = {r["Page link"] for r in rows}
+    assert len(rows) == 4
+    assert "https://example.com/" in page_links
+    assert "https://example.com/about/" in page_links
+    assert "https://example.com/blog/post-one/" in page_links
+    assert "https://example.com/contact/" in page_links
+
+
+def test_no_homepage_row_still_returns_other_crawled_urls() -> None:
+    about = _make_extra("https://example.com/about/")
+    services = _make_extra("https://example.com/services/")
+    rows = build_content_planner_rows([about, services], root_url="https://example.com/")
+    assert len(rows) == 2
+    assert {r["Page link"] for r in rows} == {
+        "https://example.com/about/",
+        "https://example.com/services/",
+    }
+
+
+def test_homepage_without_nav_footer_still_listed() -> None:
     extra = _make_extra("https://example.com/")
-    result = build_content_planner_rows([extra], root_url="https://example.com/")
-    assert result == []
-
-
-def test_no_homepage_row_returns_empty_list() -> None:
-    extra = _make_extra("https://example.com/about/")
-    result = build_content_planner_rows([extra], root_url="https://example.com/")
-    assert result == []
+    rows = build_content_planner_rows([extra], root_url="https://example.com/")
+    assert len(rows) == 1
+    assert rows[0]["Page link"] == "https://example.com/"
+    assert rows[0]["Primary"] == "Home"
 
 
 def test_primary_link_at_depth_1() -> None:
-    extra = _make_extra(
-        "https://example.com/",
-        [_nav_link("https://example.com/about/", "About")],
-    )
+    extra = _make_extra("https://example.com/about/")
     rows = build_content_planner_rows([extra], root_url="https://example.com/")
     assert len(rows) == 1
     assert rows[0]["Primary"] == "about"
@@ -87,10 +111,7 @@ def test_primary_link_at_depth_1() -> None:
 
 
 def test_secondary_link_at_depth_2() -> None:
-    extra = _make_extra(
-        "https://example.com/",
-        [_nav_link("https://example.com/about/team/", "Team")],
-    )
+    extra = _make_extra("https://example.com/about/team/")
     rows = build_content_planner_rows([extra], root_url="https://example.com/")
     assert len(rows) == 1
     assert rows[0]["Primary"] is None
@@ -99,10 +120,7 @@ def test_secondary_link_at_depth_2() -> None:
 
 
 def test_tertiary_link_at_depth_3_plus() -> None:
-    extra = _make_extra(
-        "https://example.com/",
-        [_nav_link("https://example.com/about/team/leadership/", "Leadership")],
-    )
+    extra = _make_extra("https://example.com/about/team/leadership/")
     rows = build_content_planner_rows([extra], root_url="https://example.com/")
     assert len(rows) == 1
     assert rows[0]["Tertiary"] == "leadership"
@@ -111,42 +129,34 @@ def test_tertiary_link_at_depth_3_plus() -> None:
 
 
 def test_root_url_itself_gets_primary_home_label() -> None:
-    extra = _make_extra(
-        "https://example.com/",
-        [_nav_link("https://example.com/", "Home")],
-    )
+    extra = _make_extra("https://example.com/")
     rows = build_content_planner_rows([extra], root_url="https://example.com/")
     assert rows[0]["Primary"] == "Home"
     assert rows[0]["Page link"] == "https://example.com/"
 
 
-def test_duplicate_targets_deduplicated() -> None:
-    links = [
-        _nav_link("https://example.com/about/", "About"),
-        _nav_link("https://example.com/about/", "About Us"),
+def test_duplicate_crawl_urls_deduplicated() -> None:
+    extras = [
+        _make_extra("https://example.com/about/"),
+        _make_extra("https://example.com/about/"),
     ]
-    extra = _make_extra("https://example.com/", links)
-    rows = build_content_planner_rows([extra], root_url="https://example.com/")
+    rows = build_content_planner_rows(extras, root_url="https://example.com/")
     assert len(rows) == 1
 
 
 def test_rows_sorted_by_url_path() -> None:
-    links = [
-        _nav_link("https://example.com/services/", "Services"),
-        _nav_link("https://example.com/about/", "About"),
-        _nav_link("https://example.com/contact/", "Contact"),
+    extras = [
+        _make_extra("https://example.com/services/"),
+        _make_extra("https://example.com/about/"),
+        _make_extra("https://example.com/contact/"),
     ]
-    extra = _make_extra("https://example.com/", links)
-    rows = build_content_planner_rows([extra], root_url="https://example.com/")
+    rows = build_content_planner_rows(extras, root_url="https://example.com/")
     paths = [r["Page link"] for r in rows]
     assert paths == sorted(paths)
 
 
 def test_row_keys_match_content_planner_columns() -> None:
-    extra = _make_extra(
-        "https://example.com/",
-        [_nav_link("https://example.com/about/", "About")],
-    )
+    extra = _make_extra("https://example.com/about/")
     rows = build_content_planner_rows([extra], root_url="https://example.com/")
     row_keys = set(rows[0].keys())
     expected_keys = set(CONTENT_PLANNER_COLUMNS)
@@ -154,31 +164,24 @@ def test_row_keys_match_content_planner_columns() -> None:
 
 
 def test_signoff_columns_default_to_not_signed_off() -> None:
-    extra = _make_extra(
-        "https://example.com/",
-        [_nav_link("https://example.com/about/", "About")],
-    )
+    extra = _make_extra("https://example.com/about/")
     rows = build_content_planner_rows([extra], root_url="https://example.com/")
     for col in CONTENT_PLANNER_SIGNOFF_COLUMNS:
         assert rows[0][col] == "Not signed off"
 
 
 def test_copy_doc_defaults_to_none() -> None:
-    extra = _make_extra(
-        "https://example.com/",
-        [_nav_link("https://example.com/about/", "About")],
-    )
+    extra = _make_extra("https://example.com/about/")
     rows = build_content_planner_rows([extra], root_url="https://example.com/")
     assert rows[0]["Copy Doc"] is None
 
 
-def test_footer_links_included_alongside_nav_links() -> None:
-    links = [
-        _nav_link("https://example.com/about/", "About", location="nav"),
-        _nav_link("https://example.com/privacy/", "Privacy", location="footer"),
+def test_multiple_crawled_urls_all_emitted() -> None:
+    extras = [
+        _make_extra("https://example.com/about/"),
+        _make_extra("https://example.com/privacy/"),
     ]
-    extra = _make_extra("https://example.com/", links)
-    rows = build_content_planner_rows([extra], root_url="https://example.com/")
+    rows = build_content_planner_rows(extras, root_url="https://example.com/")
     page_links = {r["Page link"] for r in rows}
     assert "https://example.com/about/" in page_links
     assert "https://example.com/privacy/" in page_links
@@ -193,19 +196,15 @@ def test_root_url_with_trailing_slash_matches_normalized_key() -> None:
     assert len(rows) >= 0
 
 
-def test_multiple_extra_rows_only_homepage_used() -> None:
-    home = _make_extra(
-        "https://example.com/",
-        [_nav_link("https://example.com/about/", "About")],
-    )
-    other = _make_extra(
-        "https://example.com/other/",
-        [_nav_link("https://example.com/services/", "Services")],
-    )
-    rows = build_content_planner_rows([home, other], root_url="https://example.com/")
+def test_multiple_extra_rows_all_urls_emitted() -> None:
+    home = _make_extra("https://example.com/")
+    about = _make_extra("https://example.com/about/")
+    other = _make_extra("https://example.com/services/")
+    rows = build_content_planner_rows([home, about, other], root_url="https://example.com/")
     page_links = {r["Page link"] for r in rows}
+    assert "https://example.com/" in page_links
     assert "https://example.com/about/" in page_links
-    assert "https://example.com/services/" not in page_links
+    assert "https://example.com/services/" in page_links
 
 
 @pytest.mark.parametrize(
@@ -220,6 +219,6 @@ def test_multiple_extra_rows_only_homepage_used() -> None:
 def test_hierarchy_assignment_parametrized(
     url: str, expected_col: str, expected_label: str
 ) -> None:
-    extra = _make_extra("https://example.com/", [_nav_link(url)])
+    extra = _make_extra(url)
     rows = build_content_planner_rows([extra], root_url="https://example.com/")
     assert rows[0][expected_col] == expected_label

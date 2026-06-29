@@ -1,3 +1,5 @@
+"""Top-level application orchestration — crawl, enrichment, export, and replay."""
+
 from __future__ import annotations
 
 import asyncio
@@ -8,14 +10,28 @@ from urllib.parse import urlparse
 
 from hype_frog.core import get_logger
 from hype_frog.core.console import log_completion_panel
+from hype_frog.core.file_utils import build_regen_output_filename
 from hype_frog.core.run_config import CliRunOverrides, RunConfig
 from hype_frog.core.url_normalization import normalize_url_key
 from hype_frog.orchestration.crawl_runner import execute_crawl
 from hype_frog.orchestration.enrichment_flow import run_enrichment
 from hype_frog.orchestration.export_flow import execute_export
 from hype_frog.orchestration.export_row_builders import build_aeo_rows, build_aioseo_rows
-from hype_frog.orchestration.run_setup import resolve_run_setup
+from hype_frog.orchestration.run_setup import RunSetup, resolve_run_setup
 from hype_frog.pipeline.enrich import value_or_default as _value_or_default_pipeline
+from hype_frog.snapshots import (
+    load_crawl_snapshot_by_id,
+    load_latest_crawl_snapshot_for_domain,
+    save_crawl_snapshot,
+)
+from hype_frog.snapshots.replay import (
+    ReplaySnapshotError,
+    assert_snapshot_domain_matches,
+    build_crawl_replay_snapshot,
+    merge_setup_from_snapshot,
+    replay_from_snapshot,
+    resolve_snapshot_domain,
+)
 
 logger = get_logger(__name__)
 
@@ -37,14 +53,11 @@ def _value_or_default(value: object, default: float = 0.0) -> float:
     return _value_or_default_pipeline(value, default)
 
 
-async def main(
-    run: RunConfig | None = None,
-    cli_overrides: CliRunOverrides | None = None,
-) -> None:
-    _start = time.perf_counter()
-    setup = resolve_run_setup(run, cli_overrides=cli_overrides)
-    crawl_result = await execute_crawl(setup)
-    enrichment_result = await run_enrichment(crawl_result)
+def _execute_export_bundle(
+    setup: RunSetup,
+    crawl_result,
+    enrichment_result,
+) -> str:
     execute_export(
         setup,
         crawl_result,
@@ -54,9 +67,78 @@ async def main(
         build_aeo_rows_fn=_build_aeo_rows,
         build_aioseo_rows_fn=_build_aioseo_rows,
     )
-    _pdf = crawl_result.output_filename.replace(".xlsx", "_executive_summary.pdf")
+    return crawl_result.output_filename
+
+
+async def _run_replay_export(setup: RunSetup) -> tuple[str, int]:
+    domain = resolve_snapshot_domain(setup.target_input)
+    if setup.snapshot_id:
+        snapshot = load_crawl_snapshot_by_id(setup.snapshot_id)
+        if snapshot is None:
+            raise ReplaySnapshotError(
+                f"No crawl snapshot found with id {setup.snapshot_id!r}."
+            )
+        assert_snapshot_domain_matches(snapshot, setup.target_input)
+    else:
+        snapshot = load_latest_crawl_snapshot_for_domain(domain)
+        if snapshot is None:
+            raise ReplaySnapshotError(
+                f"No crawl snapshots stored for domain {domain!r}. "
+                "Run a full crawl first or pass --snapshot-id."
+            )
+
+    logger.info(
+        "REPLAY RUN: loading snapshot %s from %s (%d URLs)",
+        snapshot.snapshot_id,
+        snapshot.run_timestamp,
+        len(snapshot.main_rows),
+    )
+
+    setup = merge_setup_from_snapshot(setup, snapshot)
+    source_path = snapshot.source_output_path or ""
+    output_filename = build_regen_output_filename(
+        source_path or f"replay_{domain}.xlsx",
+        snapshot.snapshot_id,
+    )
+    crawl_result, enrichment_result = replay_from_snapshot(
+        snapshot,
+        setup,
+        output_filename=output_filename,
+    )
+    _execute_export_bundle(setup, crawl_result, enrichment_result)
+    return output_filename, len(snapshot.main_rows)
+
+
+async def main(
+    run: RunConfig | None = None,
+    cli_overrides: CliRunOverrides | None = None,
+) -> None:
+    _start = time.perf_counter()
+    setup = resolve_run_setup(run, cli_overrides=cli_overrides)
+
+    if setup.regen_report:
+        try:
+            output_filename, url_count = await _run_replay_export(setup)
+        except ReplaySnapshotError as exc:
+            logger.error("%s", exc)
+            raise SystemExit(1) from exc
+        _pdf = output_filename.replace(".xlsx", "_executive_summary.pdf")
+        log_completion_panel(
+            output_filename=output_filename,
+            url_count=url_count,
+            elapsed_seconds=time.perf_counter() - _start,
+            pdf_filename=_pdf if os.path.exists(_pdf) else None,
+        )
+        return
+
+    crawl_result = await execute_crawl(setup)
+    enrichment_result = await run_enrichment(crawl_result)
+    snapshot = build_crawl_replay_snapshot(setup, crawl_result, enrichment_result)
+    save_crawl_snapshot(snapshot)
+    output_filename = _execute_export_bundle(setup, crawl_result, enrichment_result)
+    _pdf = output_filename.replace(".xlsx", "_executive_summary.pdf")
     log_completion_panel(
-        output_filename=crawl_result.output_filename,
+        output_filename=output_filename,
         url_count=len(crawl_result.crawl_rows),
         elapsed_seconds=time.perf_counter() - _start,
         pdf_filename=_pdf if os.path.exists(_pdf) else None,

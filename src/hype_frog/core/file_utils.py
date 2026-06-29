@@ -24,3 +24,18 @@ def build_output_filename(source_label: str, full_suite: bool = True) -> str:
         counter += 1
 
     return str(candidate.resolve())
+
+
+def build_regen_output_filename(original_path: str, snapshot_id: str) -> str:
+    """Return a distinct workbook path for a replay export (never overwrites the source)."""
+    REPORTS_LATEST_DIR.mkdir(parents=True, exist_ok=True)
+    snapshot_short = snapshot_id.replace("-", "")[:8]
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    stem = original_path.replace("\\", "/").rsplit("/", 1)[-1].removesuffix(".xlsx")
+    base_name = f"{stem}_regen_{snapshot_short}_{timestamp}"
+    candidate = REPORTS_LATEST_DIR / f"{base_name}.xlsx"
+    counter = 1
+    while candidate.exists():
+        candidate = REPORTS_LATEST_DIR / f"{base_name}_{counter}.xlsx"
+        counter += 1
+    return str(candidate.resolve())

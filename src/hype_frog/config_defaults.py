@@ -41,6 +41,10 @@ OUTPUT_FILENAME: str = "seo_audit_report.xlsx"
 # --- Checkpointing ---
 CHECKPOINT_EVERY_N_PAGES: int = 50
 
+# --- Crawl replay snapshots (post-enrichment report regeneration) ---
+SNAPSHOT_RETENTION_PER_DOMAIN_DEFAULT: int = 10
+CRAWL_SNAPSHOTS_DB_RELATIVE: str = ".cache/crawl_snapshots.sqlite"
+
 # --- Core Web Vitals / lab thresholds (registry rules) ---
 CWV_LCP_CRITICAL_THRESHOLD: float = 4.0
 CWV_LCP_WARNING_THRESHOLD: float = 2.5

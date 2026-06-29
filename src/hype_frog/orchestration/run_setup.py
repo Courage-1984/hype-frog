@@ -13,6 +13,8 @@ from hype_frog.core.env_vars import (
     get_hf_competitors,
     get_hf_gsc_url_inspection,
     get_hf_max_memory_mb,
+    get_hf_regen_report,
+    get_hf_snapshot_id,
     get_hf_streaming,
 )
 from hype_frog.core.run_config import CliRunOverrides, ResumeCheckpointMode, RunConfig
@@ -57,6 +59,8 @@ class RunSetup:
     competitor_domains: tuple[str, ...] = ()
     output_filename: str | None = None
     export_pdf: bool = False
+    regen_report: bool = False
+    snapshot_id: str | None = None
 
 
 def resolve_run_setup(
@@ -93,6 +97,8 @@ def resolve_run_setup(
             competitor_domains=tuple(run.competitor_domains),
             output_filename=run.output_filename,
             export_pdf=run.export_pdf,
+            regen_report=False,
+            snapshot_id=None,
         )
 
     user = get_user_config()
@@ -106,6 +112,8 @@ def resolve_run_setup(
     competitor_domains = _resolve_competitor_domains_env()
     previous_audit_path_preset: str | None = None
     export_pdf = False
+    regen_report = get_hf_regen_report()
+    snapshot_id: str | None = get_hf_snapshot_id()
 
     if cli_overrides is not None:
         if cli_overrides.check_og_images:
@@ -126,6 +134,10 @@ def resolve_run_setup(
             competitor_domains = _parse_competitor_domains(cli_overrides.competitors)
         elif cli_overrides.benchmarks:
             competitor_domains = ()
+        if cli_overrides.regen_report:
+            regen_report = True
+        if cli_overrides.snapshot_id:
+            snapshot_id = cli_overrides.snapshot_id
 
     return RunSetup(
         target_input=user.target_input,
@@ -150,6 +162,8 @@ def resolve_run_setup(
         streaming=streaming,
         competitor_domains=competitor_domains,
         export_pdf=export_pdf,
+        regen_report=regen_report,
+        snapshot_id=snapshot_id,
     )
 
 

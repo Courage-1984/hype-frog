@@ -179,6 +179,17 @@ Output: `reports/full_smoke_test/`. Tune synthetic sitemap volume: `HF_FULL_SMOK
 
 If Playwright is not installed, accurate mode falls back to fast HTTP with a warning; the run still completes. Output lands under `reports/latest/` unless `HF_OUTPUT_FILENAME` overrides it.
 
+### Report-only regeneration (`--regen-report`)
+
+After a normal crawl, post-enrichment row data is saved to `.cache/crawl_snapshots.sqlite`. Re-run export only (no crawl) when iterating on reporter or workbook layout:
+
+```bash
+uv run hype-frog --regen-report
+uv run hype-frog --regen-report --snapshot-id <uuid>
+```
+
+Replay uses the same `export_flow` as a live run and writes a new workbook under `reports/latest/` with a `_regen_` suffix. See [`commands.md`](commands.md) for env vars (`HF_REGEN_REPORT`, `HF_SNAPSHOT_RETENTION_PER_DOMAIN`) and the manual regression workflow.
+
 **`ModuleNotFoundError: No module named 'hype_frog'`** means the editable project is not installed in the active venv. Run **`uv sync`** from the repo root (not only `uv venv` without syncing the project). Then retry `uv run …`.
 
 ## Tests
@@ -194,7 +205,7 @@ Re-run the suite after substantive changes to crawl, pipeline, or reporting code
 Canonical technical manuals (keep in sync with code changes):
 
 - [`docs/system_architecture.md`](docs/system_architecture.md) — layers, staged pipeline, **BFS spider**, fetch modes, **AEO**, **search intent**, **ROI**, executive dashboard, workbook integrity pointers.
-- [`docs/data_contracts.md`](docs/data_contracts.md) — `main` / `extra` envelopes, Pydantic contracts, additive keys, checkpoints.
+- [`docs/data_contracts.md`](docs/data_contracts.md) — `main` / `extra` envelopes, Pydantic contracts, additive keys, checkpoints, **crawl replay snapshots**.
 - [`docs/excel_reporting_standards.md`](docs/excel_reporting_standards.md) — reporter module split, sanitization, ghost/nuclear view state, TOC, Content Hub literals.
 
 ## Governance

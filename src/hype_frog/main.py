@@ -195,6 +195,23 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--regen-report",
+        action="store_true",
+        help=(
+            "Skip crawl and enrichment; regenerate workbook/HTML/PDF from the "
+            "latest stored crawl snapshot for the target domain"
+        ),
+    )
+    parser.add_argument(
+        "--snapshot-id",
+        default=None,
+        metavar="UUID",
+        help=(
+            "With --regen-report: replay a specific stored crawl snapshot "
+            "(default: latest for the target domain)"
+        ),
+    )
+    parser.add_argument(
         "--psi-delay",
         type=float,
         default=None,
@@ -252,6 +269,17 @@ def run(argv: list[str] | None = None) -> None:
             skip_workbook_audit=args.quick_test_skip_audit,
         )
         raise SystemExit(asyncio.run(run_quick_test_gate(options)))
+    if args.regen_report and (
+        args.quick_test
+        or args.quick_test_fast
+        or args.full_smoke_test
+        or args.full_smoke_test_fast
+        or args.validate
+    ):
+        raise SystemExit(
+            "--regen-report cannot be combined with --quick-test, "
+            "--full-smoke-test, or --validate."
+        )
     gsc_inspection: str | None = None
     if args.gsc_url_inspection_full:
         gsc_inspection = "full"
@@ -267,6 +295,8 @@ def run(argv: list[str] | None = None) -> None:
         gsc_url_inspection=gsc_inspection,
         max_memory_mb=args.max_memory_mb,
         streaming=args.streaming,
+        regen_report=args.regen_report,
+        snapshot_id=args.snapshot_id,
     )
     asyncio.run(_async_main(None, cli_overrides=cli_overrides))
 

@@ -233,7 +233,7 @@ def _apply_content_hub_assigned_owner_validation(worksheet) -> None:
         return
     headers = _hub_headers_row2(worksheet)
     col = headers.get("Assigned Owner")
-    if not col or worksheet.max_row < 3:
+    if not col or worksheet.max_row < 4:
         return
     letter = get_column_letter(col)
     dv = DataValidation(
@@ -246,7 +246,7 @@ def _apply_content_hub_assigned_owner_validation(worksheet) -> None:
     )
     dv.errorStyle = "stop"
     worksheet.add_data_validation(dv)
-    dv.add(f"{letter}3:{letter}{worksheet.max_row}")
+    dv.add(f"{letter}4:{letter}{worksheet.max_row}")
 
 
 def _apply_content_hub_copywriter_column_layout(worksheet) -> None:
@@ -274,7 +274,7 @@ def _apply_content_hub_copywriter_column_layout(worksheet) -> None:
     header_lower_by_col: dict[int, str] = {
         col_idx: str(name).lower() for name, col_idx in headers.items()
     }
-    for r in range(3, worksheet.max_row + 1):
+    for r in range(4, worksheet.max_row + 1):
         for c in range(1, worksheet.max_column + 1):
             cell = worksheet.cell(row=r, column=c)
             prev = cell.alignment
@@ -315,7 +315,7 @@ def _link_hub_scores_from_main(worksheet: Worksheet) -> None:
     for hub_header, main_header in score_pairs:
         hub_l = content_hub_column_letter(hub_header)
         main_col = sheet_data_column_range("Main", main_header)
-        for row_idx in range(3, worksheet.max_row + 1):
+        for row_idx in range(4, worksheet.max_row + 1):
             worksheet[f"{hub_l}{row_idx}"] = (
                 f"=IFERROR(INDEX({main_col},MATCH({hub_url_l}{row_idx},{main_url},0)),\"\")"
             )
