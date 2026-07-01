@@ -323,7 +323,6 @@ def write_full_suite_workbook(
     logger.info("Writing summary and issue sheets...")
     summary_df = pd.DataFrame(summary_rows)
     write_dataframe_sheet(writer, summary_df, "Summary", startrow=1)
-    write_dataframe_sheet(writer, issue_inventory_df, "IssueInventory", startrow=1)
     template_duplication_rows = build_template_duplication_risks_rows(
         duplicate_rows=duplicate_rows,
         pattern_rows=pattern_rows,
@@ -472,7 +471,6 @@ def write_full_suite_workbook(
         for row in typed_extra_rows
         if str(row.values.get("Severity Badge") or "") == "Warning"
     )
-    top_blockers = fixplan_df.head(10).reindex(columns=list(_FIXPLAN_TOP_BLOCKER_COLS))
     seo_health_values: list[float] = []
     for row in typed_extra_rows:
         raw_hs = row.values.get("SEO Health Score")
@@ -513,67 +511,6 @@ def write_full_suite_workbook(
         warning_url_count=warning_count,
         projected_health_score_pct=projected_health_pct,
         projected_pass_rate_pct=projected_pass_pct,
-    )
-    dashboard_rows = [
-        {"Metric": "URLs Crawled", "Value": summary_metrics.urls_crawled},
-        {"Metric": "SEO Pass Rate %", "Value": summary_metrics.seo_pass_rate_pct},
-        {"Metric": "Health Score %", "Value": summary_metrics.health_score_pct},
-        {"Metric": "Critical URL Count", "Value": summary_metrics.critical_url_count},
-        {"Metric": "Warning URL Count", "Value": summary_metrics.warning_url_count},
-        {
-            "Metric": "Projected Health Score %",
-            "Value": summary_metrics.projected_health_score_pct,
-        },
-        {
-            "Metric": "Projected Pass Rate %",
-            "Value": summary_metrics.projected_pass_rate_pct,
-        },
-    ]
-    # TODO: [Next Major Release] Remove legacy hidden Dashboard tab — delete this write block
-    # and ``style_dashboard`` once Executive Briefing bookmark migration is complete.
-    # Tab hiding is enforced via ``LEGACY_HIDDEN_SHEETS`` in ``workbook_layout``.
-    write_dataframe_sheet(writer, pd.DataFrame(dashboard_rows), "Dashboard", startrow=1)
-    critical_issues_rows = [
-        {"Block": "Critical Issues", "URL": row.get("URL"), "Issue": row.get("Matched Issues")}
-        for row in extra_rows
-        if value_or_default_fn(row.get("Critical Issues Count"), 0.0) > 0
-    ][:10]
-    dashboard_quick_win_rows = [
-        {"Block": "Quick Wins", "URL": row.get("URL"), "Issue": "Missing meta on high-impression page"}
-        for row in extra_rows
-        if bool(row.get("Meta Description Missing"))
-        and value_or_default_fn(row.get("GSC Impressions"), 0.0) > 500
-    ][:10]
-    growth_rows = [
-        {"Block": "Growth Opportunities", "URL": row.get("URL"), "Issue": "Missing FAQ/QA schema or thin content on revenue URL"}
-        for row in extra_rows
-        if (
-            (
-                not bool(row.get("QAPage/FAQ Schema Present"))
-                or value_or_default_fn(row.get("Word Count"), 0.0) < 300
-            )
-            and any(slug in str(row.get("URL") or "").lower() for slug in high_value_slugs)
-        )
-    ][:10]
-    action_hub_df = pd.DataFrame(critical_issues_rows + dashboard_quick_win_rows + growth_rows)
-    if not action_hub_df.empty:
-        write_dataframe_sheet(writer, action_hub_df, "Dashboard", startrow=20)
-    immediate_action_cols = ["URL", "Business Risk Score", "Why Prioritized", "Action Needed", "Owner", "Status"]
-    immediate_actions_df = priority_df.reindex(columns=immediate_action_cols).head(5).copy()
-    immediate_actions_df.insert(0, "Rank", range(1, len(immediate_actions_df) + 1))
-    immediate_actions_startrow = len(dashboard_rows) + len(top_blockers) + 7
-    write_dataframe_sheet(
-        writer,
-        pd.DataFrame([{"Immediate Actions": "Top 5 URLs by Business Risk Score"}]),
-        "Dashboard",
-        startrow=immediate_actions_startrow,
-    )
-    write_dataframe_sheet(
-        writer,
-        immediate_actions_df,
-        "Dashboard",
-        startrow=immediate_actions_startrow + 2,
-        include_header=True,
     )
     if not is_write_only_writer(writer):
         write_executive_briefing(
@@ -656,7 +593,9 @@ def write_full_suite_workbook(
         1 for row in typed_extra_rows if row.values.get("Extraction Source Fallback")
     )
     logger.debug("Crawl duration for Dashboard RunMetadata: %.1fs", crawl_duration_s)
+    target_site = urlparse(urls[0]).netloc if urls else "Unknown"
     run_meta_rows = [
+        {"Key": "Target Site", "Value": target_site},
         {"Key": "Run Timestamp", "Value": run_timestamp},
         {"Key": "Total URLs", "Value": len(urls)},
         {"Key": "Duration (s)", "Value": crawl_duration_s},

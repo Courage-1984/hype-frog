@@ -264,7 +264,7 @@ def apply_cross_sheet_links(
                         url_letter, r, link_label="Open"
                     ),
                 )
-    if sheet_name in {"IssueInventory", "Issue Register"}:
+    if sheet_name in {"Issue Register"}:
         url_col = headers.get("URL")
         issue_col = headers.get("Issue")
         reference_tab_col = headers.get("Reference Tab") or headers.get(

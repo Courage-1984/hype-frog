@@ -130,10 +130,10 @@ PLAYBOOK_QUICK_REFERENCE_ROWS = [
 PLAYBOOK_LEGEND_ROWS = [
     {
         "Section": "How To Use",
-        "Term": "Step 1: Start on Dashboard",
+        "Term": "Step 1: Start on Executive Briefing",
         "Meaning": "Review pass rate, critical URL count, and Immediate Actions to understand overall risk first.",
         "Values/Threshold": "5-minute executive scan",
-        "Related Tabs": "Dashboard, Priority URLs",
+        "Related Tabs": "Executive Briefing, Priority URLs",
     },
     {
         "Section": "How To Use",

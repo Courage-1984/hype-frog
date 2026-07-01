@@ -57,6 +57,57 @@ def load_snapshot_json(path: str) -> RunSnapshot | None:
     return snapshot
 
 
+def _issue_records_from_dataframe(
+    df: pd.DataFrame,
+    *,
+    run_date: str,
+) -> tuple[dict[str, IssueRecord], set[str]]:
+    issues: dict[str, IssueRecord] = {}
+    fixed_issue_ids: set[str] = set()
+    for _, row in df.iterrows():
+        stable_id = str(row.get("Stable Issue ID") or "").strip()
+        if not stable_id:
+            continue
+        status = str(row.get("Status") or "Open").strip()
+        record = IssueRecord(
+            stable_issue_id=stable_id,
+            url=str(row.get("URL") or "").strip(),
+            issue=str(row.get("Issue") or "").strip(),
+            severity=str(row.get("Severity") or "").strip(),
+            last_seen=run_date,
+            status=status,
+        )
+        issues[stable_id] = record
+        if status.lower() in {"fixed", "done", "closed"}:
+            fixed_issue_ids.add(stable_id)
+    return issues, fixed_issue_ids
+
+
+def _load_issue_records_from_workbook(
+    workbook: pd.ExcelFile,
+    *,
+    run_date: str,
+) -> tuple[dict[str, IssueRecord], set[str]]:
+    if "Issue Register" in workbook.sheet_names:
+        register = pd.read_excel(workbook, sheet_name="Issue Register")
+        if "Section" in register.columns:
+            per_url = register[
+                register["Section"].astype(str).str.strip() == "Issue Inventory"
+            ]
+            if not per_url.empty:
+                register = per_url
+            elif "URL" in register.columns:
+                register = register[
+                    register["URL"].astype(str).str.strip().astype(bool)
+                    & register["Stable Issue ID"].astype(str).str.strip().astype(bool)
+                ]
+        return _issue_records_from_dataframe(register, run_date=run_date)
+    if "IssueInventory" in workbook.sheet_names:
+        inventory = pd.read_excel(workbook, sheet_name="IssueInventory")
+        return _issue_records_from_dataframe(inventory, run_date=run_date)
+    return {}, set()
+
+
 def load_snapshot_xlsx(path: str) -> RunSnapshot | None:
     try:
         workbook = pd.ExcelFile(path)
@@ -70,26 +121,10 @@ def load_snapshot_xlsx(path: str) -> RunSnapshot | None:
                 run_date = parse_run_timestamp(row.get("Value")) or run_date
                 break
 
-    issues: dict[str, IssueRecord] = {}
-    fixed_issue_ids: set[str] = set()
-    if "IssueInventory" in workbook.sheet_names:
-        inventory = pd.read_excel(workbook, sheet_name="IssueInventory")
-        for _, row in inventory.iterrows():
-            stable_id = str(row.get("Stable Issue ID") or "").strip()
-            if not stable_id:
-                continue
-            status = str(row.get("Status") or "Open").strip()
-            record = IssueRecord(
-                stable_issue_id=stable_id,
-                url=str(row.get("URL") or "").strip(),
-                issue=str(row.get("Issue") or "").strip(),
-                severity=str(row.get("Severity") or "").strip(),
-                last_seen=run_date,
-                status=status,
-            )
-            issues[stable_id] = record
-            if status.lower() in {"fixed", "done", "closed"}:
-                fixed_issue_ids.add(stable_id)
+    issues, fixed_issue_ids = _load_issue_records_from_workbook(
+        workbook,
+        run_date=run_date,
+    )
 
     metrics_by_url: dict[str, dict[str, float | None]] = {}
     if "Main" in workbook.sheet_names:

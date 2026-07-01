@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from openpyxl.formatting.rule import FormulaRule
-from openpyxl.styles import Border, PatternFill, Side
+from openpyxl.styles import Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
+from hype_frog.reporter.sheets.conditional import apply_cf_zebra_banding
 from hype_frog.reporter.sheets.config import (
     CHART_DATA_SHEET,
     CONTENT_HUB_METRICS_SHEET,
@@ -16,13 +16,11 @@ from hype_frog.reporter.sheets.config import (
     EXECUTIVE_BRIEFING_SHEET,
     GRID_BORDER,
     LARGE_SHEET_ROW_THRESHOLD,
-    ZEBRA_FAINT,
 )
 from hype_frog.reporter.sheets.sheet_rows import sheet_data_header_row
 
 _EXEMPT_LARGE_SHEET_PRESENTATION: frozenset[str] = frozenset(
     {
-        "Dashboard",
         EXECUTIVE_BRIEFING_SHEET,
         "Table of Contents",
         CONTENT_OPTIMISATION_HUB_SHEET,
@@ -71,15 +69,7 @@ def apply_large_sheet_presentation(worksheet: Worksheet, sheet_name: str) -> Non
     if DISABLE_CONDITIONAL_FORMATTING:
         return
 
-    rng = f"A{data_start}:{last_col}{worksheet.max_row}"
-    worksheet.conditional_formatting.add(
-        rng,
-        FormulaRule(
-            formula=["MOD(ROW(),2)=0"],
-            stopIfTrue=False,
-            fill=PatternFill("solid", fgColor=ZEBRA_FAINT),
-        ),
-    )
+    apply_cf_zebra_banding(worksheet, sheet_name, header_row=header_row)
 
 
 __all__ = [

@@ -25,7 +25,7 @@ from hype_frog.reporter.sheets.navigation import add_return_to_briefing_strip
 from hype_frog.reporter.sheets.sheet_rows import sheet_data_header_row
 from hype_frog.reporter.sheets.tables import normalize_table_headers
 from hype_frog.reporter.sheets.tables_impl import (
-    _EMPTY_STATE_MESSAGE,
+    _EMPTY_STATE_BY_SHEET,
     _write_empty_state_message,
 )
 
@@ -84,6 +84,7 @@ def test_url_and_prose_header_sets_are_disjoint() -> None:
 def test_empty_state_message_written_under_headers() -> None:
     wb = Workbook()
     ws = wb.active
+    ws.title = "FixPlan"
     ws.cell(row=1, column=1, value=RETURN_TO_BRIEFING_LABEL)
     ws.cell(row=2, column=1, value="Issue Type")
     ws.cell(row=2, column=2, value="Severity")
@@ -91,8 +92,9 @@ def test_empty_state_message_written_under_headers() -> None:
 
     _write_empty_state_message(ws, header_row=2)
 
-    assert ws.cell(row=3, column=1).value == _EMPTY_STATE_MESSAGE
+    assert ws.cell(row=3, column=1).value == _EMPTY_STATE_BY_SHEET["FixPlan"]
     assert ws.cell(row=3, column=1).font.italic is True
+    assert ws.cell(row=3, column=1).fill.start_color.rgb.endswith("E6F4EA")
 
 
 def test_empty_state_message_skipped_when_data_present() -> None:

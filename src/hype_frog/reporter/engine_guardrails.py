@@ -26,6 +26,7 @@ from hype_frog.reporter.sheets.config import (
 from hype_frog.reporter.sheets.large_sheet_presentation import (
     apply_large_sheet_presentation,
 )
+from hype_frog.reporter.sheets.navigation import apply_return_strip_run_metadata
 from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
 from hype_frog.reporter.sheets.workbook_layout import apply_workbook_active_tab
 from hype_frog.reporter.sheets.layout import (
@@ -38,9 +39,6 @@ _BANNED_TOC_FALLBACK = "Detailed URL diagnostic data"
 
 # Manual TOC blurbs (authoritative for export guardrails and initial TOC seed).
 _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
-    "Dashboard": (
-        "Legacy formula dashboard (hidden one release — use Executive Briefing)."
-    ),
     "Executive Briefing": (
         "Primary executive landing: KPI cards, charts, owner triage, and navigation."
     ),
@@ -120,10 +118,7 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "Pattern and Template Issues": (
         "Folder-level clusters and template-wide systemic issue patterns."
     ),
-    "IssueInventory": (
-        "Legacy flattened issue log (superseded by Issue Register for client workflows). "
-        "Hidden from the Table of Contents; use Issue Register for backlog tracking."
-    ),
+
     "SitemapQA": "Sitemap coverage, URL membership checks, and sitemap metadata QA.",
     "Quick Reference Guide": "In-workbook SEO and AEO copy standards and guardrails.",
     "Glossary & Legend": "Definitions for metrics, badges, and workbook conventions.",
@@ -148,7 +143,7 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "CrawlGraph": "Derived link graph metrics (click depth, inlinks, PageRank proxy).",
     "Issue Register": (
         "Tracked issue backlog with first-seen dates, days open, assignment fields, "
-        "and client notes. Unified rollups from Summary plus per-URL rows from Issue Inventory."
+        "and client notes. Unified rollups from Summary plus per-URL issue rows."
     ),
     "Technical Diagnostics": (
         "Per-URL technical, indexability, redirect, security, PSI, and Search Console signals."
@@ -477,5 +472,6 @@ def apply_workbook_export_guardrails(wb: Workbook) -> None:
     apply_bespoke_freeze_panes(wb)
     for name in wb.sheetnames:
         apply_large_sheet_presentation(wb[name], name)
+    apply_return_strip_run_metadata(wb)
     # Last write wins: open the workbook on Executive Briefing (TOC stays left-most).
     apply_workbook_active_tab(wb)

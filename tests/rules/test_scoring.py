@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from hype_frog.rules import get_summary_rules, score_url_health
+from hype_frog.rules.scoring import align_extraction_state_from_main
 from hype_frog.reporter.summary_builder import safe_rule
 
 
@@ -36,3 +37,24 @@ def test_score_url_health_skipped_stays_unmeasured() -> None:
     assert badge == "Unmeasured"
     assert score is None
     assert matched == {"Critical": [], "Warning": [], "Observation": []}
+
+
+def test_align_extraction_state_from_main_repairs_desync_before_scoring() -> None:
+    rules = get_summary_rules()
+    extra: dict[str, object] = {
+        "URL": "https://example.com/page",
+        "Extraction State": "skipped",
+        "Status Code": 200,
+        "Title Missing": True,
+    }
+    main: dict[str, object] = {
+        "URL": "https://example.com/page",
+        "Extraction State": "partial",
+        "Extraction Source": "raw_http",
+    }
+    align_extraction_state_from_main(extra, main)
+    assert extra["Extraction State"] == "partial"
+    score, badge, _icon, matched = score_url_health(extra, rules)
+    assert badge != "Unmeasured"
+    assert score is not None
+    assert "Missing Title" in matched["Critical"]

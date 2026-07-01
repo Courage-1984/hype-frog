@@ -203,6 +203,17 @@ _FIXPLAN_HELP: dict[str, str] = {
 }
 
 _QUICK_WINS_HELP: dict[str, str] = {
+    "Priority Score": format_help_layer(
+        description=(
+            "Quick-win ranking (higher = tackle sooner) blending severity, effort, traffic, "
+            "and business risk."
+        ),
+        calculation=(
+            "Severity weight (Critical=100, Warning=50, Observation=10) divided by effort "
+            "hours, plus GSC clicks ÷ 10, plus Business Risk Score ÷ 100; computed during "
+            "Quick Wins assembly (not recalculated in Excel)."
+        ),
+    ),
     "Effort (hrs)": format_help_layer(
         description="Estimated hands-on hours to complete this quick win.",
         calculation="Estimated during Quick Wins assembly from the issue's fix profile.",
@@ -222,6 +233,16 @@ _QUICK_WINS_HELP: dict[str, str] = {
 }
 
 _BROKEN_LINK_IMPACT_HELP: dict[str, str] = {
+    "Priority Score": format_help_layer(
+        description=(
+            "Broken-destination ranking (higher = fix sooner) by inbound link volume and "
+            "source-page traffic."
+        ),
+        calculation=(
+            "Source Page Clicks Total plus Inbound Link Count × 10; computed during Broken "
+            "Link Impact assembly (not recalculated in Excel)."
+        ),
+    ),
     "Inbound Link Count": format_help_layer(
         description="How many internal links point at this broken destination.",
         calculation="Count of internal link edges resolving to this broken target URL.",
@@ -602,6 +623,9 @@ def apply_workflow_status_dropdown(
         formula1=status_validation_list_formula(),
         allow_blank=True,
     )
+    status_dv.showInputMessage = True
+    status_dv.promptTitle = "Workflow status"
+    status_dv.prompt = "Track workflow state: To Do → In Progress → In Review → Done"
     status_dv.showErrorMessage = True
     status_dv.errorTitle = "Invalid Status"
     status_dv.error = "Select a value from the dropdown list."

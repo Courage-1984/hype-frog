@@ -35,7 +35,7 @@ RAG_GREEN_FONT: str = "137333"
 RAG_RED_SOFT: str = "FFF0F0"   # softer critical (severity row striping) — lighter than RAG_RED
 RAG_AMBER_SOFT: str = "FFFAED" # softer warning striping — lighter than RAG_AMBER
 RAG_NEUTRAL: str = "D9D9D9"    # not-applicable / to-do
-ZEBRA_BAND: str = "F7F7F7"     # legacy static zebra (≤500 rows; superseded by CF)
+ZEBRA_BAND: str = "F7F7F7"     # CF zebra anchor (≤500 data rows)
 
 # Office-style 3-stop heatmap scale (low → mid → high), reused by colour scales.
 HEATMAP_LOW: str = "F8696B"
@@ -122,12 +122,30 @@ CONTENT_HUB_FREEZE_PANES: str = "I3"
 SHEET_ZOOM_OVERRIDES: dict[str, int] = {
     EXECUTIVE_BRIEFING_SHEET: 85,
     "Main": 85,
+    "Priority URLs": 90,
 }
+
+# Actionable workflow / triage sheets always receive autofilter headers (Phase 3).
+AUTO_FILTER_SHEETS: frozenset[str] = frozenset(
+    {
+        "Summary",
+        "Priority URLs",
+        "FixPlan",
+        "Quick Wins",
+        AIOSEO_RECOMMENDATIONS_SHEET,
+        "Technical Diagnostics",
+        CONTENT_HUB_METRICS_SHEET,
+        "Broken Link Impact",
+        "Issue Register",
+        "Content & AI Readiness",
+        "Link Intelligence",
+        "Template & Duplication Risks",
+        "SitemapQA",
+    }
+)
 
 DATA_HEAVY_TABS: set[str] = {
     "Main",
-    "Technical",
-    "AEO",
     AIOSEO_RECOMMENDATIONS_SHEET,
     "FixPlan",
     "Summary",
@@ -239,6 +257,7 @@ __all__ = [
     "CHART_DATA_SHEET",
     "CONTENT_HUB_FREEZE_PANES",
     "SHEET_ZOOM_OVERRIDES",
+    "AUTO_FILTER_SHEETS",
     "DATA_HEAVY_TABS",
     "env_bool",
     "DEBUG_EXCEL_ISOLATION_MODE",

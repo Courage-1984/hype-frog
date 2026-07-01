@@ -22,6 +22,7 @@ from hype_frog.rules import (
     score_url_health,
     stable_issue_id,
 )
+from hype_frog.rules.scoring import align_extraction_state_from_main, scorable_extraction_state
 from hype_frog.core.text_utils import normalize_text_hash, to_bool
 from hype_frog.core.url_normalization import normalize_url_key
 
@@ -321,6 +322,20 @@ def compute_seo_technical_copy_scores(
     return technical_health, copy_score, seo_score
 
 
+def merged_extraction_state(
+    main_values: Mapping[str, Any],
+    extra_values: Mapping[str, Any],
+) -> object:
+    """Prefer scorable extraction from either row payload when assembling Main."""
+    main_state = main_values.get("Extraction State")
+    extra_state = extra_values.get("Extraction State")
+    if scorable_extraction_state(main_state):
+        return main_state
+    if scorable_extraction_state(extra_state):
+        return extra_state
+    return main_state or extra_state or "skipped"
+
+
 def assemble_enriched_row(
     main_data: MainRowPayload,
     extra_data: ExtraRowPayload,
@@ -349,8 +364,7 @@ def assemble_enriched_row(
         "SEO Health Score": extra_values.get("SEO Health Score"),
         "Severity Badge": extra_values.get("Severity Badge"),
         "Health Icon": extra_values.get("Health Icon"),
-        "Extraction State": main_values.get("Extraction State")
-        or extra_values.get("Extraction State", "skipped"),
+        "Extraction State": merged_extraction_state(main_values, extra_values),
         "Extraction Source": extra_values.get("Extraction Source")
         or main_values.get("Extraction Source", "raw_http"),
         "CWV LCP (s)": extra_values.get("CWV LCP (s)"),
@@ -598,6 +612,10 @@ def row_with_seo_health_enrichment(
 ) -> ExtraRowPayload:
     norm = normalize_url_key_fn or normalize_url_key
     row_values = row.values
+    url_key = str(row_values.get("URL") or "").strip()
+    main_match = main_by_url.get(url_key)
+    if main_match is not None:
+        align_extraction_state_from_main(row_values, main_match.values)
     score, badge, icon, matched = score_url_health(row_values, summary_rules)
     row_url_norm = norm(row_values.get("Final URL") or row_values.get("URL"))
     base: dict[str, object] = {

@@ -198,13 +198,12 @@ def apply_workbook_toc_and_links(
             continue
         if disable_non_core_freeze_panes and tab_name not in {
             "Main",
-            "Dashboard",
             EXECUTIVE_BRIEFING_SHEET,
         }:
             _set_freeze_panes_safe(ws, None)
             _clear_orphaned_selection(ws)
             continue
-        if tab_name not in {"Main", "Dashboard"} and (
+        if tab_name not in {"Main"} and (
             ws.max_row < 10 or ws.max_column < 5
         ):
             _set_freeze_panes_safe(ws, None)
@@ -236,7 +235,6 @@ def apply_workbook_toc_and_links(
             "Pattern and Template Issues",
             "Duplicates",
             "PSI Performance",
-            "IssueInventory",
             "Issue Register",
             "Content & AI Readiness",
             "Link Intelligence",

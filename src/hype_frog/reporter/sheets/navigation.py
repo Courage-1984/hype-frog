@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.reporter.sheets.config import (
+    AUDIT_RUN_DETAILS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     DEBUG_EXCEL_ISOLATION_MODE,
     DISABLE_EXTERNAL_LINKS_AND_IMAGES,
@@ -27,6 +29,23 @@ from hype_frog.reporter.sheets.style_helpers import header_row_index
 from hype_frog.reporter.sheets.workbook_layout import excel_sheet_link_target
 
 _LEGACY_BACK_NAV_HEADER = "BACK TO DASHBOARD"
+
+
+def _audit_details_lookup_formula(key: str) -> str:
+    audit_esc = AUDIT_RUN_DETAILS_SHEET.replace("'", "''")
+    return (
+        f'IFERROR(INDEX(\'{audit_esc}\'!$B:$B,'
+        f'MATCH("{key}",\'{audit_esc}\'!$A:$A,0)),"")'
+    )
+
+
+def build_run_metadata_subtitle_formula() -> str:
+    """Excel formula for row-1 run context (domain, URL count, audit date)."""
+    return (
+        f'={_audit_details_lookup_formula("Target Site")} & " — " & '
+        f'{_audit_details_lookup_formula("Total URLs")} & " URLs crawled — " & '
+        f'LEFT({_audit_details_lookup_formula("Run Timestamp")},10)'
+    )
 
 
 def _has_return_strip(worksheet: Worksheet) -> bool:
@@ -60,19 +79,42 @@ def add_return_to_briefing_strip(worksheet: Worksheet, sheet_name: str) -> None:
     _remove_legacy_back_to_dashboard_column(worksheet, header_row=header_row)
     worksheet.insert_rows(1)
 
-    # Merge across the sheet's real columns only (capped at 8). Forcing a
-    # minimum of 4 columns previously inflated ``max_column`` on narrow sheets
-    # (e.g. the 3-column empty FixPlan), which then produced a stray
-    # ``Column_4`` header via ``normalize_table_headers``.
-    merge_end = get_column_letter(min(max(worksheet.max_column, 1), 8))
-    worksheet.merge_cells(f"A1:{merge_end}1")
+    # Return link in A1:B1; run metadata formula is applied in guardrails (C1:H1).
+    merge_end_col = min(max(worksheet.max_column, 1), 8)
+    return_end = get_column_letter(min(2, merge_end_col))
+    worksheet.merge_cells(f"A1:{return_end}1")
     cell = worksheet["A1"]
     cell.value = RETURN_TO_BRIEFING_LABEL
     safe_target = excel_sheet_link_target(WORKBOOK_NAV_TARGET_SHEET)
     cell.hyperlink = f"#'{safe_target}'!A1"
     cell.font = Font(color=STD_BLUE, italic=True, underline="single")
     cell.alignment = Alignment(horizontal="left", vertical="center")
+    if merge_end_col >= 3:
+        meta_end = get_column_letter(merge_end_col)
+        worksheet.merge_cells(f"C1:{meta_end}1")
+        meta_cell = worksheet["C1"]
+        meta_cell.alignment = Alignment(horizontal="right", vertical="center")
+        meta_cell.font = Font(size=9, italic=True, color="666666")
     worksheet.row_dimensions[1].height = 20
+
+
+def apply_return_strip_run_metadata(wb: Workbook) -> None:
+    """Populate row-1 metadata on data sheets from Audit Run Details."""
+    if AUDIT_RUN_DETAILS_SHEET not in wb.sheetnames:
+        return
+    formula = build_run_metadata_subtitle_formula()
+    for name in wb.sheetnames:
+        if not sheet_uses_return_strip(name):
+            continue
+        ws = wb[name]
+        if not _has_return_strip(ws):
+            continue
+        if ws.max_column < 3:
+            continue
+        meta_end = get_column_letter(min(ws.max_column, 8))
+        if meta_end <= "B":
+            continue
+        ws["C1"].value = formula
 
 
 def add_back_to_dashboard_link(worksheet: Worksheet, sheet_name: str) -> None:
@@ -140,6 +182,8 @@ __all__ = [
     "add_return_to_briefing_strip",
     "add_url_navigation_links",
     "apply_cross_sheet_links",
+    "apply_return_strip_run_metadata",
+    "build_run_metadata_subtitle_formula",
     "sheet_data_header_row",
     "sheet_data_start_row",
     "sheet_uses_return_strip",

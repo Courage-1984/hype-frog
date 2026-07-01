@@ -207,7 +207,9 @@ async def test_execute_export_full_suite_writes_core_sheets(
     workbook = load_workbook(crawl_result.output_filename, read_only=True)
     try:
         assert "Main" in workbook.sheetnames
-        assert "Dashboard" in workbook.sheetnames
+        assert "Executive Briefing" in workbook.sheetnames
+        assert "Dashboard" not in workbook.sheetnames
+        assert "IssueInventory" not in workbook.sheetnames
         assert "Table of Contents" in workbook.sheetnames
         assert REQUIRED_FULL_SUITE_SHEETS.issubset(set(workbook.sheetnames))
     finally:

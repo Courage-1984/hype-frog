@@ -15,7 +15,6 @@ from hype_frog.reporter.sheets.config import (
     COMPETITOR_BENCHMARKS_SHEET,
     EXECUTIVE_BRIEFING_SHEET,
     IMAGE_INVENTORY_SHEET,
-    LEGACY_DASHBOARD_SHEET,
     LINK_EQUITY_MAP_SHEET,
     REDIRECT_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
@@ -68,7 +67,6 @@ ADVANCED_WORKBOOK_TAB_ORDER: tuple[str, ...] = (
     "Content & AI Readiness",
     "Link Intelligence",
     "CMS Action URLs",
-    "IssueInventory",
     "Redirects",
     REDIRECT_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
@@ -90,14 +88,9 @@ PREFERRED_WORKBOOK_TAB_ORDER: tuple[str, ...] = (
 
 _PREFERRED_TAB_SET: frozenset[str] = frozenset(PREFERRED_WORKBOOK_TAB_ORDER)
 
-# Legacy formula Dashboard retained one release (hidden); advanced tabs stay hidden.
-LEGACY_HIDDEN_SHEETS: frozenset[str] = frozenset({LEGACY_DASHBOARD_SHEET})
+HIDDEN_SHEETS_BY_DEFAULT: frozenset[str] = frozenset(ADVANCED_WORKBOOK_TAB_ORDER)
 
-HIDDEN_SHEETS_BY_DEFAULT: frozenset[str] = frozenset(
-    ADVANCED_WORKBOOK_TAB_ORDER
-) | LEGACY_HIDDEN_SHEETS
-
-SHEETS_EXCLUDED_FROM_TOC: frozenset[str] = frozenset({"IssueInventory"})
+SHEETS_EXCLUDED_FROM_TOC: frozenset[str] = frozenset()
 
 TOC_PRIMARY_SECTION_LABEL = "Primary workflow"
 TOC_ADVANCED_SECTION_LABEL = (
@@ -128,7 +121,6 @@ DASHBOARD_ADVANCED_SHEET_LINKS: tuple[tuple[str, str], ...] = (
 
 _SHEET_TAB_COLORS: dict[str, str] = {
     EXECUTIVE_BRIEFING_SHEET: TAB_COLOR_MANAGEMENT,
-    LEGACY_DASHBOARD_SHEET: TAB_COLOR_MANAGEMENT,
     "Summary": TAB_COLOR_MANAGEMENT,
     "Playbook": TAB_COLOR_MANAGEMENT,
     "Priority URLs": TAB_COLOR_TECHNICAL,
@@ -148,7 +140,6 @@ _SHEET_TAB_COLORS: dict[str, str] = {
     "Content & AI Readiness": TAB_COLOR_ADVANCED,
     "Link Intelligence": TAB_COLOR_ADVANCED,
     "CMS Action URLs": TAB_COLOR_ADVANCED,
-    "IssueInventory": TAB_COLOR_ADVANCED,
     "Redirects": TAB_COLOR_ADVANCED,
     REDIRECT_MAP_SHEET: TAB_COLOR_ADVANCED,
     ROBOTS_ANALYSIS_SHEET: TAB_COLOR_ADVANCED,
@@ -190,7 +181,7 @@ def apply_workbook_tab_colors(wb: Workbook) -> None:
 
 
 def apply_workbook_tab_visibility(wb: Workbook) -> None:
-    """Hide advanced / historical tabs and legacy Dashboard by default."""
+    """Hide advanced / historical tabs by default."""
     from hype_frog.reporter.sheets.config import EXECUTIVE_DASHBOARD_SHEET
 
     if EXECUTIVE_DASHBOARD_SHEET in wb.sheetnames:
@@ -240,7 +231,6 @@ __all__ = [
     "DASHBOARD_ADVANCED_SHEET_LINKS",
     "DASHBOARD_ADVANCED_SHEETS_NOTE",
     "HIDDEN_SHEETS_BY_DEFAULT",
-    "LEGACY_HIDDEN_SHEETS",
     "PREFERRED_WORKBOOK_TAB_ORDER",
     "TOC_ADVANCED_SECTION_LABEL",
     "TOC_PRIMARY_SECTION_LABEL",

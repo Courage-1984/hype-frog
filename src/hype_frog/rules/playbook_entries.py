@@ -43,7 +43,7 @@ def _entry_for_rule(rule: IssueRule) -> PlaybookEntry:
     owner = owner_for_issue(rule.name, rule.severity)
     verify = (
         f"Re-run the audit and confirm '{rule.name}' no longer appears for affected URLs "
-        "on the Issue Inventory tab."
+        "on the Issue Register tab."
     )
     extras = _PLAYBOOK_OVERRIDES.get(rule.name)
     if extras:

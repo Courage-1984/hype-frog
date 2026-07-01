@@ -54,16 +54,13 @@ def test_sheet_data_column_range_main_uses_row2_header_and_row3_data() -> None:
     assert "OFFSET('Main'!$A$1,2," in rng
 
 
-def test_issue_inventory_excluded_from_toc_and_dashboard_links() -> None:
-    assert "IssueInventory" in SHEETS_EXCLUDED_FROM_TOC
-    assert all(name != "IssueInventory" for name, _ in DASHBOARD_ADVANCED_SHEET_LINKS)
-
-
-def test_issue_inventory_skipped_in_toc_advanced_section() -> None:
+def test_issue_register_is_canonical_backlog_tab() -> None:
     from hype_frog.reporter.sheets.toc import ADVANCED_WORKBOOK_TAB_ORDER
 
-    assert "IssueInventory" in ADVANCED_WORKBOOK_TAB_ORDER
-    assert "IssueInventory" in SHEETS_EXCLUDED_FROM_TOC
+    assert "Issue Register" in ADVANCED_WORKBOOK_TAB_ORDER
+    assert "IssueInventory" not in ADVANCED_WORKBOOK_TAB_ORDER
+    assert "IssueInventory" not in SHEETS_EXCLUDED_FROM_TOC
+    assert any(name == "Issue Register" for name, _ in DASHBOARD_ADVANCED_SHEET_LINKS)
 
 
 def test_display_header_alias_rewrites_optimisation_label() -> None:

@@ -31,7 +31,7 @@ from hype_frog.reporter.sheets.layout import (
     content_optimisation_hub_ordered_headers,
     main_sheet_url_column_letter,
 )
-from hype_frog.reporter.summary_builder import reference_tab_for_merged_workbook
+from hype_frog.reporter.summary_builder import reference_tab_for_merged_workbook, safe_rule
 
 logger = get_logger(__name__)
 
@@ -241,7 +241,7 @@ def build_fixplan_rows(
         affected = [
             r
             for r in extra_rows
-            if issue_name in str(r.values.get("Matched Issues") or "").split(" | ")
+            if safe_rule(rule.fn, r.values)
         ]
         affected_count = len(affected)
         if affected_count <= 0:

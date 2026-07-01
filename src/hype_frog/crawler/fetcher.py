@@ -427,6 +427,7 @@ async def fetch_and_parse(
         extra_values["Extraction State"] = extraction_state_hint
     else:
         main_values["Extraction State"] = "skipped"
+        extra_values["Extraction State"] = "skipped"
         finalize_row_state(main_data, extra)
 
     if main_values["Load Time (s)"] is None:

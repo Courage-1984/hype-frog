@@ -61,7 +61,7 @@ def test_content_planner_has_tab_colour() -> None:
 def test_advanced_tabs_hidden_by_default() -> None:
     assert "Technical Diagnostics" in HIDDEN_SHEETS_BY_DEFAULT
     assert AUDIT_RUN_DETAILS_SHEET in HIDDEN_SHEETS_BY_DEFAULT
-    assert "Dashboard" in HIDDEN_SHEETS_BY_DEFAULT
+    assert "Dashboard" not in HIDDEN_SHEETS_BY_DEFAULT
     assert "Summary" not in HIDDEN_SHEETS_BY_DEFAULT
 
 
@@ -74,7 +74,6 @@ def test_apply_workbook_tab_layout_orders_colors_and_hides() -> None:
     wb.active.title = "Main"
     for name in (
         "Executive Briefing",
-        "Dashboard",
         "Technical Diagnostics",
         AUDIT_RUN_DETAILS_SHEET,
         "Playbook",
@@ -86,8 +85,8 @@ def test_apply_workbook_tab_layout_orders_colors_and_hides() -> None:
     assert titles.index("Playbook") < titles.index("Technical Diagnostics")
     briefing_color = str(wb["Executive Briefing"].sheet_properties.tabColor.rgb or "")
     assert briefing_color.upper().endswith(TAB_COLOR_MANAGEMENT.upper())
-    assert wb["Dashboard"].sheet_state == "hidden"
     assert wb["Technical Diagnostics"].sheet_state == "hidden"
+    assert "Dashboard" not in wb.sheetnames
     assert len(PREFERRED_WORKBOOK_TAB_ORDER) == len(set(PREFERRED_WORKBOOK_TAB_ORDER))
 
 

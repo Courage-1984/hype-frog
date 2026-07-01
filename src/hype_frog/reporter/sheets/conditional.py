@@ -21,15 +21,18 @@ from hype_frog.reporter.engine_formatting import (
     apply_workflow_status_conditional_formatting,
 )
 from hype_frog.reporter.sheets.config import (
+    CHART_DATA_SHEET,
     CONTENT_HUB_DATA_START_ROW,
     CONTENT_HUB_FREEZE_PANES,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    CONTENT_PLANNER_SHEET,
     DATA_BAR_BLUE,
     DEBUG_EXCEL_ISOLATION_MODE,
     DISABLE_CONDITIONAL_FORMATTING,
     DISABLE_DATA_VALIDATION,
     DISABLE_EXTERNAL_LINKS_AND_IMAGES,
+    EXECUTIVE_BRIEFING_SHEET,
     HEATMAP_HIGH,
     HEATMAP_LOW,
     HEATMAP_MID,
@@ -50,7 +53,9 @@ from hype_frog.reporter.sheets.config import (
     STD_WHITE,
     THEME_HEADER_BG,
     WORKBOOK_NAV_TARGET_SHEET,
+    LARGE_SHEET_ROW_THRESHOLD,
     ZEBRA_BAND,
+    ZEBRA_FAINT,
     HUB_BANNER_FILL,
     HUB_OWNER_COPYWRITER_FILL,
     HUB_OWNER_DEVELOPER_FILL,
@@ -219,6 +224,56 @@ def _cf_owns_static_fill(sheet_name: str, header: str) -> bool:
     return header in _CF_OWNED_COLUMNS_BY_SHEET.get(sheet_name, frozenset())
 
 
+_CF_ZEBRA_EXEMPT_SHEETS: frozenset[str] = frozenset(
+    {
+        EXECUTIVE_BRIEFING_SHEET,
+        "Table of Contents",
+        CONTENT_OPTIMISATION_HUB_SHEET,
+        CONTENT_PLANNER_SHEET,
+        CHART_DATA_SHEET,
+    }
+)
+
+
+def _worksheet_has_cf_zebra(worksheet: Worksheet) -> bool:
+    for rules in worksheet.conditional_formatting._cf_rules.values():
+        for rule in rules:
+            if not rule.formula:
+                continue
+            if any("MOD(ROW(),2)=0" in formula for formula in rule.formula):
+                return True
+    return False
+
+
+def apply_cf_zebra_banding(
+    worksheet: Worksheet,
+    sheet_name: str,
+    *,
+    header_row: int,
+) -> None:
+    """Apply sort/filter-safe zebra banding via conditional formatting."""
+    if DISABLE_CONDITIONAL_FORMATTING:
+        return
+    if sheet_name in _CF_ZEBRA_EXEMPT_SHEETS:
+        return
+    if _worksheet_has_cf_zebra(worksheet):
+        return
+    data_start = header_row + 1
+    if worksheet.max_row < data_start or worksheet.max_column < 2:
+        return
+    data_rows = worksheet.max_row - header_row
+    fill_color = ZEBRA_FAINT if data_rows > LARGE_SHEET_ROW_THRESHOLD else ZEBRA_BAND
+    last_col = get_column_letter(worksheet.max_column)
+    worksheet.conditional_formatting.add(
+        f"A{data_start}:{last_col}{worksheet.max_row}",
+        FormulaRule(
+            formula=["MOD(ROW(),2)=0"],
+            stopIfTrue=False,
+            fill=PatternFill("solid", fgColor=fill_color),
+        ),
+    )
+
+
 def apply_generic_sheet_coloring(
     worksheet: Worksheet, sheet_name: str, *, header_row: int = 1
 ) -> None:
@@ -242,9 +297,6 @@ def apply_generic_sheet_coloring(
         start_color=RAG_AMBER_SOFT, end_color=RAG_AMBER_SOFT, fill_type="solid"
     )
     edge_fill = PatternFill(start_color=RAG_NEUTRAL, end_color=RAG_NEUTRAL, fill_type="solid")
-    zebra_fill = PatternFill(
-        start_color=ZEBRA_BAND, end_color=ZEBRA_BAND, fill_type="solid"
-    )
     headers = [
         worksheet.cell(row=header_row, column=c).value
         for c in range(1, worksheet.max_column + 1)
@@ -478,12 +530,6 @@ def apply_generic_sheet_coloring(
 
         if not row_has_issue:
             worksheet.cell(row=row_idx, column=1).fill = good_fill
-        if sheet_name != "Dashboard" and row_idx % 2 == 0:
-            if worksheet.max_row - header_row <= 500:
-                for col_idx in range(1, worksheet.max_column + 1):
-                    cell = worksheet.cell(row=row_idx, column=col_idx)
-                    if cell.fill.fill_type is None:
-                        cell.fill = zebra_fill
 
     if not DISABLE_CONDITIONAL_FORMATTING:
         # On Main, apply_main_sheet_heatmaps owns these columns; tell the global pass
@@ -495,6 +541,7 @@ def apply_generic_sheet_coloring(
             skip_headers=skip_headers,
             header_row=header_row,
         )
+    apply_cf_zebra_banding(worksheet, sheet_name, header_row=header_row)
 
 
 def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> None:
@@ -1725,6 +1772,7 @@ def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
 __all__ = [
     "apply_wrapped_row_heights",
     "apply_sheet_text_wrap_columns",
+    "apply_cf_zebra_banding",
     "apply_generic_sheet_coloring",
     "apply_content_hub_conditional_rules",
     "finalize_content_hub_after_normalized_headers",

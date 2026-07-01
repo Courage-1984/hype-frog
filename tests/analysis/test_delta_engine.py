@@ -195,15 +195,35 @@ def test_load_legacy_xlsx_snapshot_handles_nan_counts(tmp_path: Path) -> None:
     ws_summary.append(["Issue Counts", "Missing Title", None])   # NaN when read back
     ws_summary.append(["Issue Counts", "Missing Meta Description", 3])
 
-    ws_inventory = wb.create_sheet("IssueInventory")
-    ws_inventory.append(["Stable Issue ID", "URL", "Issue", "Severity", "Status"])
-    ws_inventory.append([
-        "https://example.com/::missing-title",
-        "https://example.com/",
-        "Missing Title",
-        "Critical",
-        "Open",
-    ])
+    ws_register = wb.create_sheet("Issue Register")
+    ws_register.append(
+        [
+            "URL",
+            "Section",
+            "Issue",
+            "Severity",
+            "Affected URL Count",
+            "Reference Area",
+            "Stable Issue ID",
+            "Owner",
+            "Sprint",
+            "Status",
+        ]
+    )
+    ws_register.append(
+        [
+            "https://example.com/",
+            "Issue Inventory",
+            "Missing Title",
+            "Critical",
+            1,
+            "Technical Diagnostics",
+            "https://example.com/::missing-title",
+            "",
+            "",
+            "Open",
+        ]
+    )
 
     xlsx_path = str(tmp_path / "audit.xlsx")
     wb.save(xlsx_path)

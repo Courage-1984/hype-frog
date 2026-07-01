@@ -29,7 +29,9 @@ def test_get_sheet_sequence_main_only_vs_full_suite() -> None:
     assert get_sheet_sequence(ExportRegistryConfig(full_suite=False)) == ["Main"]
     full = get_sheet_sequence(ExportRegistryConfig(full_suite=True))
     assert "Main" in full
-    assert "Dashboard" in full
+    assert "Executive Briefing" in full
+    assert "Dashboard" not in full
+    assert "IssueInventory" not in full
     assert len(full) > 30
 
 
@@ -48,9 +50,9 @@ def test_get_finalization_steps_order_is_stable() -> None:
 
 def test_sheet_column_registries_return_independent_copies() -> None:
     standard = get_standard_sheet_columns()
-    assert "Technical" in standard
-    standard["Technical"].append("MUTATED")
-    assert "MUTATED" not in get_standard_sheet_columns()["Technical"]
+    assert "Schema & Metadata" in standard
+    standard["Schema & Metadata"].append("MUTATED")
+    assert "MUTATED" not in get_standard_sheet_columns()["Schema & Metadata"]
 
     merged = get_merged_sheet_columns()
     assert "Issue Register" in merged
@@ -123,6 +125,38 @@ def test_build_priority_rows_scores_and_sorts() -> None:
     assert rows[1]["Business Risk Score"] == 15
     assert rows[1]["Action Needed"] == "No"
     assert rows[1]["Revenue Intent"] == "Standard"
+
+
+def test_build_priority_rows_unmeasured_skips_health_penalty() -> None:
+    extra_rows = [
+        {
+            "URL": "https://s/unmeasured",
+            "Severity Badge": "Unmeasured",
+            "Critical Issues Count": None,
+            "Warning Issues Count": None,
+            "SEO Health Score": None,
+            "Broken Internal Links Count": 0,
+        },
+        {
+            "URL": "https://s/healthy",
+            "Severity Badge": "Pass",
+            "Critical Issues Count": 0,
+            "Warning Issues Count": 0,
+            "SEO Health Score": 95.0,
+            "Broken Internal Links Count": 0,
+        },
+    ]
+    rows = build_priority_rows(
+        extra_rows,
+        high_value_slugs=[],
+        value_or_default_fn=_value_or_default,
+        owner_for_issue_fn=lambda _issue, _sev: "SEO Lead",
+    )
+    unmeasured = next(row for row in rows if row["URL"] == "https://s/unmeasured")
+    healthy = next(row for row in rows if row["URL"] == "https://s/healthy")
+    assert unmeasured["Business Risk Score"] == 0
+    assert unmeasured["SEO Health Score"] is None
+    assert healthy["Business Risk Score"] == 5
 
 
 def test_build_crawlgraph_rows_identifies_orphans_and_inlinks() -> None:

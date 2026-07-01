@@ -43,12 +43,13 @@ from hype_frog.reporter.sheets.config import (
     DEBUG_EXCEL_ISOLATION_MODE,
     DISABLE_DATA_VALIDATION,
     DISABLE_EXTERNAL_LINKS_AND_IMAGES,
+    RAG_GREEN,
+    RAG_GREEN_FONT,
     DISABLE_NON_CORE_FREEZE_PANES,
     STD_BLUE,
     STD_NAVY,
     STD_WHITE,
 )
-from hype_frog.reporter.sheets.dashboard import style_dashboard
 from hype_frog.reporter.sheets.layout import (
     apply_column_widths,
     apply_display_header_aliases,
@@ -332,8 +333,20 @@ def _link_hub_scores_from_main(worksheet: Worksheet) -> None:
             )
 
 
-_EMPTY_STATE_MESSAGE = "No items to report for this run."
-_EMPTY_STATE_SHEETS: frozenset[str] = frozenset({"FixPlan", "Quick Wins"})
+_EMPTY_STATE_BY_SHEET: dict[str, str] = {
+    "FixPlan": (
+        "No issues qualified for FixPlan in this run. "
+        "See Summary and Issue Register for the full issue list."
+    ),
+    "Quick Wins": (
+        "No quick wins met the ranking threshold this run. "
+        "See Summary for all flagged issues."
+    ),
+}
+_EMPTY_STATE_SHEETS: frozenset[str] = frozenset(_EMPTY_STATE_BY_SHEET.keys())
+_EMPTY_STATE_FILL = PatternFill(
+    start_color=RAG_GREEN, end_color=RAG_GREEN, fill_type="solid"
+)
 
 
 def _write_empty_state_message(worksheet: Worksheet, header_row: int) -> None:
@@ -347,8 +360,12 @@ def _write_empty_state_message(worksheet: Worksheet, header_row: int) -> None:
             value = worksheet.cell(row=row_idx, column=col_idx).value
             if value is not None and str(value).strip():
                 return
-    cell = worksheet.cell(row=data_start, column=1, value=_EMPTY_STATE_MESSAGE)
-    cell.font = Font(italic=True, color="808080")
+    message = _EMPTY_STATE_BY_SHEET.get(
+        worksheet.title, "No items to report for this run."
+    )
+    cell = worksheet.cell(row=data_start, column=1, value=message)
+    cell.font = Font(italic=True, color=RAG_GREEN_FONT)
+    cell.fill = _EMPTY_STATE_FILL
     cell.alignment = Alignment(horizontal="left", vertical="center")
     end_col = get_column_letter(max(1, min(max_col, 8)))
     if end_col != "A":
@@ -393,7 +410,7 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
     )
     add_url_navigation_links(writer, worksheet, sheet_name, header_row=header_row)
     apply_cross_sheet_links(writer, worksheet, sheet_name, header_row=header_row)
-    if sheet_name in {AIOSEO_RECOMMENDATIONS_SHEET, "FixPlan", "IssueInventory"}:
+    if sheet_name in {AIOSEO_RECOMMENDATIONS_SHEET, "FixPlan", "Issue Register"}:
         status_col = header_index(worksheet, header_row).get("Status")
         if status_col:
             apply_status_dropdown(worksheet, status_col, header_row=header_row)
@@ -429,59 +446,56 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
         add_header_tooltips(worksheet)
     if sheet_name in {"Technical", "Main", "AEO"}:
         apply_header_tooltips(worksheet, header_row=1)
-    if sheet_name == "Dashboard" and not DEBUG_EXCEL_ISOLATION_MODE:
-        style_dashboard(worksheet, writer)
-    if sheet_name != "Dashboard":
-        if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
-            header_row = 2
-        normalize_table_headers(worksheet, header_row=header_row)
-        header_values = [
-            worksheet.cell(row=header_row, column=c).value
-            for c in range(1, worksheet.max_column + 1)
-        ]
-        valid_table_headers = all(
-            isinstance(v, str) and v.strip() for v in header_values
-        )
-        if (
-            worksheet.max_row > header_row
-            and worksheet.max_column > 0
-            and valid_table_headers
-        ):
-            ref_string = compute_exact_table_ref(worksheet, header_row)
-            if ref_string:
-                start_ref, end_ref = ref_string.split(":")
-                min_row, min_col = coordinate_to_tuple(start_ref)
-                max_row, max_col = coordinate_to_tuple(end_ref)
-                apply_mock_table_styling(
-                    worksheet,
-                    min_col=min_col,
-                    max_col=max_col,
-                    min_row=min_row,
-                    max_row=max_row,
-                )
-        if sheet_name == "Main":
-            apply_main_column_group_header_tints(worksheet, header_row=header_row)
-        if sheet_name in (
-            "Technical Diagnostics",
-            "Content & AI Readiness",
-            "Link Intelligence",
-            "Link Inventory",
-            "Broken Link Impact",
-            "Quick Wins",
-            "Issue Register",
-            "Template & Duplication Risks",
-        ):
-            apply_merged_tabs_conditional_formatting(
-                worksheet, sheet_name, header_row=header_row
+    if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
+        header_row = 2
+    normalize_table_headers(worksheet, header_row=header_row)
+    header_values = [
+        worksheet.cell(row=header_row, column=c).value
+        for c in range(1, worksheet.max_column + 1)
+    ]
+    valid_table_headers = all(
+        isinstance(v, str) and v.strip() for v in header_values
+    )
+    if (
+        worksheet.max_row > header_row
+        and worksheet.max_column > 0
+        and valid_table_headers
+    ):
+        ref_string = compute_exact_table_ref(worksheet, header_row)
+        if ref_string:
+            start_ref, end_ref = ref_string.split(":")
+            min_row, min_col = coordinate_to_tuple(start_ref)
+            max_row, max_col = coordinate_to_tuple(end_ref)
+            apply_mock_table_styling(
+                worksheet,
+                min_col=min_col,
+                max_col=max_col,
+                min_row=min_row,
+                max_row=max_row,
             )
-        if sheet_name == "Technical Diagnostics":
-            # Sprint 5 — attach tooltips for the migrated diagnostic
-            # columns (Crawl Depth / Security: HSTS / Security: CSP /
-            # Hreflang Signals). The helper is name-keyed so it skips
-            # any header it doesn't recognise.
-            _apply_diagnostic_header_tooltips(worksheet, header_row=header_row)
-        if sheet_name == "Link Inventory":
-            _apply_link_inventory_client_polish(worksheet)
+    if sheet_name == "Main":
+        apply_main_column_group_header_tints(worksheet, header_row=header_row)
+    if sheet_name in (
+        "Technical Diagnostics",
+        "Content & AI Readiness",
+        "Link Intelligence",
+        "Link Inventory",
+        "Broken Link Impact",
+        "Quick Wins",
+        "Issue Register",
+        "Template & Duplication Risks",
+    ):
+        apply_merged_tabs_conditional_formatting(
+            worksheet, sheet_name, header_row=header_row
+        )
+    if sheet_name == "Technical Diagnostics":
+        # Sprint 5 — attach tooltips for the migrated diagnostic
+        # columns (Crawl Depth / Security: HSTS / Security: CSP /
+        # Hreflang Signals). The helper is name-keyed so it skips
+        # any header it doesn't recognise.
+        _apply_diagnostic_header_tooltips(worksheet, header_row=header_row)
+    if sheet_name == "Link Inventory":
+        _apply_link_inventory_client_polish(worksheet)
     if sheet_name == CONTENT_PLANNER_SHEET:
         apply_content_planner_signoff_rules(worksheet)
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
@@ -495,8 +509,7 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
     if sheet_name in _EMPTY_STATE_SHEETS:
         _write_empty_state_message(worksheet, header_row)
     ensure_auto_filter(worksheet)
-    if sheet_name != "Dashboard":
-        ensure_freeze_header(worksheet)
+    ensure_freeze_header(worksheet)
     ensure_print_setup(worksheet)
     apply_optimal_view_state(worksheet, sheet_name)
     sanitize_sheet_view_selection(worksheet)

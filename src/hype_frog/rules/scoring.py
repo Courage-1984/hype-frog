@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, MutableMapping
 from typing import Any
 
 from hype_frog.core import get_logger
@@ -15,6 +16,27 @@ logger = get_logger(__name__)
 # carries the same rule inputs as Summary tab issue counts; only skip scoring when we never
 # got a usable crawl payload.
 _SCORABLE_EXTRACTION_STATES = frozenset({"complete", "partial"})
+
+
+def scorable_extraction_state(state: object) -> bool:
+    """Return True when HTML-derived rule inputs are present on the row."""
+    return str(state or "").strip().lower() in _SCORABLE_EXTRACTION_STATES
+
+
+def align_extraction_state_from_main(
+    extra: MutableMapping[str, Any],
+    main: Mapping[str, Any],
+) -> None:
+    """Copy scorable main ``Extraction State`` onto extra when extra was left at skipped."""
+    if scorable_extraction_state(extra.get("Extraction State")):
+        return
+    main_state = main.get("Extraction State")
+    if not scorable_extraction_state(main_state):
+        return
+    extra["Extraction State"] = main_state
+    main_source = main.get("Extraction Source")
+    if main_source and not extra.get("Extraction Source"):
+        extra["Extraction Source"] = main_source
 
 
 def score_url_health(
@@ -37,8 +59,7 @@ def score_url_health(
             {"Critical": ["Non-200 Status"], "Warning": [], "Observation": []},
         )
 
-    extraction_state = str(row.get("Extraction State") or "").strip().lower()
-    if extraction_state not in _SCORABLE_EXTRACTION_STATES:
+    if not scorable_extraction_state(row.get("Extraction State")):
         return None, "Unmeasured", "UNMEASURED", {"Critical": [], "Warning": [], "Observation": []}
 
     matched = {"Critical": [], "Warning": [], "Observation": []}

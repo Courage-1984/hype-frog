@@ -67,58 +67,6 @@ class ExportRegistryConfig:
 
 
 STANDARD_SHEET_COLUMNS: dict[str, list[str]] = {
-    "Technical": [
-        "URL", "Content Cluster ID", "Extraction State", "Extraction Source",
-        "Extraction Source Fallback",
-        "Health Icon", "Severity Badge", "SEO Health Score", "SEO Score",
-        "Technical Health", "Copy Score", "Action Needed", "Owner", "Sprint",
-        "Status", "Status Code", "Final URL", "Protocol", "Redirect Chain Length",
-        "Redirect Target", "Redirect Hops", "HTTP->HTTPS Redirect", "Status Class",
-        "TTFB (ms)", "Total Request Time (ms)", "Content-Type", "HTTP Version",
-        "HTML Size (KB)", "Compression Enabled", "Cache-Control", "ETag",
-        "X-Robots-Tag", "Content-Security-Policy", "Meta Robots Raw", "Canonical URL",
-        "Canonical Matches Final URL", "Canonical Type", "Canonical Absolute URL",
-        "Canonical in Sitemap Match", "Hreflang Present", "Hreflang Count",
-        "Hreflang Self Reference", "Hreflang Reciprocal Check",
-        "Hreflang Canonical Consistency", "x-default Present", "Pagination rel=next",
-        "Pagination rel=prev", "Last-Modified", "Published Date", "Modified Date",
-        "Last Updated", "Change Frequency", "Priority", "Indexability Reason",
-        "Schema Types Count", "Schema Types Found", "Internal Links Count",
-        "Unique Internal Links Count", "External Links Count",
-        "AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)",
-        "AEO Robots AI Bot Coverage",
-        "llms.txt Present",
-        "PSI Data Status", "Desktop PSI Score", "Mobile PSI Score", "Mobile LCP (s)", "Mobile CLS",
-        "Mobile TTFB (s)", "CWV LCP (s)", "CWV CLS", "CWV Data Source",
-        "Field vs Lab", "GSC Clicks", "GSC Impressions", "GSC CTR",
-        "GSC Avg Position", "GSC Data Freshness", "GSC Coverage Note",
-        "Click Depth", "Internal Inlinks", "Orphan Pages", "Reachable from Homepage",
-        "Internal PageRank", "Discovered On URL", "Regional Authority Score", "Regional Entity Hits",
-        "Answer Block Detected (First 60 Words)", "AEO Extractability Score",
-        "Critical Issues Count", "Warning Issues Count", "Observation Issues Count",
-        "Inlinks Bucket", "Important But Underlinked", "SERP Title Truncation Risk",
-        "SERP Meta Truncation Risk", "SERP Title Pixel Approx", "SERP Meta Pixel Approx",
-        "Cannibalization Hint", "Draft Page Flag", "Probable Duplicate Flag",
-        "Duplicate Of URL", "Content Similarity %", "Heading Structure Cluster Size",
-        "Stable Issue IDs", "URL Depth", "Param URL Flag",
-    ],
-    "Content": [
-        "URL", "H1 Count", "Missing H1 Flag", "Multiple H1 Flag", "Title Missing",
-        "Meta Description Missing", "Word Count", "Word Count Band", "Sentence Count",
-        "Body Text-to-HTML Ratio", "Readability (Rough Flesch)", "Flesch-Kincaid Grade (Est.)",
-        "Thin Content Flag",
-    ],
-    "Links": [
-        "URL", "Internal Links Count", "Unique Internal Links Count", "External Links Count",
-        "Nofollow Internal Links Count", "Nofollow External Links Count",
-        "Generic Anchor Text Count", "Broken Internal Links Count",
-        "Unresolved Internal Links Count", "Internal Link Statuses",
-    ],
-    "Media": [
-        "URL", "Image Count", "Images", "Images Missing Alt", "Image Alt Coverage (%)",
-        "Image Extension Distribution", "Likely Large Image Count", "Image Filename Quality Issues",
-        "Image On Canonical Domain (%)", "Mixed Content Detected",
-    ],
     "Schema & Metadata": [
         "URL", "Schema Types Found", "Schema Types Count", "Schema Parse Errors",
         "OG Title", "OG Description", "OG Type", "OG URL", "OG Image", "OG Image URL",
@@ -126,29 +74,11 @@ STANDARD_SHEET_COLUMNS: dict[str, list[str]] = {
         "Open Graph Complete", "Twitter Card Type", "Twitter Title", "Twitter Description",
         "Twitter Image",
     ],
-    "AEO": [
-        "URL", "AEO Badge", "AEO Readiness Score", "Why It Matters", "FAQ Section Count",
-        "Question Heading Count", "QAPage/FAQ Schema Present", "Speakable Schema Present",
-        "HowTo Signal", "Definition Signal", "List/Table Answer Signal",
-        "Paragraphs 40-60 Words Count", "Answer Block Detected (First 60 Words)",
-        "AEO Extractability Score", "Snippet Preview Mockup", "Title Missing",
-        "Meta Description Missing",
-    ],
     AIOSEO_RECOMMENDATIONS_SHEET: [
         "URL", "WordPress Post ID", "Direct Edit Link", "AIOSEO Panel", "Severity",
         "Issue", "Current Value", "Recommended Target", "Why It Matters", "How to Fix in AIOSEO",
         "Reference Tab", "Reference Field", "Action Needed", "Owner", "Status",
         "Priority Score", "Est. Hours", "Stable Issue ID",
-    ],
-    "Security": [
-        "URL", "Strict-Transport-Security", "Content-Security-Policy", "X-Content-Type-Options",
-        "X-Frame-Options", "Referrer-Policy", "Permissions-Policy", "Robots.txt Accessible",
-        "Sitemap in Robots.txt", "Robots.txt Crawl-Delay", "Robots.txt Disallow /",
-    ],
-    "Indexability": [
-        "URL", "Status Code", "Status Class", "Final URL", "Indexability Reason",
-        "Meta Robots Raw", "X-Robots-Tag", "Canonical URL", "Canonical Type",
-        "Canonical Matches Final URL", "Canonical in Sitemap Match",
     ],
     "Redirects": [
         "URL",
@@ -181,7 +111,6 @@ CMS_ACTION_URLS_COLUMNS: list[str] = [
 
 _FULL_SUITE_FORMAT_SHEETS: list[str] = [
     "Executive Briefing",
-    "Dashboard",
     "Summary",
     "Priority URLs",
     "FixPlan",
@@ -197,7 +126,6 @@ _FULL_SUITE_FORMAT_SHEETS: list[str] = [
     "Template & Duplication Risks",
     "Playbook",
     "Issue Register",
-    "IssueInventory",
     "Technical Diagnostics",
     "Content & AI Readiness",
     "Link Intelligence",
@@ -428,10 +356,19 @@ def build_priority_rows(
 ) -> list[dict[str, Any]]:
     priority_rows: list[dict[str, Any]] = []
     for row in extra_rows:
+        badge = str(row.get("Severity Badge") or "").strip()
+        seo_raw = row.get("SEO Health Score")
+        health_penalty = 0.0
+        if (
+            badge != "Unmeasured"
+            and seo_raw is not None
+            and str(seo_raw).strip() != ""
+        ):
+            health_penalty = 100 - value_or_default_fn(seo_raw, 100.0)
         risk_score = (
             value_or_default_fn(row.get("Critical Issues Count"), 0.0) * 30
             + value_or_default_fn(row.get("Warning Issues Count"), 0.0) * 10
-            + (100 - value_or_default_fn(row.get("SEO Health Score"), 100.0))
+            + health_penalty
         )
         reasons: list[str] = []
         if value_or_default_fn(row.get("Critical Issues Count"), 0.0) > 0:
@@ -457,13 +394,16 @@ def build_priority_rows(
             if any(slug in url_value.lower() for slug in high_value_slugs)
             else "Standard"
         )
+        seo_display = row.get("SEO Health Score")
+        if badge == "Unmeasured" or seo_display is None or str(seo_display).strip() == "":
+            seo_health_out: float | None = None
+        else:
+            seo_health_out = round(value_or_default_fn(seo_display, 0.0), 2)
         priority_rows.append(
             {
                 "URL": row.get("URL"),
                 "Business Risk Score": int(risk_score),
-                "SEO Health Score": round(
-                    value_or_default_fn(row.get("SEO Health Score"), 0.0), 2
-                ),
+                "SEO Health Score": seo_health_out,
                 "Severity Badge": row.get("Severity Badge"),
                 "Critical Issues Count": row.get("Critical Issues Count"),
                 "Warning Issues Count": row.get("Warning Issues Count"),

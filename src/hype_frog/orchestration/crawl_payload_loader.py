@@ -7,6 +7,7 @@ from typing import Any, Protocol
 
 from hype_frog.core.memory_guard import memory_circuit_breaker
 from hype_frog.core.models import CrawlRowPayload, ExtraRowPayload, MainRowPayload
+from hype_frog.rules.scoring import align_extraction_state_from_main
 
 _DEFAULT_CHUNK_SIZE = 500
 
@@ -67,6 +68,15 @@ def iter_enrichment_row_chunks(
         yield main_chunk, extra_chunk
 
 
+def sync_enrichment_row_extraction_states(
+    main_rows: list[MainRowPayload],
+    extra_rows: list[ExtraRowPayload],
+) -> None:
+    """Align extra ``Extraction State`` with main when crawl payloads desync."""
+    for main_row, extra_row in zip(main_rows, extra_rows, strict=False):
+        align_extraction_state_from_main(extra_row.values, main_row.values)
+
+
 def load_enrichment_row_pairs(
     crawl_result: _CrawlResultLike,
     *,
@@ -82,6 +92,7 @@ def load_enrichment_row_pairs(
         extra_rows.extend(extra_chunk)
         main_chunk.clear()
         extra_chunk.clear()
+    sync_enrichment_row_extraction_states(main_rows, extra_rows)
     return main_rows, extra_rows
 
 
@@ -111,5 +122,6 @@ __all__ = [
     "iter_enrichment_row_chunks",
     "load_crawl_row_payloads",
     "load_enrichment_row_pairs",
+    "sync_enrichment_row_extraction_states",
     "release_audit_cache",
 ]

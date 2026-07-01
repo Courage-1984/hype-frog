@@ -159,7 +159,9 @@ def _apply_seo_health_export_defaults(extra_rows: list[ExtraRowPayload]) -> None
         raw = row_values.get("SEO Health Score")
         if isinstance(raw, float) and math.isnan(raw):
             raw = None
-        if badge == "Unmeasured" or raw is None or str(raw).strip() == "":
+        if badge == "Unmeasured":
+            row_values["SEO Health Score"] = None
+        elif raw is None or str(raw).strip() == "":
             row_values["SEO Health Score"] = 0.0
         else:
             try:
@@ -169,7 +171,9 @@ def _apply_seo_health_export_defaults(extra_rows: list[ExtraRowPayload]) -> None
         raw_seo = row_values.get("SEO Score")
         if isinstance(raw_seo, float) and math.isnan(raw_seo):
             raw_seo = None
-        if raw_seo is None or str(raw_seo).strip() == "":
+        if badge == "Unmeasured":
+            row_values["SEO Score"] = None
+        elif raw_seo is None or str(raw_seo).strip() == "":
             row_values["SEO Score"] = 0.0
         else:
             try:

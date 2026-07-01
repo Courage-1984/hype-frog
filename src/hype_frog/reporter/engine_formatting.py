@@ -136,9 +136,12 @@ def _legacy_sheet_header_index(
 
 
 def ensure_auto_filter(worksheet: Worksheet) -> None:
+    from hype_frog.reporter.sheets.config import AUTO_FILTER_SHEETS
     from hype_frog.reporter.sheets.sheet_rows import sheet_data_header_row
 
-    if worksheet.title == CONTENT_PLANNER_SHEET:
+    title = worksheet.title
+
+    if title == CONTENT_PLANNER_SHEET:
         if worksheet.max_row >= 2 and worksheet.max_column >= 1:
             worksheet.auto_filter.ref = (
                 f"A1:{get_column_letter(worksheet.max_column)}{worksheet.max_row}"
@@ -147,15 +150,25 @@ def ensure_auto_filter(worksheet: Worksheet) -> None:
             worksheet.auto_filter.ref = None
         return
 
-    if worksheet.title not in {"Main", "Dashboard", "Link Inventory"} and (
+    header_row = sheet_data_header_row(title)
+    if title == CONTENT_OPTIMISATION_HUB_SHEET:
+        header_row = 2
+
+    if title in AUTO_FILTER_SHEETS:
+        if worksheet.max_row >= header_row and worksheet.max_column >= 1:
+            worksheet.auto_filter.ref = (
+                f"A{header_row}:{get_column_letter(worksheet.max_column)}{worksheet.max_row}"
+            )
+        else:
+            worksheet.auto_filter.ref = None
+        return
+
+    if title not in {"Main", "Link Inventory"} and (
         worksheet.max_row < 10 or worksheet.max_column < 5
     ):
         worksheet.auto_filter.ref = None
         return
 
-    header_row = sheet_data_header_row(worksheet.title)
-    if worksheet.title == CONTENT_OPTIMISATION_HUB_SHEET:
-        header_row = 2
     if worksheet.max_row >= header_row + 1 and worksheet.max_column >= 1:
         worksheet.auto_filter.ref = (
             f"A{header_row}:{get_column_letter(worksheet.max_column)}{worksheet.max_row}"

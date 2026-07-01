@@ -24,10 +24,10 @@ def test_preferred_tab_order_has_no_duplicates() -> None:
 
 def test_workbook_tabs_follow_preferred_order_when_subset_present() -> None:
     """Tabs present in a workbook must appear in PREFERRED_WORKBOOK_TAB_ORDER sequence."""
-    subset = ("Table of Contents", "Dashboard", "Main", "Technical")
+    subset = ("Table of Contents", "Executive Briefing", "Main", "Technical Diagnostics")
     wb = Workbook()
     wb.active.title = "Table of Contents"
-    for name in ("Dashboard", "Main", "Technical"):
+    for name in ("Executive Briefing", "Main", "Technical Diagnostics"):
         wb.create_sheet(name)
 
     preferred_index = {name: idx for idx, name in enumerate(PREFERRED_WORKBOOK_TAB_ORDER)}
@@ -55,9 +55,9 @@ def test_toc_freeze_panes_contract_is_a3_after_tab_hyperlinks() -> None:
 
     wb = Workbook()
     wb.active.title = "Main"
-    wb.create_sheet("Dashboard")
+    wb.create_sheet("Summary")
     writer = type("W", (), {"book": wb, "sheets": {}})()
-    writer.sheets = {"Main": wb["Main"], "Dashboard": wb["Dashboard"]}
+    writer.sheets = {"Main": wb["Main"], "Summary": wb["Summary"]}
     apply_tab_hyperlinks(writer)
     toc = wb["Table of Contents"]
     assert toc.freeze_panes == "A3"

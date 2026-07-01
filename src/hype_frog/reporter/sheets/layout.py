@@ -77,9 +77,7 @@ PERFORMANCE_CWV_GROUP_COLUMNS: tuple[str, ...] = (
 )
 
 # Canonical post-``reorder_columns`` layouts (single source for column helpers).
-# Preferred column orders per sheet. Keys for retired split tabs (Technical, Content,
-# Links, …) remain for legacy workbook compatibility but those sheets are not in the
-# default export suite — do not add new behaviour keyed only on those names.
+# Preferred column orders for active export sheets only.
 _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
     "Main": [
         "Health Icon",
@@ -97,24 +95,6 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "Status",
         "Sprint",
         *PERFORMANCE_CWV_GROUP_COLUMNS,
-    ],
-    "Technical": [
-        "URL",
-        "Content Cluster ID",
-        "Status Code",
-        "Status Class",
-        "SEO Health Score",
-        "Severity Badge",
-        "Action Needed",
-        "Indexability Reason",
-        "TTFB (ms)",
-        "Total Request Time (ms)",
-        "Final URL",
-        "Canonical URL",
-        "Canonical Type",
-        "Owner",
-        "Status",
-        "Sprint",
     ],
     "FixPlan": [
         "Issue Type",
@@ -169,30 +149,6 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "Status",
         "Sprint",
     ],
-    "Content": [
-        "URL",
-        "Word Count",
-        "Word Count Band",
-        "Readability (Rough Flesch)",
-        "H1 Count",
-        "Missing H1 Flag",
-        "Multiple H1 Flag",
-        "Title Missing",
-        "Meta Description Missing",
-        "Thin Content Flag",
-    ],
-    "Links": [
-        "URL",
-        "Internal Links Count",
-        "Unique Internal Links Count",
-        "Broken Internal Links Count",
-        "Unresolved Internal Links Count",
-        "Generic Anchor Text Count",
-        "External Links Count",
-        "Nofollow Internal Links Count",
-        "Nofollow External Links Count",
-        "Internal Link Statuses",
-    ],
     "AIOSEO Recommendations": [
         "URL",
         "WordPress Post ID",
@@ -244,46 +200,6 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "OG Image Health",
         "OG Image Preview",
         "Open in Main",
-    ],
-    "AEO": [
-        "URL",
-        "AEO Readiness Score",
-        "AEO Badge",
-        "Why It Matters",
-        "FAQ Section Count",
-        "Question Heading Count",
-        "Paragraphs 40-60 Words Count",
-        "QAPage/FAQ Schema Present",
-        "Speakable Schema Present",
-        "HowTo Signal",
-        "Definition Signal",
-        "List/Table Answer Signal",
-    ],
-    "Indexability": [
-        "URL",
-        "Status Code",
-        "Status Class",
-        "Indexability Reason",
-        "Canonical URL",
-        "Canonical Type",
-        "Canonical Matches Final URL",
-        "Canonical in Sitemap Match",
-        "Meta Robots Raw",
-        "X-Robots-Tag",
-        "Final URL",
-    ],
-    "IssueInventory": [
-        "URL",
-        "Issue",
-        "Severity",
-        "Affected URL Count",
-        "Reference Tab",
-        "Stable Issue ID",
-        "Owner",
-        "Status",
-        "Sprint",
-        "Open in Main",
-        "Open in Reference",
     ],
 }
 

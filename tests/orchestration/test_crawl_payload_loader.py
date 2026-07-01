@@ -32,6 +32,32 @@ def _seed_cache(tmp_path, count: int) -> AuditCache:
     return cache
 
 
+def test_load_enrichment_row_pairs_syncs_main_extraction_to_extra(tmp_path) -> None:
+    cache = AuditCache(str(tmp_path / "desync.sqlite"))
+    cache.upsert_results(
+        [
+            {
+                "main": {
+                    "URL": "https://example.com/a/",
+                    "Extraction State": "partial",
+                },
+                "extra": {
+                    "URL": "https://example.com/a/",
+                    "Extraction State": "skipped",
+                    "Status Code": 200,
+                },
+            }
+        ]
+    )
+    result = _CacheResult(cache)
+    result.crawl_row_count = cache.row_count()
+
+    _main_rows, extra_rows = load_enrichment_row_pairs(result)
+
+    assert extra_rows[0].values["Extraction State"] == "partial"
+    cache.close(cleanup_file=True)
+
+
 def test_load_enrichment_row_pairs_streams_from_cache(tmp_path) -> None:
     cache = _seed_cache(tmp_path, 5)
     result = _CacheResult(cache)

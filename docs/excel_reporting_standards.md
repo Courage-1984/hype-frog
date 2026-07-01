@@ -74,8 +74,7 @@ bare-name fallback only applies to legacy/plain rows.
   Executive Briefing `A10` — pins the title/KPI/insights band above the
   non-overlapping chart grid; the four chart bands are spaced ~19 rows apart with
   the triage matrix and chart source tables stacked well below them).
-- The legacy **Dashboard** tab remains exported one release (hidden) for backward
-  compatibility; **Executive Briefing** is the primary executive landing tab.
+- The legacy **Dashboard** tab is no longer exported; **Executive Briefing** is the sole executive landing tab.
 
 ### Tooltips and dropdowns
 
@@ -85,7 +84,7 @@ status **dropdowns** remain gated by `HF_DISABLE_DATA_VALIDATION` only. Curated 
 help bodies live in `_SHEET_CURATED_HEADER_HELP` (`reporter/sheets/validation.py`); semantic
 Content Hub tooltips and merged-tab help are applied via `apply_curated_header_tooltips`
 (delegated from `help_layer.py`). Schema-metadata tooltips remain in
-`SCHEMA_METADATA_HEADER_TOOLTIP_BODIES`; Dashboard KPI blocks stay in `dashboard_config`.
+`SCHEMA_METADATA_HEADER_TOOLTIP_BODIES`; Executive Briefing KPI blocks use `dashboard_config` and `executive_dashboard.py`.
 A contract test keeps curated keys aligned with exported column headers.
 
 ### Advanced-sheet navigation
@@ -94,7 +93,7 @@ The Executive Briefing "Advanced Sheets" panel surfaces a **curated subset** of 
 tabs (relocated below the Owner Issue Summary at row 32+ to avoid column overlap); the
 TOC's "Technical & Historical (Advanced)" section remains the complete index of every
 advanced sheet (`ADVANCED_WORKBOOK_TAB_ORDER`). **Issue Register** is the canonical issue
-backlog; legacy **IssueInventory** is hidden and excluded from the TOC.
+backlog (Summary roll-ups plus per-URL rows); the legacy **IssueInventory** tab is no longer exported.
 
 ### Formulas and display projection (Phase 3 polish)
 
@@ -107,8 +106,8 @@ backlog; legacy **IssueInventory** is hidden and excluded from the TOC.
   Diagnostics is the source of truth for PSI/CWV detail.
 - British display headers (e.g. **On-Page Optimisation Score**) are applied at the reporter
   layer via `DISPLAY_HEADER_ALIASES`; pipeline row keys stay append-only.
-- The **Dashboard** Owner Issue Summary (G24–K31), status/severity side panels (M7/M8), sprint
-  roll-ups (M5/M6), and Top Issues block (G/H15+) use live `COUNTIF`/`SUMIF`/`INDEX`/`MATCH`
+- **Executive Briefing** Owner Issue Summary, status/severity side panels, sprint
+  roll-ups, and Top Issues blocks use live `COUNTIF`/`SUMIF`/`INDEX`/`MATCH`
   against FixPlan header-resolved ranges so figures stay current when FixPlan rows change.
 - **Link Inventory** table headers use the shared navy mock-table style (`STD_NAVY`) for visual
   parity with other inventory sheets.
@@ -289,11 +288,39 @@ when present before inserting the strip.
   clobbered the metrics header/first-data row (B–K); it has been removed so all
   metric headers and data survive the formatting pass.
 
-## IssueInventory and Issue Register scope branching
+## Autofilter coverage
+
+Actionable workflow sheets in ``AUTO_FILTER_SHEETS`` (``config.py``) always receive
+header autofilter during final formatting — including sparse FixPlan / Quick Wins
+exports with only a handful of rows. Link Inventory and Content Planner retain
+their existing bespoke filter rules.
+
+## Empty-state messaging
+
+FixPlan and Quick Wins write a green-tinted guidance row when the data grid is
+blank, pointing readers to Summary / Issue Register rather than implying a broken
+export.
+
+## Workbook presentation defaults
+
+Late in ``apply_workbook_toc_and_links`` (``toc.py``): gridlines are disabled on
+every tab; ``SHEET_ZOOM_OVERRIDES`` applies per-sheet zoom (Executive Briefing 85%,
+Main 85%, Priority URLs 90%). All standard data sheets receive CF-based zebra
+banding via ``apply_cf_zebra_banding`` (sort/filter-safe); large inventory sheets
+(>500 rows) also get a light header grid via ``large_sheet_presentation.py``.
+
+## Return strip run metadata
+
+Row 1 on data sheets with a return strip splits ``A1:B1`` (hyperlink back to
+Executive Briefing) from ``C1:H1`` (formula subtitle pulling Target Site, URL
+count, and audit date from **Audit Run Details**). Applied in
+``apply_return_strip_run_metadata`` during export guardrails.
+
+## Issue Register scope branching
 
 `summary_builder.py` treats `IssueRule.scope` values:
 
-- **`url`** — per-URL rows in IssueInventory.
+- **`url`** — per-URL rows merged into **Issue Register** (Section `Issue Inventory`).
 - **`site`** / **`server`** — one aggregate row with URL label `(site-wide)` or `(server config)` and **`Affected URL Count`**.
 
 Issue Register mirrors reference areas with dynamic `INDIRECT` hyperlinks to the target diagnostic sheet.
