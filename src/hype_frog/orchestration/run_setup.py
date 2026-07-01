@@ -6,7 +6,8 @@ from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
-from hype_frog.core import configure_logging, get_logger, get_user_config
+from hype_frog.core import get_logger, get_user_config
+from hype_frog.core.logger import configure_logging, resolve_console_level_from_cli
 from hype_frog.core.env_vars import (
     get_check_content_images,
     get_check_og_images,
@@ -68,8 +69,10 @@ def resolve_run_setup(
     cli_overrides: CliRunOverrides | None = None,
 ) -> RunSetup:
     """Resolve startup configuration for interactive and preset runs."""
-    configure_logging()
     load_dotenv()
+    verbose = bool(cli_overrides and cli_overrides.verbose)
+    quiet = bool(cli_overrides and cli_overrides.quiet)
+    configure_logging(console_level=resolve_console_level_from_cli(verbose=verbose, quiet=quiet))
 
     if run is not None:
         logger.info("Non-interactive run preset active (e.g. --quick-test).")

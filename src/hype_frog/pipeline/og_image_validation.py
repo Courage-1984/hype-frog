@@ -75,8 +75,8 @@ async def _fetch_og_image_probe(
                 if dims:
                     return status, dims[0], dims[1]
                 return status, None, None
-        except Exception as exc:
-            logger.debug("OG image probe failed %r: %s", url, exc)
+        except Exception:
+            logger.debug("og_image_probe_failed", url=url, exc_info=True)
             return None, None, None
 
 

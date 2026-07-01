@@ -5,7 +5,10 @@ from __future__ import annotations
 from openpyxl import Workbook
 
 from hype_frog.reporter.engine_rows import content_hub_column_letter
-from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
+from hype_frog.reporter.sheets.config import (
+    CONTENT_HUB_DATA_START_ROW,
+    CONTENT_OPTIMISATION_HUB_SHEET,
+)
 from hype_frog.reporter.sheets.links import (
     _fixplan_hub_status_formula,
     apply_cross_sheet_links,
@@ -25,8 +28,8 @@ def test_fixplan_hub_status_formula_indexes_status_matches_url() -> None:
 
     assert status_l == "F"
     assert url_l == "I"
-    assert f"'{CONTENT_OPTIMISATION_HUB_SHEET}'!{status_l}3:{status_l}10000" in formula
-    assert f"'{CONTENT_OPTIMISATION_HUB_SHEET}'!{url_l}3:{url_l}10000" in formula
+    assert f"'{CONTENT_OPTIMISATION_HUB_SHEET}'!{status_l}{CONTENT_HUB_DATA_START_ROW}:{status_l}10000" in formula
+    assert f"'{CONTENT_OPTIMISATION_HUB_SHEET}'!{url_l}{CONTENT_HUB_DATA_START_ROW}:{url_l}10000" in formula
     assert "J5" in formula
     assert "!C:C" not in formula
     assert "Not in Hub" in formula
@@ -41,8 +44,8 @@ def test_apply_cross_sheet_links_writes_hub_status_on_fixplan() -> None:
     hub = wb.create_sheet(CONTENT_OPTIMISATION_HUB_SHEET)
     hub.cell(row=2, column=6, value="Status")
     hub.cell(row=2, column=9, value="URL")
-    hub.cell(row=3, column=6, value="Completed")
-    hub.cell(row=3, column=9, value="https://example.com/a")
+    hub.cell(row=CONTENT_HUB_DATA_START_ROW, column=6, value="Done")
+    hub.cell(row=CONTENT_HUB_DATA_START_ROW, column=9, value="https://example.com/a")
     writer = _WriterStub(wb)
 
     apply_cross_sheet_links(

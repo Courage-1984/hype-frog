@@ -117,6 +117,37 @@ async def _apply_jitter_delay(mean_seconds: float) -> float:
     return delay
 
 
+def _retry_wait_seconds(
+    *,
+    status: int,
+    response_headers: dict[str, str],
+    attempt: int,
+    retry_base_delay_seconds: float,
+    retry_backoff_factor: float,
+    retry_max_delay_seconds: float,
+    request_jitter_seconds: float,
+) -> float:
+    """Compute retry delay; honour ``Retry-After`` on 429 when numeric."""
+    if status == 429:
+        retry_after = response_headers.get("Retry-After") or response_headers.get(
+            "retry-after"
+        )
+        if retry_after:
+            try:
+                return min(retry_max_delay_seconds, float(retry_after)) + random.uniform(
+                    0, request_jitter_seconds
+                )
+            except ValueError:
+                pass
+    base = min(
+        retry_max_delay_seconds,
+        retry_base_delay_seconds * (retry_backoff_factor**attempt),
+    )
+    if status == 429:
+        base = min(retry_max_delay_seconds, base * 2.0)
+    return base + random.uniform(0, request_jitter_seconds)
+
+
 # Native ``PerformanceObserver`` payload. Wrapped in try/catch so CSP, older
 # browsers, or unsupported entry types degrade to ``null`` rather than throw.
 _FIELD_METRICS_JS: str = (
@@ -622,10 +653,15 @@ async def fetch_http(
                 headers = {str(k): str(v) for k, v in response.headers.items()}
                 status = int(response.status)
                 if status in retryable_status_codes and attempt < max_retries:
-                    wait_time = min(
-                        retry_max_delay_seconds,
-                        retry_base_delay_seconds * (retry_backoff_factor**attempt),
-                    ) + random.uniform(0, request_jitter_seconds)
+                    wait_time = _retry_wait_seconds(
+                        status=status,
+                        response_headers=headers,
+                        attempt=attempt,
+                        retry_base_delay_seconds=retry_base_delay_seconds,
+                        retry_backoff_factor=retry_backoff_factor,
+                        retry_max_delay_seconds=retry_max_delay_seconds,
+                        request_jitter_seconds=request_jitter_seconds,
+                    )
                     logger.warning(
                         "[%s] Retrying %s (attempt %s/%s) in %.1fs",
                         status,

@@ -36,7 +36,7 @@ from hype_frog.crawler.network_engine import (
     fetch_http,
     fetch_rendered_with_diagnostics,
 )
-from hype_frog.core.models import CrawlRowPayload
+from hype_frog.core.models import CrawlRowPayload, ExtraRowPayload, MainRowPayload
 from hype_frog.pipeline.content_hub_metrics import backfill_extra_content_hub_metrics
 from hype_frog.core.text_utils import status_class
 from hype_frog.core.url_normalization import normalize_url_key
@@ -50,6 +50,27 @@ _RENDER_RETRY_RENDER_WAIT_BUMP_MS = 2000
 _RENDER_RETRY_SELECTOR_WAIT_BUMP_MS = 1000
 _MAX_RENDER_WAIT_MS = 15000
 _MAX_SELECTOR_WAIT_MS = 10000
+
+
+def _assemble_row_from_html_sync(
+    *,
+    main_data: MainRowPayload,
+    extra: ExtraRowPayload,
+    html: str,
+    resolved_url: str,
+    depth: int,
+    response_headers: dict[str, str],
+) -> None:
+    assemble_from_html(
+        main_data=main_data,
+        extra=extra,
+        html=html,
+        resolved_url=resolved_url,
+        depth=depth,
+        response_headers=response_headers,
+    )
+    finalize_row_state(main_data, extra)
+    backfill_extra_content_hub_metrics(extra.values, main_data.values)
 
 
 async def _fetch_render_diagnostics(
@@ -165,25 +186,18 @@ async def fetch_and_parse(
     playwright_session_manager: PlaywrightSessionManager | None = None,
     crawl_log: CrawlLogCollector | None = None,
 ) -> CrawlRowPayload:
-    """Crawl a single URL and return a populated row payload.
+    """Crawl a single URL and return a populated row payload."""
+    start_time = time.time()
+    main_data, extra = init_rows(url, sitemap_meta)
+    main_values = main_data.values
+    extra_values = extra.values
+    timeout = aiohttp.ClientTimeout(
+        total=TIMEOUT_SECONDS,
+        connect=CONNECT_TIMEOUT_SECONDS,
+        sock_read=READ_TIMEOUT_SECONDS,
+    )
 
-    ``depth`` is the BFS hop distance from the seed URL when the caller
-    is operating a true spider (``0`` for the seed). The current
-    sitemap-driven runner in :mod:`hype_frog.orchestration.crawl_runner`
-    does not maintain BFS state, so it leaves the default; the kwarg
-    exists here so a future spider entrypoint can plug in without
-    further fetcher edits.
-    """
     async with semaphore:
-        start_time = time.time()
-        main_data, extra = init_rows(url, sitemap_meta)
-        main_values = main_data.values
-        extra_values = extra.values
-        timeout = aiohttp.ClientTimeout(
-            total=TIMEOUT_SECONDS,
-            connect=CONNECT_TIMEOUT_SECONDS,
-            sock_read=READ_TIMEOUT_SECONDS,
-        )
         result = await fetch_http(
             session=session,
             url=url,
@@ -195,244 +209,234 @@ async def fetch_and_parse(
             retry_max_delay_seconds=RETRY_MAX_DELAY_SECONDS,
             request_jitter_seconds=get_request_jitter_seconds(),
         )
-        status_code = normalise_status_code(result["status_code"])
-        final_url = result["final_url"]
-        resolved_url = final_url or url
-        response_headers = result["response_headers"]
-        error_kind = str(result.get("error_kind") or "")
-        hop_details = result.get("redirect_hop_details") or []
-        hop_records = [
-            RedirectHopRecord(url=str(item["url"]), status=int(item["status"]))
-            for item in hop_details
-            if isinstance(item, dict) and item.get("url") is not None
-        ]
-        html = result["html"]
 
-        main_values["Load Time (s)"] = round(time.time() - start_time, 3)
-        main_values["Status Code"] = status_code
-        extra_values["Status Code"] = status_code
-        domain_key = ""
+    status_code = normalise_status_code(result["status_code"])
+    final_url = result["final_url"]
+    resolved_url = final_url or url
+    response_headers = result["response_headers"]
+    error_kind = str(result.get("error_kind") or "")
+    hop_details = result.get("redirect_hop_details") or []
+    hop_records = [
+        RedirectHopRecord(url=str(item["url"]), status=int(item["status"]))
+        for item in hop_details
+        if isinstance(item, dict) and item.get("url") is not None
+    ]
+    html = result["html"]
+
+    main_values["Load Time (s)"] = round(time.time() - start_time, 3)
+    main_values["Status Code"] = status_code
+    extra_values["Status Code"] = status_code
+    domain_key = ""
+    if final_url:
+        extra_values["Final URL"] = normalize_url_key(final_url)
+        extra_values["Protocol"] = urlparse(final_url).scheme
+        parsed_final = urlparse(final_url)
+        domain_key = f"{parsed_final.scheme}://{parsed_final.netloc}"
+    if hop_records:
+        redirect_fields = build_redirect_chain_fields(
+            source_url=url,
+            hop_records=hop_records,
+            final_url=final_url or resolved_url,
+        )
+        extra_values.update(redirect_fields)
         if final_url:
-            extra_values["Final URL"] = normalize_url_key(final_url)
             extra_values["Protocol"] = urlparse(final_url).scheme
             parsed_final = urlparse(final_url)
             domain_key = f"{parsed_final.scheme}://{parsed_final.netloc}"
-        if hop_records:
-            redirect_fields = build_redirect_chain_fields(
-                source_url=url,
-                hop_records=hop_records,
-                final_url=final_url or resolved_url,
-            )
-            extra_values.update(redirect_fields)
-            if final_url:
-                extra_values["Protocol"] = urlparse(final_url).scheme
-                parsed_final = urlparse(final_url)
-                domain_key = f"{parsed_final.scheme}://{parsed_final.netloc}"
-            final_target = final_url or url
-            first_scheme = urlparse(hop_records[0].url).scheme.lower()
-            final_scheme = urlparse(final_target).scheme.lower()
-            extra_values["HTTP->HTTPS Redirect"] = (
-                first_scheme == "http" and final_scheme == "https"
-            )
-        else:
-            extra_values["Redirect Chain Length"] = 0
-        extra_values["Status Class"] = status_class(status_code)
-        extra_values["TTFB (ms)"] = result["ttfb_ms"]
-        extra_values["Total Request Time (ms)"] = result["total_request_ms"]
-        extra_values["Content-Type"] = response_headers.get("Content-Type")
-        extra_values["Cache-Control"] = response_headers.get("Cache-Control")
-        extra_values["ETag"] = response_headers.get("ETag")
-        extra_values["Last-Modified"] = response_headers.get("Last-Modified") or response_headers.get(
-            "last-modified"
+        final_target = final_url or url
+        first_scheme = urlparse(hop_records[0].url).scheme.lower()
+        final_scheme = urlparse(final_target).scheme.lower()
+        extra_values["HTTP->HTTPS Redirect"] = (
+            first_scheme == "http" and final_scheme == "https"
         )
-        extra_values["X-Robots-Tag"] = response_headers.get("X-Robots-Tag")
-        extra_values["Strict-Transport-Security"] = response_headers.get(
-            "Strict-Transport-Security"
-        )
-        extra_values["Content-Security-Policy"] = response_headers.get("Content-Security-Policy")
-        extra_values["X-Content-Type-Options"] = response_headers.get("X-Content-Type-Options")
-        extra_values["X-Frame-Options"] = response_headers.get("X-Frame-Options")
-        extra_values["Referrer-Policy"] = response_headers.get("Referrer-Policy")
-        extra_values["Permissions-Policy"] = response_headers.get("Permissions-Policy")
-        content_encoding = (response_headers.get("Content-Encoding") or "").lower()
-        extra_values["Compression Enabled"] = any(
-            token in content_encoding for token in ("gzip", "br", "deflate")
-        )
+    else:
+        extra_values["Redirect Chain Length"] = 0
+    extra_values["Status Class"] = status_class(status_code)
+    extra_values["TTFB (ms)"] = result["ttfb_ms"]
+    extra_values["Total Request Time (ms)"] = result["total_request_ms"]
+    extra_values["Content-Type"] = response_headers.get("Content-Type")
+    extra_values["Cache-Control"] = response_headers.get("Cache-Control")
+    extra_values["ETag"] = response_headers.get("ETag")
+    extra_values["Last-Modified"] = response_headers.get("Last-Modified") or response_headers.get(
+        "last-modified"
+    )
+    extra_values["X-Robots-Tag"] = response_headers.get("X-Robots-Tag")
+    extra_values["Strict-Transport-Security"] = response_headers.get(
+        "Strict-Transport-Security"
+    )
+    extra_values["Content-Security-Policy"] = response_headers.get("Content-Security-Policy")
+    extra_values["X-Content-Type-Options"] = response_headers.get("X-Content-Type-Options")
+    extra_values["X-Frame-Options"] = response_headers.get("X-Frame-Options")
+    extra_values["Referrer-Policy"] = response_headers.get("Referrer-Policy")
+    extra_values["Permissions-Policy"] = response_headers.get("Permissions-Policy")
+    content_encoding = (response_headers.get("Content-Encoding") or "").lower()
+    extra_values["Compression Enabled"] = any(
+        token in content_encoding for token in ("gzip", "br", "deflate")
+    )
 
-        if robots_cache is not None and domain_key:
-            if domain_key not in robots_cache:
+    if robots_cache is not None and domain_key:
+        if domain_key not in robots_cache:
+            async with semaphore:
                 await _populate_robots_cache(
                     session=session,
                     timeout=timeout,
                     robots_cache=robots_cache,
                     domain_key=domain_key,
                 )
-            extra_values["llms.txt Present"] = robots_cache.get(domain_key, {}).get(
-                "llms_present"
-            )
-            extra_values["AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)"] = (
-                robots_cache.get(domain_key, {}).get("ai_allowed")
-            )
-            extra_values["AEO Robots AI Bot Coverage"] = robots_cache.get(
-                domain_key, {}
-            ).get("aeo_engine_bot_coverage")
-            domain_entry = robots_cache.get(domain_key, {})
-            extra_values["Robots.txt Accessible"] = domain_entry.get("robots_accessible")
-            extra_values["Robots.txt Crawl-Delay"] = None
+        extra_values["llms.txt Present"] = robots_cache.get(domain_key, {}).get(
+            "llms_present"
+        )
+        extra_values["AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)"] = (
+            robots_cache.get(domain_key, {}).get("ai_allowed")
+        )
+        extra_values["AEO Robots AI Bot Coverage"] = robots_cache.get(
+            domain_key, {}
+        ).get("aeo_engine_bot_coverage")
+        domain_entry = robots_cache.get(domain_key, {})
+        extra_values["Robots.txt Accessible"] = domain_entry.get("robots_accessible")
+        extra_values["Robots.txt Crawl-Delay"] = None
 
+    if crawl_log is not None:
+        if error_kind:
+            crawl_log.record(
+                url=url,
+                phase="fetch",
+                error_type=error_kind.replace("_", " ").title(),
+                error_detail=str(result.get("status_code") or error_kind),
+                recovery_action="Row retained with transport-error status code.",
+            )
+        elif is_error_status(status_code):
+            crawl_log.record(
+                url=url,
+                phase="fetch",
+                error_type="HTTP Error",
+                error_detail=f"Status {status_code}",
+                recovery_action="Partial or skipped extraction depending on body.",
+            )
+    ct_lower = (response_headers.get("Content-Type") or "").lower()
+    unsupported_mime = (
+        isinstance(status_code, int)
+        and status_code == 200
+        and html is None
+        and "text/html" not in ct_lower
+    )
+    if unsupported_mime:
+        main_values["Extraction Source"] = "raw_http"
+        extra_values["Extraction Source"] = "raw_http"
+        main_values["Extraction State"] = "skipped"
+        extra_values["Extraction State"] = "skipped"
+        extra_values["skip_reason"] = "unsupported_mime"
         if crawl_log is not None:
-            if error_kind:
-                crawl_log.record(
-                    url=url,
-                    phase="fetch",
-                    error_type=error_kind.replace("_", " ").title(),
-                    error_detail=str(result.get("status_code") or error_kind),
-                    recovery_action="Row retained with transport-error status code.",
-                )
-            elif is_error_status(status_code):
-                crawl_log.record(
-                    url=url,
-                    phase="fetch",
-                    error_type="HTTP Error",
-                    error_detail=f"Status {status_code}",
-                    recovery_action="Partial or skipped extraction depending on body.",
-                )
-        ct_lower = (response_headers.get("Content-Type") or "").lower()
-        unsupported_mime = (
-            isinstance(status_code, int)
-            and status_code == 200
-            and html is None
-            and "text/html" not in ct_lower
-        )
-        if unsupported_mime:
-            main_values["Extraction Source"] = "raw_http"
-            extra_values["Extraction Source"] = "raw_http"
-            main_values["Extraction State"] = "skipped"
-            extra_values["Extraction State"] = "skipped"
-            extra_values["skip_reason"] = "unsupported_mime"
-            if crawl_log is not None:
-                crawl_log.record(
-                    url=url,
-                    phase="extract",
-                    error_type="Unsupported MIME",
-                    error_detail=str(response_headers.get("Content-Type") or "unknown"),
-                    recovery_action="Skipped HTML extraction for non-text body.",
-                )
-        elif isinstance(status_code, int) and status_code == 200 and html is not None:
-            extraction_source = "raw_http"
-            extraction_state_hint = "complete"
-            rendered_headers: dict[str, str] = {}
-            if render_pages or crawl_mode == "accurate":
-                # Render the post-redirect final URL so extraction aligns with the
-                # HTTP payload we already fetched. A shared Playwright session per
-                # crawl (when provided) keeps browser startup consistent across URLs.
-                render_target = resolved_url or url
-                diagnostics = await _fetch_render_with_retries(
-                    primary_url=render_target,
-                    fallback_url=url if render_target != url else None,
-                    render_wait_ms=render_wait_ms,
-                    selector_wait_ms=selector_wait_ms,
-                    playwright_session_manager=playwright_session_manager,
-                )
-                rendered_html = diagnostics["html"]
-                if rendered_html:
-                    html = rendered_html
-                    extraction_source = diagnostics["extraction_source"]
-                    extraction_state_hint = diagnostics["extraction_state"]
-                    rendered_headers = {
-                        str(k).lower(): str(v)
-                        for k, v in (diagnostics["response_headers"] or {}).items()
-                    }
-                else:
-                    extraction_state_hint = diagnostics["extraction_state"]
-                    if extraction_state_hint == "skipped":
-                        extraction_state_hint = "partial"
-                    extra_values["Extraction Source Fallback"] = True
-                    logger.info(
-                        "Render unavailable for %s; using raw_http HTML for extraction.",
-                        render_target,
-                    )
-                    if crawl_log is not None:
-                        crawl_log.record(
-                            url=url,
-                            phase="render",
-                            error_type="Render Unavailable",
-                            error_detail=str(diagnostics.get("failure_reason") or "empty render"),
-                            recovery_action="Fell back to raw_http HTML extraction.",
-                        )
-                # Always surface the Sprint 2 ghost data — even when
-                # ``rendered_html`` was empty the raw_word_count /
-                # is_js_dependent values are still meaningful (and the
-                # SQLite cache stores raw JSON, so these new keys
-                # round-trip without a Pydantic schema bump).
-                extra_values["JS Dependent"] = bool(diagnostics["is_js_dependent"])
-                extra_values["Raw Words"] = int(diagnostics["raw_word_count"] or 0)
-                extra_values["Rendered Words"] = int(
-                    diagnostics["rendered_word_count"] or 0
-                )
-                extra_values["Field LCP (ms)"] = diagnostics["field_lcp_ms"]
-                extra_values["Field CLS"] = diagnostics["field_cls"]
-            main_values["Extraction Source"] = extraction_source
-            extra_values["Extraction Source"] = extraction_source
-            if extraction_source == "rendered_browser":
-                extra_values["Extraction Source Fallback"] = False
-            if rendered_headers:
-                extra_values["Cache-Control"] = rendered_headers.get(
-                    "cache-control", extra_values["Cache-Control"]
-                )
-                extra_values["ETag"] = rendered_headers.get("etag", extra_values["ETag"])
-                extra_values["X-Robots-Tag"] = rendered_headers.get(
-                    "x-robots-tag", extra_values["X-Robots-Tag"]
-                )
-                extra_values["Strict-Transport-Security"] = rendered_headers.get(
-                    "strict-transport-security", extra_values["Strict-Transport-Security"]
-                )
-                extra_values["Content-Security-Policy"] = rendered_headers.get(
-                    "content-security-policy", extra_values["Content-Security-Policy"]
-                )
-                extra_values["X-Content-Type-Options"] = rendered_headers.get(
-                    "x-content-type-options", extra_values["X-Content-Type-Options"]
-                )
-                extra_values["X-Frame-Options"] = rendered_headers.get(
-                    "x-frame-options", extra_values["X-Frame-Options"]
-                )
-                extra_values["Referrer-Policy"] = rendered_headers.get(
-                    "referrer-policy", extra_values["Referrer-Policy"]
-                )
-                extra_values["Permissions-Policy"] = rendered_headers.get(
-                    "permissions-policy", extra_values["Permissions-Policy"]
-                )
-                rendered_encoding = (
-                    rendered_headers.get("content-encoding") or ""
-                ).lower()
-                if rendered_encoding:
-                    extra_values["Compression Enabled"] = any(
-                        token in rendered_encoding for token in ("gzip", "br", "deflate")
-                    )
-            assemble_from_html(
-                main_data=main_data,
-                extra=extra,
-                html=html,
-                resolved_url=resolved_url,
-                depth=depth,
-                response_headers=response_headers,
+            crawl_log.record(
+                url=url,
+                phase="extract",
+                error_type="Unsupported MIME",
+                error_detail=str(response_headers.get("Content-Type") or "unknown"),
+                recovery_action="Skipped HTML extraction for non-text body.",
             )
-            main_values["Extraction State"] = extraction_state_hint
-        else:
-            main_values["Extraction State"] = "skipped"
-
-        if main_values["Load Time (s)"] is None:
-            main_values["Load Time (s)"] = round(time.time() - start_time, 3)
+    elif isinstance(status_code, int) and status_code == 200 and html is not None:
+        extraction_source = "raw_http"
+        extraction_state_hint = "complete"
+        rendered_headers: dict[str, str] = {}
+        diagnostics: RenderedFetchDiagnostics | None = None
+        if render_pages or crawl_mode == "accurate":
+            render_target = resolved_url or url
+            diagnostics = await _fetch_render_with_retries(
+                primary_url=render_target,
+                fallback_url=url if render_target != url else None,
+                render_wait_ms=render_wait_ms,
+                selector_wait_ms=selector_wait_ms,
+                playwright_session_manager=playwright_session_manager,
+            )
+            rendered_html = diagnostics["html"]
+            if rendered_html:
+                html = rendered_html
+                extraction_source = diagnostics["extraction_source"]
+                extraction_state_hint = diagnostics["extraction_state"]
+                rendered_headers = {
+                    str(k).lower(): str(v)
+                    for k, v in (diagnostics["response_headers"] or {}).items()
+                }
+            else:
+                extraction_state_hint = diagnostics["extraction_state"]
+                if extraction_state_hint == "skipped":
+                    extraction_state_hint = "partial"
+                extra_values["Extraction Source Fallback"] = True
+                logger.info(
+                    "Render unavailable for %s; using raw_http HTML for extraction.",
+                    render_target,
+                )
+                if crawl_log is not None:
+                    crawl_log.record(
+                        url=url,
+                        phase="render",
+                        error_type="Render Unavailable",
+                        error_detail=str(diagnostics.get("failure_reason") or "empty render"),
+                        recovery_action="Fell back to raw_http HTML extraction.",
+                    )
+            extra_values["JS Dependent"] = bool(diagnostics["is_js_dependent"])
+            extra_values["Raw Words"] = int(diagnostics["raw_word_count"] or 0)
+            extra_values["Rendered Words"] = int(diagnostics["rendered_word_count"] or 0)
+            extra_values["Field LCP (ms)"] = diagnostics["field_lcp_ms"]
+            extra_values["Field CLS"] = diagnostics["field_cls"]
+        main_values["Extraction Source"] = extraction_source
+        extra_values["Extraction Source"] = extraction_source
+        if extraction_source == "rendered_browser":
+            extra_values["Extraction Source Fallback"] = False
+        if rendered_headers:
+            extra_values["Cache-Control"] = rendered_headers.get(
+                "cache-control", extra_values["Cache-Control"]
+            )
+            extra_values["ETag"] = rendered_headers.get("etag", extra_values["ETag"])
+            extra_values["X-Robots-Tag"] = rendered_headers.get(
+                "x-robots-tag", extra_values["X-Robots-Tag"]
+            )
+            extra_values["Strict-Transport-Security"] = rendered_headers.get(
+                "strict-transport-security", extra_values["Strict-Transport-Security"]
+            )
+            extra_values["Content-Security-Policy"] = rendered_headers.get(
+                "content-security-policy", extra_values["Content-Security-Policy"]
+            )
+            extra_values["X-Content-Type-Options"] = rendered_headers.get(
+                "x-content-type-options", extra_values["X-Content-Type-Options"]
+            )
+            extra_values["X-Frame-Options"] = rendered_headers.get(
+                "x-frame-options", extra_values["X-Frame-Options"]
+            )
+            extra_values["Referrer-Policy"] = rendered_headers.get(
+                "referrer-policy", extra_values["Referrer-Policy"]
+            )
+            extra_values["Permissions-Policy"] = rendered_headers.get(
+                "permissions-policy", extra_values["Permissions-Policy"]
+            )
+            rendered_encoding = (rendered_headers.get("content-encoding") or "").lower()
+            if rendered_encoding:
+                extra_values["Compression Enabled"] = any(
+                    token in rendered_encoding for token in ("gzip", "br", "deflate")
+                )
+        await asyncio.to_thread(
+            _assemble_row_from_html_sync,
+            main_data=main_data,
+            extra=extra,
+            html=html,
+            resolved_url=resolved_url,
+            depth=depth,
+            response_headers=response_headers,
+        )
+        main_values["Extraction State"] = extraction_state_hint
+        extra_values["Extraction State"] = extraction_state_hint
+    else:
+        main_values["Extraction State"] = "skipped"
         finalize_row_state(main_data, extra)
-        backfill_extra_content_hub_metrics(extra_values, main_values)
-        logger.debug("[%s] Crawled: %s", main_values["Status Code"], url)
-        delay_seconds = (
-            request_delay if request_delay is not None else get_delay_between_requests()
-        )
-        await asyncio.sleep(
-            delay_seconds + random.uniform(0, get_request_jitter_seconds())
-        )
-        return CrawlRowPayload(main=main_data, extra=extra)
+
+    if main_values["Load Time (s)"] is None:
+        main_values["Load Time (s)"] = round(time.time() - start_time, 3)
+    logger.debug("[%s] Crawled: %s", main_values["Status Code"], url)
+    delay_seconds = (
+        request_delay if request_delay is not None else get_delay_between_requests()
+    )
+    await asyncio.sleep(delay_seconds + random.uniform(0, get_request_jitter_seconds()))
+    return CrawlRowPayload(main=main_data, extra=extra)
 
 
 def configure_playwright_browsers_path() -> str | None:
@@ -463,7 +467,7 @@ def configure_playwright_browsers_path() -> str | None:
     if not getattr(sys, "frozen", False):
         return None
 
-    base = get_local_app_data() or os.path.expanduser("~")
+    base = get_local_app_data() or str(Path.home())
     target = Path(base) / "hype-frog" / "ms-playwright"
     try:
         target.mkdir(parents=True, exist_ok=True)

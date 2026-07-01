@@ -38,17 +38,17 @@ def test_inventory_sheets_have_curated_toc_blurbs(sheet: str) -> None:
     assert len(desc) > 20
 
 
-def test_apply_workbook_active_tab_lands_on_dashboard() -> None:
+def test_apply_workbook_active_tab_lands_on_executive_briefing() -> None:
     wb = Workbook()
     wb.active.title = "Table of Contents"  # index 0 stays the TOC
-    wb.create_sheet("Dashboard")
+    wb.create_sheet("Executive Briefing")
     wb.create_sheet("Main")
 
     apply_workbook_active_tab(wb)
 
     assert wb.sheetnames[0] == "Table of Contents"
-    assert wb.active.title == WORKBOOK_LANDING_SHEET == "Dashboard"
-    assert wb["Dashboard"].views.sheetView[0].tabSelected is True
+    assert wb.active.title == WORKBOOK_LANDING_SHEET == "Executive Briefing"
+    assert wb["Executive Briefing"].views.sheetView[0].tabSelected is True
     assert wb["Table of Contents"].views.sheetView[0].tabSelected is False
 
 
@@ -104,17 +104,19 @@ def test_friendly_toc_description_unknown_still_names_sheet() -> None:
 
 def test_freeze_precedence_exempts_bespoke_sheets() -> None:
     from hype_frog.reporter.engine_guardrails import (
-        EXECUTIVE_DASHBOARD_SHEET,
         apply_freeze_c2_data_sheets,
     )
-    from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
+    from hype_frog.reporter.sheets.config import (
+        CONTENT_OPTIMISATION_HUB_SHEET,
+        EXECUTIVE_BRIEFING_SHEET,
+    )
 
     wb = Workbook()
     toc = wb.active
     toc.title = "Table of Contents"
     toc.freeze_panes = "A3"
-    exec_dash = wb.create_sheet(EXECUTIVE_DASHBOARD_SHEET)
-    exec_dash.freeze_panes = "A8"
+    briefing = wb.create_sheet(EXECUTIVE_BRIEFING_SHEET)
+    briefing.freeze_panes = "A22"
     hub = wb.create_sheet(CONTENT_OPTIMISATION_HUB_SHEET)
     hub.freeze_panes = "A4"
     data = wb.create_sheet("Technical Diagnostics")
@@ -123,11 +125,11 @@ def test_freeze_precedence_exempts_bespoke_sheets() -> None:
 
     apply_freeze_c2_data_sheets(wb)
 
-    # Bespoke freezes survive; ordinary data sheets normalise to C2.
+    # Bespoke freezes survive; ordinary data sheets normalise to C3 (return strip + header).
     assert toc.freeze_panes == "A3"
-    assert exec_dash.freeze_panes == "A8"
+    assert briefing.freeze_panes == "A22"
     assert hub.freeze_panes == "A4"
-    assert data.freeze_panes == "C2"
+    assert data.freeze_panes == "C3"
 
 
 def test_banned_fallback_constant_present() -> None:

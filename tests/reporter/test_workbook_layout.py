@@ -20,7 +20,8 @@ from hype_frog.reporter.sheets.workbook_layout import (
     ADVANCED_WORKBOOK_TAB_ORDER,
     HIDDEN_SHEETS_BY_DEFAULT,
     PREFERRED_WORKBOOK_TAB_ORDER,
-    TAB_COLOR_EXECUTIVE,
+    TAB_COLOR_MANAGEMENT,
+    TAB_COLOR_TECHNICAL,
     VISIBLE_WORKBOOK_TAB_ORDER,
     _SHEET_TAB_COLORS,
     apply_workbook_tab_layout,
@@ -29,19 +30,18 @@ from hype_frog.reporter.sheets.workbook_layout import (
 
 def test_visible_tab_order_matches_workflow_spec() -> None:
     visible = [n for n in VISIBLE_WORKBOOK_TAB_ORDER if n != "Table of Contents"]
-    assert visible[:7] == [
-        "Dashboard",
-        "Executive Dashboard",
+    assert visible[:6] == [
+        "Executive Briefing",
         "Summary",
         "Priority URLs",
         "FixPlan",
         "Quick Wins",
         CONTENT_OPTIMISATION_HUB_SHEET,
     ]
-    assert visible[9] == "Main"
-    assert visible[11] == "Link Inventory"
-    assert visible[12] == "Broken Link Impact"
-    assert visible[13] == "SitemapQA"
+    assert visible[8] == "Main"
+    assert visible[10] == "Link Inventory"
+    assert visible[11] == "Broken Link Impact"
+    assert visible[12] == "SitemapQA"
     assert AIOSEO_RECOMMENDATIONS_SHEET in visible
     assert CONTENT_PLANNER_SHEET in visible
     assert visible[-1] == "Playbook"
@@ -61,14 +61,19 @@ def test_content_planner_has_tab_colour() -> None:
 def test_advanced_tabs_hidden_by_default() -> None:
     assert "Technical Diagnostics" in HIDDEN_SHEETS_BY_DEFAULT
     assert AUDIT_RUN_DETAILS_SHEET in HIDDEN_SHEETS_BY_DEFAULT
-    assert "Dashboard" not in HIDDEN_SHEETS_BY_DEFAULT
+    assert "Dashboard" in HIDDEN_SHEETS_BY_DEFAULT
     assert "Summary" not in HIDDEN_SHEETS_BY_DEFAULT
+
+
+def test_aioseo_tab_colour_is_technical_persona() -> None:
+    assert _SHEET_TAB_COLORS[AIOSEO_RECOMMENDATIONS_SHEET] == TAB_COLOR_TECHNICAL
 
 
 def test_apply_workbook_tab_layout_orders_colors_and_hides() -> None:
     wb = Workbook()
     wb.active.title = "Main"
     for name in (
+        "Executive Briefing",
         "Dashboard",
         "Technical Diagnostics",
         AUDIT_RUN_DETAILS_SHEET,
@@ -77,10 +82,11 @@ def test_apply_workbook_tab_layout_orders_colors_and_hides() -> None:
         wb.create_sheet(name)
     apply_workbook_tab_layout(wb)
     titles = [ws.title for ws in wb.worksheets]
-    assert titles.index("Dashboard") < titles.index("Main")
+    assert titles.index("Executive Briefing") < titles.index("Main")
     assert titles.index("Playbook") < titles.index("Technical Diagnostics")
-    dash_color = str(wb["Dashboard"].sheet_properties.tabColor.rgb or "")
-    assert dash_color.upper().endswith(TAB_COLOR_EXECUTIVE.upper())
+    briefing_color = str(wb["Executive Briefing"].sheet_properties.tabColor.rgb or "")
+    assert briefing_color.upper().endswith(TAB_COLOR_MANAGEMENT.upper())
+    assert wb["Dashboard"].sheet_state == "hidden"
     assert wb["Technical Diagnostics"].sheet_state == "hidden"
     assert len(PREFERRED_WORKBOOK_TAB_ORDER) == len(set(PREFERRED_WORKBOOK_TAB_ORDER))
 

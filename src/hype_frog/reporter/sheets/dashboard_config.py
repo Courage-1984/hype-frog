@@ -189,8 +189,8 @@ DASHBOARD_TOOLTIPS: dict[str, str] = {
         ),
     ),
     "C17": format_help_layer(
-        description="Fraction of Content Optimisation Hub rows marked Completed.",
-        calculation="``COUNTIF(Status range,\"Completed\") / COUNTA(Status range)`` (see ``dashboard.py`` range constants).",
+        description="Fraction of Content Optimisation Hub rows marked Done.",
+        calculation="``COUNTIF(Status range,\"Done\") / COUNTA(Status range)`` (see ``dashboard.py`` range constants).",
     ),
     "O5": format_help_layer(
         description="Most widespread FixPlan issue by affected URL count.",

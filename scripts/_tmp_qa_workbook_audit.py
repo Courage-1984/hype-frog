@@ -5,8 +5,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+from hype_frog.core.path_bootstrap import bootstrap_src_path, repo_root
+
+bootstrap_src_path(anchor=Path(__file__))
+ROOT = repo_root()
 
 from hype_frog.reporter.workbook_audit import audit_workbook  # noqa: E402
 

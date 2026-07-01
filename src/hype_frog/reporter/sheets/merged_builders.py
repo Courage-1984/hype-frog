@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from hype_frog.crawler.redirect_chain import RedirectHopRecord, build_redirect_map_row
@@ -628,7 +628,7 @@ def build_issue_register_rows(
                 "Stable Issue ID": stable_id,
                 "Owner": _to_str(row.get("Owner")),
                 "Sprint": _to_str(row.get("Sprint")),
-                "Status": _to_str(row.get("Status")) or "Open",
+                "Status": _to_str(row.get("Status")) or "To Do",
                 "Affected URLs Sample": _to_str(row.get("URL")),
                 "Source Legacy Tab": "IssueInventory",
                 "Source Row ID": idx,
@@ -768,48 +768,9 @@ def build_link_intelligence_rows(
 
 def build_link_inventory_rows(extra_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Flatten per-anchor rows for the Link Inventory worksheet."""
-    rows: list[dict[str, Any]] = []
-    for row in extra_rows:
-        source = _to_str(row.get("URL"))
-        for item in row.get("Link Details") or []:
-            code_raw = item.get("Status Code")
-            code_out: int | str = ""
-            if isinstance(code_raw, int):
-                code_out = code_raw
-            elif code_raw is not None and str(code_raw).strip() != "":
-                try:
-                    code_out = int(float(code_raw))
-                except (TypeError, ValueError):
-                    code_out = ""
-            gen = item.get("Generic Anchor")
-            row_dict: dict[str, Any] = {
-                "Source URL": source,
-                "Target URL": _to_str(item.get("Target URL")),
-                "Anchor Text": _to_str(item.get("Anchor Text")),
-                "Rel Attribute": _to_str(item.get("Rel Attribute") or item.get("Rel")),
-                "Link Type": _to_str(item.get("Link Type")),
-                "Status Code": code_out,
-                "Generic Anchor": (
-                    "TRUE"
-                    if gen is True
-                    else "FALSE"
-                    if gen is False
-                    else ""
-                ),
-            }
-            rows.append({col: row_dict[col] for col in LINK_INVENTORY_COLUMNS})
-    seen_keys: set[tuple[object, ...]] = set()
-    deduped: list[dict[str, Any]] = []
-    for row in rows:
-        key = (
-            row.get("Source URL"),
-            row.get("Target URL"),
-            row.get("Anchor Text"),
-        )
-        if key not in seen_keys:
-            seen_keys.add(key)
-            deduped.append(row)
-    return deduped
+    from hype_frog.pipeline.link_inventory_stream import build_link_inventory_rows_list
+
+    return build_link_inventory_rows_list(extra_rows)
 
 
 def build_template_duplication_risks_rows(
@@ -1033,7 +994,7 @@ def build_quick_wins_rows(
 
 
 def build_broken_link_impact_rows(
-    link_inventory_rows: list[dict[str, Any]],
+    link_inventory_rows: list[dict[str, Any]] | Iterable[dict[str, Any]],
     extra_rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Rank broken internal destinations by inbound link volume and source traffic."""

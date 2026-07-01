@@ -45,6 +45,13 @@ def test_sheet_data_column_range_is_header_driven() -> None:
     rng = sheet_data_column_range("Technical Diagnostics", "SEO Health Score")
     assert "MATCH(\"SEO Health Score\"" in rng
     assert "Technical Diagnostics" in rng
+    assert "$2:$2" in rng
+
+
+def test_sheet_data_column_range_main_uses_row2_header_and_row3_data() -> None:
+    rng = sheet_data_column_range("Main", "SEO Score")
+    assert "MATCH(\"SEO Score\",'Main'!$2:$2,0)" in rng
+    assert "OFFSET('Main'!$A$1,2," in rng
 
 
 def test_issue_inventory_excluded_from_toc_and_dashboard_links() -> None:

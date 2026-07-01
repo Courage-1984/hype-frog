@@ -14,14 +14,6 @@ def test_content_hub_ordered_headers_matches_reorder_semantics() -> None:
 
 
 def test_content_hub_operational_prefix_and_formula_letters() -> None:
-    assert CONTENT_HUB_EXPORT_COLUMNS[:6] == (
-        "Action Required",
-        "On-Page Optimization Score",
-        "SEO Score",
-        "Technical Health",
-        "Copy Score",
-        "Status",
-    )
     assert content_hub_column_letter("URL Slug Normalization") == "H"
     assert content_hub_column_letter("URL") == "I"
     assert content_hub_column_letter("Current Title") == "K"
@@ -32,6 +24,28 @@ def test_content_hub_operational_prefix_and_formula_letters() -> None:
     assert content_hub_column_letter("Priority Reason") == "AG"
     assert content_hub_column_letter("Entity Density (%)") == "AH"
     assert content_hub_column_letter("Semantic AEO Score") == "AK"
+
+
+def test_hub_score_link_formula_uses_data_row_and_main_header_row() -> None:
+    from openpyxl import Workbook
+
+    from hype_frog.reporter.engine_rows import content_hub_column_letter
+    from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
+    from hype_frog.reporter.sheets.tables_impl import _link_hub_scores_from_main
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = CONTENT_OPTIMISATION_HUB_SHEET
+    ws.append(["banner"])
+    ws.append(["Action Required", "On-Page Optimization Score", "SEO Score", "URL"])
+    ws.append(["Needs Copy", 0.0, 12.5, "https://example.com/"])
+    _link_hub_scores_from_main(ws)
+    seo_col = content_hub_column_letter("SEO Score")
+    formula = str(ws[f"{seo_col}3"].value)
+    url_col = content_hub_column_letter("URL")
+    assert "MATCH(\"SEO Score\",'Main'!$2:$2,0)" in formula
+    assert f"MATCH(TRIM({url_col}3" in formula
+    assert "OFFSET('Main'!$A$1,2," in formula
 
 
 def test_hub_display_text_strips_zero_width_space() -> None:

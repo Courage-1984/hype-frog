@@ -7,7 +7,11 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
+from hype_frog.reporter.sheets.config import (
+    CONTENT_HUB_DATA_START_ROW,
+    CONTENT_OPTIMISATION_HUB_SHEET,
+    RETURN_TO_BRIEFING_LABEL,
+)
 from hype_frog.reporter.sheets.toc import PREFERRED_WORKBOOK_TAB_ORDER
 from hype_frog.reporter.sheets.workbook_layout import SHEETS_EXCLUDED_FROM_TOC
 
@@ -24,9 +28,21 @@ _FORMULA_ERROR_RE = re.compile(
 )
 _PREFERRED_TAB_SET = frozenset(PREFERRED_WORKBOOK_TAB_ORDER)
 
+
+def _main_header_row(main_ws) -> int:
+    """Resolve Main header row from the physical sheet (return strip aware)."""
+    if str(main_ws.cell(row=1, column=1).value or "").strip() == RETURN_TO_BRIEFING_LABEL:
+        return 2
+    return 1
+
+
+def _main_data_start_row(main_ws) -> int:
+    return _main_header_row(main_ws) + 1
+
 REQUIRED_FULL_SUITE_SHEETS: frozenset[str] = frozenset(
     {
         "Table of Contents",
+        "Executive Briefing",
         "Dashboard",
         CONTENT_OPTIMISATION_HUB_SHEET,
         "Content Hub Metrics",
@@ -144,8 +160,8 @@ def audit_workbook(
         if action_col is None:
             errors.append(f"{hub_name} missing Action Required column")
         else:
-            # Row 3 is the scope-note row (merged); data starts at row 4.
-            for r in range(4, hub.max_row + 1):
+            # Row 1 banner, row 2 headers; data starts at CONTENT_HUB_DATA_START_ROW.
+            for r in range(CONTENT_HUB_DATA_START_ROW, hub.max_row + 1):
                 val = hub.cell(row=r, column=action_col).value
                 if val is None or str(val).strip() == "":
                     errors.append(
@@ -161,16 +177,22 @@ def audit_workbook(
 
     if "Main" in wb.sheetnames:
         main_ws = wb["Main"]
-        main_headers = {str(c.value).strip(): c.column for c in main_ws[1] if c.value}
+        main_header_row = _main_header_row(main_ws)
+        main_data_start = _main_data_start_row(main_ws)
+        main_headers = {
+            str(c.value).strip(): c.column
+            for c in main_ws[main_header_row]
+            if c.value
+        }
         state_col = main_headers.get("Extraction State")
         url_col = main_headers.get("URL")
         if state_col is None:
             errors.append("Main sheet missing Extraction State column")
-        elif main_ws.max_row < 2:
+        elif main_ws.max_row < main_data_start:
             errors.append("Main sheet has no data rows")
         else:
             allowed_states = frozenset({"complete", "partial", "skipped"})
-            for r in range(2, main_ws.max_row + 1):
+            for r in range(main_data_start, main_ws.max_row + 1):
                 state = str(main_ws.cell(row=r, column=state_col).value or "").strip().lower()
                 if state and state not in allowed_states:
                     errors.append(
@@ -185,12 +207,14 @@ def audit_workbook(
 
 
 def count_main_rows(path: Path | str) -> int:
-    """Return data row count on the Main sheet (excluding header)."""
+    """Return data row count on the Main sheet (excluding header and return strip)."""
     wb = load_workbook(Path(path), read_only=True)
     try:
         if "Main" not in wb.sheetnames:
             return 0
-        return max(0, wb["Main"].max_row - 1)
+        main = wb["Main"]
+        data_start = _main_data_start_row(main)
+        return max(0, main.max_row - data_start + 1)
     finally:
         wb.close()
 

@@ -9,7 +9,10 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.core.url_normalization import normalize_url_key
 from hype_frog.reporter.engine_rows import content_hub_column_letter
-from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
+from hype_frog.reporter.sheets.config import (
+    CONTENT_HUB_DATA_START_ROW,
+    CONTENT_OPTIMISATION_HUB_SHEET,
+)
 from hype_frog.reporter.sheets.layout import main_sheet_url_column_letter
 
 TECHNICAL_DIAGNOSTICS_SHEET = "Technical Diagnostics"
@@ -27,15 +30,17 @@ def _technical_diagnostics_jump_formula(url_col_letter: str, row: int, *, link_l
 def _fixplan_hub_status_formula(fixplan_url_letter: str, row: int) -> str:
     """Return Hub ``Status`` for a FixPlan URL via INDEX/MATCH on the Content Hub.
 
-    Hub data starts at row 3 (row 1 banner, row 2 headers). Column letters are resolved
-    from the canonical export order so reordering does not silently join on SEO Score.
+    Hub data starts at row ``CONTENT_HUB_DATA_START_ROW`` (banner + headers).
+    Column letters are resolved from the canonical export order so reordering does not
+    silently join on SEO Score.
     """
     hub = CONTENT_OPTIMISATION_HUB_SHEET
     status_l = content_hub_column_letter("Status")
     url_l = content_hub_column_letter("URL")
+    data_start = CONTENT_HUB_DATA_START_ROW
     return (
-        f"=IFERROR(INDEX('{hub}'!{status_l}3:{status_l}10000,"
-        f"MATCH({fixplan_url_letter}{row},'{hub}'!{url_l}3:{url_l}10000,0)),"
+        f"=IFERROR(INDEX('{hub}'!{status_l}{data_start}:{status_l}10000,"
+        f"MATCH({fixplan_url_letter}{row},'{hub}'!{url_l}{data_start}:{url_l}10000,0)),"
         f'"Not in Hub")'
     )
 
@@ -102,6 +107,9 @@ def normalize_url_for_match(url_value: Any) -> str:
     return normalize_url_key(sanitize_excel_url(url_value))
 
 
+from hype_frog.reporter.sheets.sheet_rows import sheet_data_start_row
+
+
 def add_url_navigation_links(
     writer: Any,
     worksheet: Worksheet,
@@ -109,7 +117,9 @@ def add_url_navigation_links(
     *,
     debug_excel_isolation_mode: bool,
     disable_external_links_and_images: bool,
-    header_index_fn: Callable[[Worksheet], dict[str, int]],
+    header_index_fn: Callable[..., dict[str, int]],
+    data_start_row: int = 2,
+    header_row: int = 1,
 ) -> None:
     """Add per-row URL hyperlinks and optional ``Open in Main`` helper links.
 
@@ -141,14 +151,14 @@ def add_url_navigation_links(
             ):
                 url_cell.hyperlink = url_val
                 url_cell.style = "Hyperlink"
-                url_cell.alignment = Alignment(wrap_text=True, vertical="top")
+                url_cell.alignment = Alignment(wrap_text=False, vertical="center")
         return
 
     headers = header_index_fn(worksheet)
     url_col = headers.get("URL")
-    if not url_col or worksheet.max_row <= 1:
+    if not url_col or worksheet.max_row < data_start_row:
         return
-    for r in range(2, worksheet.max_row + 1):
+    for r in range(data_start_row, worksheet.max_row + 1):
         url_cell = worksheet.cell(row=r, column=url_col)
         url_val = str(url_cell.value or "").strip()
         if url_val.startswith(("http://", "https://")) and is_safe_hyperlink_target(
@@ -156,15 +166,15 @@ def add_url_navigation_links(
         ):
             url_cell.hyperlink = url_val
             url_cell.style = "Hyperlink"
-            url_cell.alignment = Alignment(wrap_text=True, vertical="top")
+            url_cell.alignment = Alignment(wrap_text=False, vertical="center")
 
     if sheet_name not in {"Main", "Dashboard"} and "Main" in writer.book.sheetnames:
         if "Open in Main" not in headers:
             new_col = worksheet.max_column + 1
-            worksheet.cell(row=1, column=new_col, value="Open in Main")
+            worksheet.cell(row=header_row, column=new_col, value="Open in Main")
             url_col_letter = get_column_letter(url_col)
             main_u = main_sheet_url_column_letter()
-            for r in range(2, worksheet.max_row + 1):
+            for r in range(data_start_row, worksheet.max_row + 1):
                 worksheet.cell(
                     row=r,
                     column=new_col,
@@ -181,7 +191,9 @@ def apply_cross_sheet_links(
     sheet_name: str,
     *,
     debug_excel_isolation_mode: bool,
-    header_index_fn: Callable[[Worksheet], dict[str, int]],
+    header_index_fn: Callable[..., dict[str, int]],
+    data_start_row: int = 2,
+    header_row: int = 1,
 ) -> None:
     """Attach cross-sheet helper links used for analyst navigation.
 
@@ -195,6 +207,7 @@ def apply_cross_sheet_links(
     if debug_excel_isolation_mode:
         return
     headers = header_index_fn(worksheet)
+    fix_data_start = sheet_data_start_row("FixPlan")
     if sheet_name in {"Summary", "Issue Register"}:
         issue_col = headers.get("Issue")
         fix_ws = writer.book["FixPlan"] if "FixPlan" in writer.book.sheetnames else None
@@ -202,14 +215,14 @@ def apply_cross_sheet_links(
         fix_issue_col = fix_headers.get("Issue Type")
         fix_issue_to_row: dict[str, int] = {}
         if fix_ws and fix_issue_col:
-            for r in range(2, fix_ws.max_row + 1):
+            for r in range(fix_data_start, fix_ws.max_row + 1):
                 issue_name = str(
                     fix_ws.cell(row=r, column=fix_issue_col).value or ""
                 ).strip()
                 if issue_name and issue_name not in fix_issue_to_row:
                     fix_issue_to_row[issue_name] = r
         if issue_col:
-            for r in range(2, worksheet.max_row + 1):
+            for r in range(data_start_row, worksheet.max_row + 1):
                 issue = str(worksheet.cell(row=r, column=issue_col).value or "").strip()
                 if issue and not issue.startswith("==="):
                     issue_cell = worksheet.cell(row=r, column=issue_col)
@@ -225,9 +238,9 @@ def apply_cross_sheet_links(
                 target_col = existing_col
             else:
                 target_col = worksheet.max_column + 1
-                worksheet.cell(row=1, column=target_col, value="Technical View")
+                worksheet.cell(row=header_row, column=target_col, value="Technical View")
             col_letter = get_column_letter(url_col)
-            for r in range(2, worksheet.max_row + 1):
+            for r in range(data_start_row, worksheet.max_row + 1):
                 worksheet.cell(
                     row=r,
                     column=target_col,
@@ -241,9 +254,9 @@ def apply_cross_sheet_links(
             new_col = headers.get("Open in Technical")
             if not new_col:
                 new_col = worksheet.max_column + 1
-                worksheet.cell(row=1, column=new_col, value="Open in Technical")
+                worksheet.cell(row=header_row, column=new_col, value="Open in Technical")
             url_letter = get_column_letter(url_col)
-            for r in range(2, worksheet.max_row + 1):
+            for r in range(data_start_row, worksheet.max_row + 1):
                 worksheet.cell(
                     row=r,
                     column=new_col,
@@ -261,10 +274,10 @@ def apply_cross_sheet_links(
             new_col = headers.get("Open in Main")
             if not new_col:
                 new_col = worksheet.max_column + 1
-                worksheet.cell(row=1, column=new_col, value="Open in Main")
+                worksheet.cell(row=header_row, column=new_col, value="Open in Main")
             url_letter = get_column_letter(url_col)
             main_u = main_sheet_url_column_letter()
-            for r in range(2, worksheet.max_row + 1):
+            for r in range(data_start_row, worksheet.max_row + 1):
                 worksheet.cell(
                     row=r,
                     column=new_col,
@@ -277,10 +290,10 @@ def apply_cross_sheet_links(
             open_ref_col = headers.get("Open in Reference")
             if not open_ref_col:
                 open_ref_col = worksheet.max_column + 1
-                worksheet.cell(row=1, column=open_ref_col, value="Open in Reference")
+                worksheet.cell(row=header_row, column=open_ref_col, value="Open in Reference")
             ref_letter = get_column_letter(reference_tab_col)
             url_letter = get_column_letter(url_col) if url_col else "A"
-            for r in range(2, worksheet.max_row + 1):
+            for r in range(data_start_row, worksheet.max_row + 1):
                 worksheet.cell(
                     row=r,
                     column=open_ref_col,
@@ -292,13 +305,13 @@ def apply_cross_sheet_links(
             fix_issue_col = fix_headers.get("Issue Type")
             fix_issue_rows: dict[str, int] = {}
             if fix_issue_col:
-                for r in range(2, fix_ws.max_row + 1):
+                for r in range(fix_data_start, fix_ws.max_row + 1):
                     key = str(
                         fix_ws.cell(row=r, column=fix_issue_col).value or ""
                     ).strip()
                     if key and key not in fix_issue_rows:
                         fix_issue_rows[key] = r
-                for r in range(2, worksheet.max_row + 1):
+                for r in range(data_start_row, worksheet.max_row + 1):
                     issue = str(
                         worksheet.cell(row=r, column=issue_col).value or ""
                     ).strip()
@@ -313,9 +326,9 @@ def apply_cross_sheet_links(
             technical_col = headers.get("Open in Technical")
             if not technical_col:
                 technical_col = worksheet.max_column + 1
-                worksheet.cell(row=1, column=technical_col, value="Open in Technical")
+                worksheet.cell(row=header_row, column=technical_col, value="Open in Technical")
             url_letter = get_column_letter(url_col)
-            for r in range(2, worksheet.max_row + 1):
+            for r in range(data_start_row, worksheet.max_row + 1):
                 worksheet.cell(
                     row=r,
                     column=technical_col,
@@ -330,11 +343,11 @@ def apply_cross_sheet_links(
         if not hub_status_col:
             hub_status_col = worksheet.max_column + 1
             worksheet.cell(
-                row=1, column=hub_status_col, value="Hub Status (Content Hub)"
+                row=header_row, column=hub_status_col, value="Hub Status (Content Hub)"
             )
         if url_col:
             u_letter = get_column_letter(url_col)
-            for r in range(2, worksheet.max_row + 1):
+            for r in range(data_start_row, worksheet.max_row + 1):
                 worksheet.cell(
                     row=r,
                     column=hub_status_col,
@@ -352,7 +365,8 @@ def apply_editor_url_column_hyperlinks(
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
         header_row, first_data_row, column_name = 2, 3, "Elementor Builder Link"
     elif sheet_name == "AIOSEO Recommendations":
-        header_row, first_data_row, column_name = 1, 2, "Direct Edit Link"
+        # AIOSEO carries a row-1 return banner, so headers sit on row 2.
+        header_row, first_data_row, column_name = 2, 3, "Direct Edit Link"
     else:
         return
     if worksheet.max_row < first_data_row:
@@ -373,7 +387,7 @@ def apply_editor_url_column_hyperlinks(
             "=HYPERLINK("
         ):
             cell.font = link_font
-            cell.alignment = Alignment(wrap_text=True, vertical="top")
+            cell.alignment = Alignment(wrap_text=False, vertical="center")
             continue
         val = sanitize_excel_url(raw_val)
         if val.startswith(("http://", "https://")) and is_safe_hyperlink_target(
@@ -382,4 +396,4 @@ def apply_editor_url_column_hyperlinks(
             cell.hyperlink = val
             cell.style = "Hyperlink"
             cell.font = link_font
-            cell.alignment = Alignment(wrap_text=True, vertical="top")
+            cell.alignment = Alignment(wrap_text=False, vertical="center")

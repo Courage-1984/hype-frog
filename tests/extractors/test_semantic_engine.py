@@ -36,6 +36,13 @@ from hype_frog.extractors.semantic_engine import (
     count_citation_candidates,
 )
 
+
+def _log_event_text(record: logging.LogRecord) -> str:
+    if isinstance(record.msg, dict):
+        return str(record.msg.get("event", ""))
+    return record.getMessage()
+
+
 # ---------------------------------------------------------------------------
 # count_citation_candidates — paragraph mode
 # ---------------------------------------------------------------------------
@@ -299,7 +306,7 @@ def test_semantic_analyzer_poison_flag_set_after_first_import_failure(
     matching = [
         rec
         for rec in caplog.records
-        if "spaCy is not installed" in rec.getMessage()
+        if "spaCy is not installed" in _log_event_text(rec)
     ]
     assert len(matching) == 1, (
         f"Expected exactly one ImportError-fallback warning; got {len(matching)}."
@@ -324,7 +331,7 @@ def test_semantic_analyzer_poison_flag_skips_repeat_import_attempts(
     matching = [
         rec
         for rec in caplog.records
-        if "spaCy is not installed" in rec.getMessage()
+        if "spaCy is not installed" in _log_event_text(rec)
     ]
     # Warning must fire exactly once across three analyse() calls.
     assert len(matching) == 1

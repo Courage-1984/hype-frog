@@ -75,10 +75,13 @@ async def test_full_smoke_pipeline_export_offline(
         "HF_OUTPUT_FILENAME",
         str(tmp_path / "full_smoke_offline.xlsx"),
     )
+    from hype_frog.orchestration.crawl_payload_loader import load_crawl_row_payloads
+
     config = full_smoke_run_config()
     crawl_result = await _run_full_smoke_pipeline(config)
+    crawl_rows = load_crawl_row_payloads(crawl_result)
     assert Path(crawl_result.output_filename).is_file()
-    assert len(crawl_result.crawl_rows) >= FULL_SMOKE_SYNTHETIC_URL_COUNT
+    assert len(crawl_rows) >= FULL_SMOKE_SYNTHETIC_URL_COUNT
     assert any(
-        row.extra.values.get("Status Code") == "Timeout" for row in crawl_result.crawl_rows
+        row.extra.values.get("Status Code") == "Timeout" for row in crawl_rows
     )

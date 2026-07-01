@@ -10,6 +10,7 @@ from hype_frog.core import get_logger
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload, SummaryMetricsPayload
 from hype_frog.core.numeric_utils import safe_float
 from hype_frog.reporter.dashboard_logic import (
+    DashboardComputationResult,
     FixPlanRowPayload,
     compute_dashboard_metrics,
 )
@@ -31,8 +32,10 @@ from hype_frog.reporter.sheets.dashboard_config import (
     VALUE_BLOCK_COLOR,
     WARN_COLOR,
 )
+from hype_frog.reporter.engine_rows import content_hub_column_letter
 from hype_frog.reporter.sheets.config import (
     AUDIT_RUN_DETAILS_SHEET,
+    CONTENT_HUB_DATA_START_ROW,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     STD_BLUE,
@@ -42,6 +45,7 @@ from hype_frog.reporter.sheets.layout import (
     link_intelligence_column_letter,
     sheet_data_column_range,
 )
+from hype_frog.reporter.sheets.sheet_rows import sheet_data_header_row
 from hype_frog.reporter.sheets.workbook_layout import (
     DASHBOARD_ADVANCED_SHEET_LINKS,
     DASHBOARD_ADVANCED_SHEETS_NOTE,
@@ -72,8 +76,12 @@ _CONTENT_HUB_METRICS_DYNAMIC_COLUMN = (
     f'INDEX(\'{CONTENT_HUB_METRICS_SHEET}\'!$1:$1048576,0,'
     f'MATCH("{{header}}",\'{CONTENT_HUB_METRICS_SHEET}\'!$1:$1,0))'
 )
-# Hub data starts row 3 (row 1 banner, row 2 headers); F = Status per preferred column order.
-_CONTENT_HUB_STATUS_RANGE = f"'{CONTENT_OPTIMISATION_HUB_SHEET}'!F3:F10000"
+# Hub data starts at CONTENT_HUB_DATA_START_ROW (banner + header above).
+_CONTENT_HUB_STATUS_RANGE = (
+    f"'{CONTENT_OPTIMISATION_HUB_SHEET}'!"
+    f"{content_hub_column_letter('Status')}{CONTENT_HUB_DATA_START_ROW}:"
+    f"{content_hub_column_letter('Status')}10000"
+)
 
 DASHBOARD_BRAND_A1 = "🐸 HYPE FROG: SEO & AEO Intelligence Report"
 
@@ -140,15 +148,18 @@ def _technical_sheet_rows(writer: Any) -> list[dict[str, Any]]:
         return []
     for sheet_title in _TECHNICAL_SOURCE_SHEET_NAMES:
         if sheet_title in names:
-            return _sheet_rows(writer.book[sheet_title])
+            return _sheet_rows(
+                writer.book[sheet_title],
+                header_row=sheet_data_header_row(sheet_title),
+            )
     return []
 
 
-def _sheet_rows(worksheet: Worksheet) -> list[dict[str, Any]]:
-    headers = header_index(worksheet)
+def _sheet_rows(worksheet: Worksheet, header_row: int = 1) -> list[dict[str, Any]]:
+    headers = header_index(worksheet, header_row)
     ordered = sorted(headers.items(), key=lambda item: item[1])
     rows: list[dict[str, Any]] = []
-    for row_idx in range(2, worksheet.max_row + 1):
+    for row_idx in range(header_row + 1, worksheet.max_row + 1):
         row_dict = {
             key: worksheet.cell(row=row_idx, column=column).value
             for key, column in ordered
@@ -162,11 +173,12 @@ def _format_priority_urls_ctr(writer: Any) -> None:
     if "Priority URLs" not in writer.book.sheetnames:
         return
     priority_ws = writer.book["Priority URLs"]
-    headers = header_index(priority_ws)
+    header_row = sheet_data_header_row("Priority URLs")
+    headers = header_index(priority_ws, header_row)
     ctr_col = headers.get("GSC CTR")
-    if not ctr_col or priority_ws.max_row < 2:
+    if not ctr_col or priority_ws.max_row <= header_row:
         return
-    for row_idx in range(2, priority_ws.max_row + 1):
+    for row_idx in range(header_row + 1, priority_ws.max_row + 1):
         priority_ws.cell(row=row_idx, column=ctr_col).number_format = "0.0000"
 
 
@@ -179,6 +191,9 @@ def _safe_excel_string_literal(value: str) -> str:
     return str(value or "").replace('"', '""')
 
 
+# TODO: [Next Major Release] Remove legacy hidden Dashboard tab — drop ``style_dashboard``,
+# stop writing the ``Dashboard`` sheet in ``export_workbook``, and delete
+# ``LEGACY_HIDDEN_SHEETS`` / ``LEGACY_DASHBOARD_SHEET`` once bookmark migration ends.
 def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     """Render the executive dashboard sheet with KPI and ownership blocks.
 
@@ -345,7 +360,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         )
         worksheet["B17"] = (
             f"=IF(COUNTA({_CONTENT_HUB_STATUS_RANGE})=0,0,"
-            f'COUNTIF({_CONTENT_HUB_STATUS_RANGE},"Completed")/'
+            f'COUNTIF({_CONTENT_HUB_STATUS_RANGE},"Done")/'
             f"COUNTA({_CONTENT_HUB_STATUS_RANGE}))"
         )
         worksheet["B17"].number_format = "0%"
@@ -537,17 +552,20 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
 
     fixplan_rows: list[FixPlanRowPayload] = []
     if "FixPlan" in writer.book.sheetnames:
-        raw_fixplan_rows = _sheet_rows(writer.book["FixPlan"])
+        fixplan_header_row = sheet_data_header_row("FixPlan")
+        raw_fixplan_rows = _sheet_rows(writer.book["FixPlan"], header_row=fixplan_header_row)
         fixplan_rows = [
             FixPlanRowPayload.model_validate({**row_dict, "source_row": idx})
-            for idx, row_dict in enumerate(raw_fixplan_rows, start=2)
+            for idx, row_dict in enumerate(raw_fixplan_rows, start=fixplan_header_row + 1)
         ]
 
     aeo_rows: list[ExtraRowPayload] = []
     if "AEO" in writer.book.sheetnames:
         aeo_rows = [
             ExtraRowPayload.model_validate(row_dict)
-            for row_dict in _sheet_rows(writer.book["AEO"])
+            for row_dict in _sheet_rows(
+                writer.book["AEO"], header_row=sheet_data_header_row("AEO")
+            )
         ]
 
     dashboard_metrics = compute_dashboard_metrics(
@@ -560,10 +578,16 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
 
     content_ai_readiness_rows: list[dict[str, Any]] = []
     if "Content & AI Readiness" in writer.book.sheetnames:
-        content_ai_readiness_rows = _sheet_rows(writer.book["Content & AI Readiness"])
+        content_ai_readiness_rows = _sheet_rows(
+            writer.book["Content & AI Readiness"],
+            header_row=sheet_data_header_row("Content & AI Readiness"),
+        )
     link_inventory_rows_narrative: list[dict[str, Any]] = []
     if "Link Inventory" in writer.book.sheetnames:
-        link_inventory_rows_narrative = _sheet_rows(writer.book["Link Inventory"])
+        link_inventory_rows_narrative = _sheet_rows(
+            writer.book["Link Inventory"],
+            header_row=sheet_data_header_row("Link Inventory"),
+        )
 
     avg_seo_pct_narrative = average_seo_score_pct(technical_main_rows)
     if (
@@ -615,7 +639,7 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     )
     worksheet["B17"] = (
         f"=IF(COUNTA({_CONTENT_HUB_STATUS_RANGE})=0,0,"
-        f'COUNTIF({_CONTENT_HUB_STATUS_RANGE},"Completed")/'
+        f'COUNTIF({_CONTENT_HUB_STATUS_RANGE},"Done")/'
         f"COUNTA({_CONTENT_HUB_STATUS_RANGE}))"
     )
     worksheet["B17"].number_format = "0%"
@@ -1120,4 +1144,153 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
                 )
 
 
-__all__ = ["DASHBOARD_BRAND_A1", "style_dashboard"]
+def apply_executive_briefing_triage(
+    worksheet: Worksheet,
+    *,
+    dashboard_metrics: DashboardComputationResult,
+    row_start: int = 22,
+) -> None:
+    """Owner issue summary and navigation matrix (rows 22–40 on Executive Briefing)."""
+    light_header_fill = PatternFill("solid", fgColor=LIGHT_HEADER_COLOR)
+    table_header_fill = PatternFill("solid", fgColor=TABLE_HEADER_COLOR)
+    table_header_font = Font(color="000000", bold=True, size=12)
+    quick_nav_fill = PatternFill("solid", fgColor=STD_NAVY)
+    panel_fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
+    owner_header_fill = PatternFill("solid", fgColor=TABLE_HEADER_COLOR)
+
+    title_row = row_start
+    header_row = row_start + 1
+    data_start = row_start + 2
+    adv_row = row_start + 10
+
+    worksheet[f"G{title_row}"] = "OWNER ISSUE SUMMARY"
+    worksheet[f"G{header_row}"] = "Owner"
+    worksheet[f"H{header_row}"] = "Issue Rows"
+    worksheet[f"I{header_row}"] = "Affected URLs"
+    worksheet[f"J{header_row}"] = "Critical"
+    worksheet[f"K{header_row}"] = "Warning"
+    worksheet[f"G{title_row}"].fill = light_header_fill
+    worksheet[f"G{title_row}"].font = Font(color="000000", bold=True, size=12)
+    worksheet[f"G{title_row}"].alignment = Alignment(
+        horizontal="center", vertical="center", wrap_text=True
+    )
+    worksheet.merge_cells(f"G{title_row}:K{title_row}")
+    for ref in (f"G{header_row}", f"H{header_row}", f"I{header_row}", f"J{header_row}", f"K{header_row}"):
+        worksheet[ref].fill = owner_header_fill
+        worksheet[ref].font = Font(color="000000", bold=True, size=11)
+        worksheet[ref].alignment = Alignment(
+            horizontal="center", vertical="center", wrap_text=True
+        )
+
+    _fp_issue = _fixplan_data_column("Issue Type")
+    _fp_affected = _fixplan_data_column("Affected Count")
+    _fp_owner = _fixplan_data_column("Owner")
+    _fp_severity = _fixplan_data_column("Severity")
+    owner_rows_sorted = sorted(
+        dashboard_metrics.owner_rollup.items(),
+        key=lambda x: (
+            -x[1].affected_urls,
+            -x[1].critical,
+            -x[1].warning,
+            x[0],
+        ),
+    )
+    for idx, (owner_name, _metrics) in enumerate(
+        owner_rows_sorted[:8], start=data_start
+    ):
+        owner_lit = _safe_excel_string_literal(owner_name)
+        worksheet[f"G{idx}"] = f'=HYPERLINK("#\'FixPlan\'!A1","{owner_lit}")'
+        worksheet[f"H{idx}"] = f'=COUNTIF({_fp_owner},"{owner_lit}")'
+        worksheet[f"I{idx}"] = f'=SUMIF({_fp_owner},"{owner_lit}",{_fp_affected})'
+        worksheet[f"J{idx}"] = f'=COUNTIFS({_fp_owner},"{owner_lit}",{_fp_severity},"Critical")'
+        worksheet[f"K{idx}"] = (
+            f'=COUNTIFS({_fp_owner},"{owner_lit}",{_fp_severity},"Warning")'
+            f'+COUNTIFS({_fp_owner},"{owner_lit}",{_fp_severity},"Needs Work")'
+        )
+        for col in ("G", "H", "I", "J", "K"):
+            worksheet[f"{col}{idx}"].fill = panel_fill
+            worksheet[f"{col}{idx}"].alignment = Alignment(
+                horizontal="center", vertical="center"
+            )
+    if not owner_rows_sorted:
+        worksheet[f"G{data_start}"] = "No owner data"
+        worksheet[f"G{data_start}"].fill = panel_fill
+        worksheet[f"G{data_start}"].alignment = Alignment(
+            horizontal="center", vertical="center"
+        )
+
+    nav_col = "M"
+    open_col = "N"
+    worksheet[f"{nav_col}{title_row}"] = "Quick Navigation"
+    worksheet[f"{open_col}{title_row}"] = "Open"
+    for ref in (f"{nav_col}{title_row}", f"{open_col}{title_row}"):
+        worksheet[ref].fill = quick_nav_fill
+        worksheet[ref].font = Font(color="000000", bold=True, size=11)
+        worksheet[ref].alignment = Alignment(horizontal="center", vertical="center")
+    target_remap = {
+        "#Technical!A1": "#'Technical Diagnostics'!A1",
+        "#Indexability!A1": "#'Technical Diagnostics'!A1",
+        "#AEO!A1": "#'Content & AI Readiness'!A1",
+    }
+    for offset, (label, target) in enumerate(QUICK_LINKS, start=1):
+        row = header_row + offset - 1
+        target = target_remap.get(target, target)
+        worksheet[f"{nav_col}{row}"] = label
+        worksheet[f"{nav_col}{row}"].alignment = Alignment(
+            horizontal="left", vertical="center", wrap_text=True
+        )
+        worksheet[f"{open_col}{row}"] = f'=HYPERLINK("{target}","Open")'
+        worksheet[f"{open_col}{row}"].font = Font(
+            color=STD_BLUE, underline="single", bold=True
+        )
+        worksheet[f"{nav_col}{row}"].fill = panel_fill
+        worksheet[f"{open_col}{row}"].fill = panel_fill
+
+    hub_row = header_row + len(QUICK_LINKS)
+    worksheet[f"{nav_col}{hub_row}"] = "Content Hub"
+    worksheet[f"{open_col}{hub_row}"] = (
+        f'=HYPERLINK("#\'{CONTENT_OPTIMISATION_HUB_SHEET}\'!A1","Open")'
+    )
+    worksheet[f"{nav_col}{hub_row}"].fill = panel_fill
+    worksheet[f"{open_col}{hub_row}"].fill = panel_fill
+    worksheet[f"{nav_col}{hub_row}"].alignment = Alignment(
+        horizontal="center", vertical="center"
+    )
+    worksheet[f"{open_col}{hub_row}"].font = Font(
+        color=STD_BLUE, underline="single", bold=True
+    )
+    worksheet[f"{open_col}{hub_row}"].alignment = Alignment(
+        horizontal="center", vertical="center"
+    )
+
+    worksheet[f"{nav_col}{adv_row}"] = "Advanced Sheets"
+    worksheet[f"{nav_col}{adv_row}"].font = Font(bold=True, color=STD_NAVY)
+    worksheet.merge_cells(f"{nav_col}{adv_row}:{open_col}{adv_row}")
+    worksheet[f"{nav_col}{adv_row + 1}"] = DASHBOARD_ADVANCED_SHEETS_NOTE
+    worksheet.merge_cells(f"{nav_col}{adv_row + 1}:{open_col}{adv_row + 2}")
+    worksheet[f"{nav_col}{adv_row + 1}"].alignment = Alignment(
+        wrap_text=True, vertical="top"
+    )
+    link_row = adv_row + 3
+    for sheet_name, label in DASHBOARD_ADVANCED_SHEET_LINKS:
+        safe = excel_sheet_link_target(sheet_name)
+        worksheet[f"{nav_col}{link_row}"] = label
+        worksheet[f"{open_col}{link_row}"] = f'=HYPERLINK("#\'{safe}\'!A1","Open")'
+        for col in (nav_col, open_col):
+            worksheet[f"{col}{link_row}"].fill = panel_fill
+        worksheet[f"{nav_col}{link_row}"].alignment = Alignment(
+            horizontal="left", vertical="center"
+        )
+        worksheet[f"{open_col}{link_row}"].font = Font(
+            color=STD_BLUE, underline="single", bold=True
+        )
+        worksheet[f"{open_col}{link_row}"].alignment = Alignment(
+            horizontal="center", vertical="center"
+        )
+        link_row += 1
+
+    for col, width in {"G": 25, "H": 14, "I": 16, "J": 12, "K": 12, "M": 28, "N": 10}.items():
+        worksheet.column_dimensions[col].width = width
+
+
+__all__ = ["DASHBOARD_BRAND_A1", "apply_executive_briefing_triage", "style_dashboard"]

@@ -12,9 +12,11 @@ from hype_frog.reporter.sheets.config import (
     CONTENT_HUB_FREEZE_PANES,
     CONTENT_OPTIMISATION_HUB_SHEET,
     CONTENT_PLANNER_SHEET,
-    STD_NAVY,
-    STD_WHITE,
+    THEME_HEADER_BG,
+    THEME_HEADER_TEXT,
+    ZEBRA_BAND,
 )
+from hype_frog.reporter.sheets.style_helpers import header_suggests_numeric_alignment
 from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
 
 
@@ -91,22 +93,34 @@ def apply_mock_table_styling(
         worksheet.auto_filter.ref = ref
 
     header_fill = PatternFill(
-        start_color=STD_NAVY, end_color=STD_NAVY, fill_type="solid"
+        start_color=THEME_HEADER_BG, end_color=THEME_HEADER_BG, fill_type="solid"
     )
-    header_font = Font(color=STD_WHITE, bold=True)
+    header_font = Font(color=THEME_HEADER_TEXT, bold=True)
     for col_idx in range(min_col, max_col + 1):
         cell = worksheet.cell(row=min_row, column=col_idx)
         cell.fill = header_fill
         cell.font = header_font
+        header_label = str(cell.value or "")
+        h_align = (
+            "right"
+            if header_suggests_numeric_alignment(header_label)
+            else "left"
+        )
         cell.alignment = Alignment(
-            horizontal="center", vertical="center", wrap_text=True
+            horizontal=h_align, vertical="center", wrap_text=True
         )
 
+    # Give the header row enough height for two-line wrapped labels so longer
+    # headers are never visually clipped once widths are applied.
+    existing_height = worksheet.row_dimensions[min_row].height or 0
+    worksheet.row_dimensions[min_row].height = max(existing_height, 30.0)
+
     # Per-cell zebra banding is O(rows × cols) — skip for large sheets to avoid
-    # multi-minute formatting passes. Sheets above the threshold keep the navy
-    # header and auto-filter; row striping is a cosmetic-only omission.
+    # multi-minute formatting passes. Phase 4C replaces this with CF-based zebra.
     if (max_row - min_row) <= 500:
-        band_fill = PatternFill(start_color="F7F7F7", end_color="F7F7F7", fill_type="solid")
+        band_fill = PatternFill(
+            start_color=ZEBRA_BAND, end_color=ZEBRA_BAND, fill_type="solid"
+        )
         for row_idx in range(min_row + 1, max_row + 1):
             if row_idx % 2 == 0:
                 for col_idx in range(min_col, max_col + 1):

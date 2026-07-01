@@ -253,7 +253,7 @@ def build_issue_inventory_rows(
                 "Reference Tab": _inventory_reference_tab(rule.name),
                 "Owner": owner_for_issue(rule.name, rule.severity),
                 "Sprint": "",
-                "Status": "Open",
+                "Status": "To Do",
             }
         )
 
@@ -280,7 +280,7 @@ def build_issue_inventory_rows(
                     "Reference Tab": _inventory_reference_tab(issue),
                     "Owner": owner_for_issue(issue, issue_severity),
                     "Sprint": "",
-                    "Status": "Open",
+                    "Status": "To Do",
                 }
             )
     return rows

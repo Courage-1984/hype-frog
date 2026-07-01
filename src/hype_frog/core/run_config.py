@@ -73,6 +73,8 @@ class CliRunOverrides:
     streaming: bool = False
     regen_report: bool = False
     snapshot_id: str | None = None
+    verbose: bool = False
+    quiet: bool = False
 
 
 def _quick_test_max_psi_urls() -> int:

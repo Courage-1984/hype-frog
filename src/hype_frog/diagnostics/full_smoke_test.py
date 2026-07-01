@@ -43,6 +43,7 @@ from hype_frog.core.run_config import (
     RunConfig,
     full_smoke_run_config,
 )
+from hype_frog.orchestration.crawl_payload_loader import crawl_row_count, load_crawl_row_payloads
 from hype_frog.orchestration.crawl_runner import CrawlExecutionResult
 
 logger = get_logger(__name__)
@@ -184,7 +185,7 @@ def _validate_full_smoke_rows(
     if base.status == "FAIL":
         return QuickTestPhaseResult(name="Crawl contracts", status="FAIL", detail=base.detail)
 
-    rows = crawl_result.crawl_rows
+    rows = load_crawl_row_payloads(crawl_result)
     status_values = {
         str(row.extra.values.get("Status Code"))
         for row in rows
@@ -299,10 +300,10 @@ async def run_full_smoke_gate(options: FullSmokeOptions | None = None) -> int:
         expected_sitemap_urls=fixture.sitemap_url_count,
     )
     report.phases.append(contract_phase)
-    report.urls_crawled = len(crawl_result.crawl_rows)
+    report.urls_crawled = crawl_row_count(crawl_result)
     report.output_filename = crawl_result.output_filename
     counts: Counter[str] = Counter()
-    for row in crawl_result.crawl_rows:
+    for row in load_crawl_row_payloads(crawl_result):
         state = str(row.main.values.get("Extraction State") or "").strip().lower()
         counts[state] += 1
     report.extraction_counts = dict(counts)

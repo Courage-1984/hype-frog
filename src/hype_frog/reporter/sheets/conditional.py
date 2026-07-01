@@ -16,8 +16,12 @@ from openpyxl.formatting.rule import (
 )
 
 from hype_frog.core import get_logger
-from hype_frog.reporter.engine_formatting import apply_global_conditional_formatting
+from hype_frog.reporter.engine_formatting import (
+    apply_global_conditional_formatting,
+    apply_workflow_status_conditional_formatting,
+)
 from hype_frog.reporter.sheets.config import (
+    CONTENT_HUB_DATA_START_ROW,
     CONTENT_HUB_FREEZE_PANES,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
@@ -31,11 +35,32 @@ from hype_frog.reporter.sheets.config import (
     HEATMAP_MID,
     RAG_AMBER,
     RAG_AMBER_FONT,
+    RAG_AMBER_SOFT,
     RAG_GREEN,
     RAG_GREEN_FONT,
+    RAG_NEUTRAL,
     RAG_RED,
     RAG_RED_FONT,
+    RAG_RED_SOFT,
+    RETURN_TO_BRIEFING_LABEL,
+    SEVERITY_OBSERVATION_FILL,
+    SEVERITY_UNMEASURED_FILL,
+    STD_BLUE,
     STD_NAVY,
+    STD_WHITE,
+    THEME_HEADER_BG,
+    WORKBOOK_NAV_TARGET_SHEET,
+    ZEBRA_BAND,
+    HUB_BANNER_FILL,
+    HUB_OWNER_COPYWRITER_FILL,
+    HUB_OWNER_DEVELOPER_FILL,
+    HUB_OWNER_SERVER_FILL,
+    HUB_SCOPE_NOTE_FONT,
+    STATUS_TODO_FILL,
+    STATUS_TODO_FONT,
+    status_validation_list_formula,
+    HTTP_STATUS_ERROR_FONT,
+    HTTP_STATUS_TIMEOUT_FONT,
 )
 from hype_frog.reporter.sheets.layout import CONTENT_HUB_ROW2_HEADER_COMMENTS
 from hype_frog.reporter.sheets.links import (
@@ -44,28 +69,38 @@ from hype_frog.reporter.sheets.links import (
 )
 from hype_frog.reporter.sheets.style_helpers import header_index
 from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
+from hype_frog.reporter.sheets.workbook_layout import excel_sheet_link_target
 
 logger = get_logger(__name__)
 
 
 def apply_wrapped_row_heights(worksheet: Worksheet) -> None:
-    """Increase row heights for wrapped long-text columns.
+    """Increase row heights only for genuinely wrapped long-prose columns.
+
+    URL-like columns are single-line by contract (see ``apply_column_widths``)
+    and must not inflate row heights into tall strips.
 
     Args:
         worksheet: Worksheet to update.
     """
-    if worksheet.max_row < 2:
+    from hype_frog.reporter.sheets.sheet_rows import sheet_data_header_row
+
+    header_row = sheet_data_header_row(worksheet.title)
+    if worksheet.title == CONTENT_OPTIMISATION_HUB_SHEET:
+        header_row = 2
+    data_start = header_row + 1
+    if worksheet.max_row < data_start:
         return
 
-    headers = header_index(worksheet)
+    headers = header_index(worksheet, header_row)
     wrapped_cols: list[int] = []
     for header_name in (
-        "URL",
-        "Final URL",
-        "Canonical URL",
         "Affected URLs",
+        "Affected URLs (sample)",
         "Internal Link Statuses",
         "How to Fix in AIOSEO",
+        "Why It Matters",
+        "Recommended Fix",
     ):
         col_idx = headers.get(header_name)
         if col_idx:
@@ -73,13 +108,15 @@ def apply_wrapped_row_heights(worksheet: Worksheet) -> None:
     if not wrapped_cols:
         return
 
-    for row_idx in range(2, worksheet.max_row + 1):
+    for row_idx in range(data_start, worksheet.max_row + 1):
         max_lines = 1
         for col_idx in wrapped_cols:
             value = worksheet.cell(row=row_idx, column=col_idx).value
             if value is None:
                 continue
             text = str(value)
+            if text.startswith("="):
+                continue
             explicit_lines = text.count("\n") + 1
             estimated_wrap_lines = max(1, int(len(text) / 50) + 1)
             max_lines = max(max_lines, explicit_lines, estimated_wrap_lines)
@@ -120,7 +157,7 @@ def apply_sheet_text_wrap_columns(worksheet: Worksheet, sheet_name: str) -> None
         for _name, col_idx in headers.items():
             if _name not in _hub_wrap and "proposed" not in str(_name).lower():
                 continue
-            for row_idx in range(4, worksheet.max_row + 1):
+            for row_idx in range(CONTENT_HUB_DATA_START_ROW, worksheet.max_row + 1):
                 cell = worksheet.cell(row=row_idx, column=col_idx)
                 prev = cell.alignment
                 cell.alignment = Alignment(
@@ -161,27 +198,57 @@ def apply_sheet_text_wrap_columns(worksheet: Worksheet, sheet_name: str) -> None
             worksheet.row_dimensions[row_idx].height = min(110, 13 * max_lines)
 
 
-def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
+# Headers whose semantic colouring is already owned by a conditional-formatting
+# rule elsewhere (``apply_main_sheet_heatmaps`` / ``apply_merged_tabs_conditional_
+# formatting``) for that specific sheet. ``apply_generic_sheet_coloring`` skips
+# writing a *static* per-cell fill for these so sort/filter doesn't strand a fill
+# that no longer matches the row's actual value — the CF rule follows the row,
+# a static fill does not.
+_CF_OWNED_COLUMNS_BY_SHEET: dict[str, frozenset[str]] = {
+    "Main": frozenset({"Status Code", "Severity Badge"}),
+    "Technical Diagnostics": frozenset({"Severity Badge", "Indexability Reason"}),
+    "Content & AI Readiness": frozenset({"Thin Content Flag", "Title Missing"}),
+    "Issue Register": frozenset({"Severity", "Status"}),
+    "Template & Duplication Risks": frozenset({"Severity"}),
+    "Quick Wins": frozenset({"Severity"}),
+    "Broken Link Impact": frozenset({"Status Code"}),
+}
+
+
+def _cf_owns_static_fill(sheet_name: str, header: str) -> bool:
+    return header in _CF_OWNED_COLUMNS_BY_SHEET.get(sheet_name, frozenset())
+
+
+def apply_generic_sheet_coloring(
+    worksheet: Worksheet, sheet_name: str, *, header_row: int = 1
+) -> None:
     """Apply base per-cell semantic coloring and global conditional formatting.
 
     Args:
         worksheet: Worksheet to style.
         sheet_name: Current sheet name.
+        header_row: 1-based header row (2 when a return strip occupies row 1).
     """
-    if worksheet.max_row < 2:
+    if worksheet.max_row <= header_row:
         return
 
-    bad_fill = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
-    warn_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
-    good_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
+    bad_fill = PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid")
+    warn_fill = PatternFill(start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid")
+    good_fill = PatternFill(start_color=RAG_GREEN, end_color=RAG_GREEN, fill_type="solid")
+    todo_fill = PatternFill(
+        start_color=STATUS_TODO_FILL, end_color=STATUS_TODO_FILL, fill_type="solid"
+    )
     traffic_warn_fill = PatternFill(
-        start_color="F4B183", end_color="F4B183", fill_type="solid"
+        start_color=RAG_AMBER_SOFT, end_color=RAG_AMBER_SOFT, fill_type="solid"
     )
-    edge_fill = PatternFill(start_color="D9D2E9", end_color="D9D2E9", fill_type="solid")
+    edge_fill = PatternFill(start_color=RAG_NEUTRAL, end_color=RAG_NEUTRAL, fill_type="solid")
     zebra_fill = PatternFill(
-        start_color="F7F7F7", end_color="F7F7F7", fill_type="solid"
+        start_color=ZEBRA_BAND, end_color=ZEBRA_BAND, fill_type="solid"
     )
-    headers = [cell.value for cell in worksheet[1]]
+    headers = [
+        worksheet.cell(row=header_row, column=c).value
+        for c in range(1, worksheet.max_column + 1)
+    ]
     is_wide_sheet = worksheet.max_column >= 30
 
     def parse_bool(value: Any) -> bool:
@@ -232,7 +299,12 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
             ]
         )
 
-    for row_idx in range(2, worksheet.max_row + 1):
+    data_start = header_row + 1
+    for row_idx in range(data_start, worksheet.max_row + 1):
+        # Baseline breathing room for top-aligned cells; wrapped-prose passes that
+        # run later (``apply_wrapped_row_heights`` etc.) only raise this further.
+        if worksheet.row_dimensions[row_idx].height is None:
+            worksheet.row_dimensions[row_idx].height = 18
         row_has_issue = False
         for col_idx, header in enumerate(headers, start=1):
             cell = worksheet.cell(row=row_idx, column=col_idx)
@@ -274,24 +346,31 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
             if h in {"Status Code", "Target Status (if crawled)"} and isinstance(
                 val, int
             ):
+                skip_fill = _cf_owns_static_fill(sheet_name, h)
                 if val >= 400:
-                    cell.fill = bad_fill
+                    if not skip_fill:
+                        cell.fill = bad_fill
                     row_has_issue = True
                 elif val >= 300:
-                    cell.fill = warn_fill
+                    if not skip_fill:
+                        cell.fill = warn_fill
                 elif 200 <= val < 300:
-                    cell.fill = good_fill
+                    if not skip_fill:
+                        cell.fill = good_fill
             if isinstance(val, bool) or (
                 isinstance(val, str) and val.strip().lower() in {"true", "false"}
             ):
                 flag = parse_bool(val)
+                skip_fill = _cf_owns_static_fill(sheet_name, h)
                 if is_bad_header(h):
-                    cell.fill = bad_fill if flag else good_fill
+                    if not skip_fill:
+                        cell.fill = bad_fill if flag else good_fill
                     row_has_issue = row_has_issue or flag
                 elif is_good_header(h):
-                    cell.fill = good_fill if flag else warn_fill
+                    if not skip_fill:
+                        cell.fill = good_fill if flag else warn_fill
                     row_has_issue = row_has_issue or (not flag)
-                elif is_edge_header(h) and flag:
+                elif is_edge_header(h) and flag and not skip_fill:
                     cell.fill = edge_fill
             if h in {
                 "Broken Internal Links Count",
@@ -323,23 +402,31 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
                 elif band == "strong":
                     cell.fill = good_fill
             if h in {"Indexability Reason"} and isinstance(val, str):
+                skip_fill = _cf_owns_static_fill(sheet_name, h)
                 if "indexable" in val.lower() and "noindex" not in val.lower():
-                    cell.fill = good_fill
+                    if not skip_fill:
+                        cell.fill = good_fill
                 else:
-                    cell.fill = bad_fill
+                    if not skip_fill:
+                        cell.fill = bad_fill
                     row_has_issue = True
             if h in {"Severity", "Severity Badge"} and isinstance(val, str):
                 sev = val.strip().lower()
+                skip_fill = _cf_owns_static_fill(sheet_name, h)
                 if sev == "critical":
-                    cell.fill = bad_fill
+                    if not skip_fill:
+                        cell.fill = bad_fill
                     row_has_issue = True
                 elif sev == "warning":
-                    cell.fill = traffic_warn_fill
+                    if not skip_fill:
+                        cell.fill = traffic_warn_fill
                     row_has_issue = True
                 elif sev in {"info", "observation"}:
-                    cell.fill = edge_fill
+                    if not skip_fill:
+                        cell.fill = edge_fill
                 elif sev == "pass":
-                    cell.fill = good_fill
+                    if not skip_fill:
+                        cell.fill = good_fill
             if h in {"SEO Score", "Technical Health", "Copy Score"}:
                 try:
                     score = float(val)
@@ -360,16 +447,16 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
                         val,
                         exc,
                     )
-            if h == "Status" and isinstance(val, str):
+            if h == "Status" and isinstance(val, str) and not _cf_owns_static_fill(
+                sheet_name, h
+            ):
                 st = val.strip().lower()
-                if st in {"to do", "todo", "open"}:
-                    cell.fill = bad_fill
-                    row_has_issue = True
-                elif st == "in progress":
-                    cell.fill = traffic_warn_fill
-                    row_has_issue = True
-                elif st in {"fixed", "done", "closed"}:
+                if st in {"done", "fixed", "closed", "completed"}:
                     cell.fill = good_fill
+                elif st in {"in progress", "in review", "review"}:
+                    cell.fill = warn_fill
+                elif st in {"to do", "todo", "open"}:
+                    cell.fill = todo_fill
             if (
                 h == "Direct Edit Link"
                 and isinstance(val, str)
@@ -379,21 +466,24 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
                     val,
                     disable_external_links_and_images=DISABLE_EXTERNAL_LINKS_AND_IMAGES,
                 ):
+                    # Render as a clean blue hyperlink (no dark button fill):
+                    # apply_editor_url_column_hyperlinks re-applies a blue font
+                    # afterwards, and a dark fill left readers with dark-on-dark.
                     cell.hyperlink = val
                     cell.style = "Hyperlink"
-                    cell.fill = PatternFill(
-                        start_color="1F4E78", end_color="1F4E78", fill_type="solid"
+                    cell.font = Font(color=STD_BLUE, underline="single")
+                    cell.alignment = Alignment(
+                        horizontal="left", vertical="center"
                     )
-                    cell.font = Font(color="FFFFFF", bold=True, underline="single")
-                    cell.alignment = Alignment(horizontal="center", vertical="center")
 
         if not row_has_issue:
             worksheet.cell(row=row_idx, column=1).fill = good_fill
         if sheet_name != "Dashboard" and row_idx % 2 == 0:
-            for col_idx in range(1, worksheet.max_column + 1):
-                cell = worksheet.cell(row=row_idx, column=col_idx)
-                if cell.fill.fill_type is None:
-                    cell.fill = zebra_fill
+            if worksheet.max_row - header_row <= 500:
+                for col_idx in range(1, worksheet.max_column + 1):
+                    cell = worksheet.cell(row=row_idx, column=col_idx)
+                    if cell.fill.fill_type is None:
+                        cell.fill = zebra_fill
 
     if not DISABLE_CONDITIONAL_FORMATTING:
         # On Main, apply_main_sheet_heatmaps owns these columns; tell the global pass
@@ -403,6 +493,7 @@ def apply_generic_sheet_coloring(worksheet: Worksheet, sheet_name: str) -> None:
             worksheet,
             merged_audit_tabs=sheet_name in _MERGED_TAB_NAMES,
             skip_headers=skip_headers,
+            header_row=header_row,
         )
 
 
@@ -421,28 +512,71 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
     instruction = (
         "CONTENT HUB (DIAGNOSTIC): Edit Title, Meta, and H1-H6 in-place; health columns "
         "and On-Page score update live. | Use Elementor link for CMS edits. | "
-        "Set Status to Completed when done. | "
+        "Set Status to Done when changes are live in the CMS."
+    )
+    security_note = (
         "NOTE: If images show '#BLOCKED!', enable external content in Excel security."
     )
     if max_col > 1:
-        inner_end = get_column_letter(max_col - 1)
-        worksheet.merge_cells(f"A1:{inner_end}1")
-        worksheet["A1"] = instruction
-        back_cell = worksheet.cell(row=1, column=max_col)
-        back_cell.value = "BACK TO DASHBOARD"
-        back_cell.hyperlink = "#'Dashboard'!A1"
-        back_cell.style = "Hyperlink"
-        back_cell.font = Font(color="0563C1", underline="single", bold=True)
-        back_cell.alignment = Alignment(horizontal="center", vertical="center")
-        worksheet["A1"].hyperlink = None
+        return_end = get_column_letter(4)
+        worksheet.merge_cells(f"A1:{return_end}1")
+        return_cell = worksheet["A1"]
+        return_cell.value = RETURN_TO_BRIEFING_LABEL
+        safe_target = excel_sheet_link_target(WORKBOOK_NAV_TARGET_SHEET)
+        return_cell.hyperlink = f"#'{safe_target}'!A1"
+        return_cell.font = Font(color=STD_BLUE, italic=True, underline="single")
+        return_cell.alignment = Alignment(horizontal="left", vertical="center")
+
+        # Give the security note its own highlighted cell (roughly the last third
+        # of the remaining width) so it doesn't get lost inside a long pipe-joined
+        # instruction string — this is the note users most often miss.
+        instr_start = 5
+        note_cols = max(2, (max_col - instr_start + 1) // 3) if max_col >= instr_start + 1 else 0
+        note_start = max_col - note_cols + 1 if note_cols and max_col > instr_start else None
+        instr_end = (note_start - 1) if note_start else max_col
+
+        worksheet.merge_cells(
+            f"{get_column_letter(instr_start)}1:{get_column_letter(instr_end)}1"
+        )
+        worksheet[f"{get_column_letter(instr_start)}1"] = instruction
+        worksheet[f"{get_column_letter(instr_start)}1"].hyperlink = None
+        worksheet[f"{get_column_letter(instr_start)}1"].font = Font(
+            color=STD_NAVY, bold=True
+        )
+        worksheet[f"{get_column_letter(instr_start)}1"].alignment = Alignment(
+            horizontal="left", vertical="center"
+        )
+
+        banner_fill = PatternFill(
+            start_color=HUB_BANNER_FILL, end_color=HUB_BANNER_FILL, fill_type="solid"
+        )
+        note_fill = PatternFill(
+            start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid"
+        )
+        for col in range(1, max_col + 1):
+            worksheet.cell(row=1, column=col).fill = (
+                note_fill if (note_start and col >= note_start) else banner_fill
+            )
+
+        if note_start:
+            worksheet.merge_cells(
+                f"{get_column_letter(note_start)}1:{get_column_letter(max_col)}1"
+            )
+            note_cell = worksheet[f"{get_column_letter(note_start)}1"]
+            note_cell.value = security_note
+            note_cell.hyperlink = None
+            note_cell.font = Font(color=RAG_AMBER_FONT, bold=True)
+            note_cell.alignment = Alignment(
+                horizontal="left", vertical="center", wrap_text=True
+            )
     else:
-        worksheet["A1"] = instruction
+        worksheet["A1"] = f"{instruction} | {security_note}"
         worksheet["A1"].hyperlink = None
-    worksheet["A1"].fill = PatternFill(
-        start_color="BFE9E4", end_color="BFE9E4", fill_type="solid"
-    )
-    worksheet["A1"].font = Font(color=STD_NAVY, bold=True)
-    worksheet["A1"].alignment = Alignment(horizontal="left", vertical="center")
+        worksheet["A1"].fill = PatternFill(
+            start_color=HUB_BANNER_FILL, end_color=HUB_BANNER_FILL, fill_type="solid"
+        )
+        worksheet["A1"].font = Font(color=STD_NAVY, bold=True)
+        worksheet["A1"].alignment = Alignment(horizontal="left", vertical="center")
     worksheet.row_dimensions[1].height = 28
     set_freeze_panes_safe(worksheet, CONTENT_HUB_FREEZE_PANES)
     headers = {
@@ -450,56 +584,30 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
         for idx, cell in enumerate(worksheet[2], start=1)
         if cell.value
     }
-    # Row 1 = banner, row 2 = headers, row 3 = scope-note row (merged here so row 2
-    # stays unmerged — merging before banner insert hid header labels in Excel).
-    scope_row = 3
-    if max_col > 1 and worksheet.max_row >= scope_row:
-        scope_end = get_column_letter(max_col)
-        for merged in list(worksheet.merged_cells.ranges):
-            if merged.min_row <= 2 <= merged.max_row:
-                worksheet.unmerge_cells(str(merged))
-        worksheet.merge_cells(f"A{scope_row}:{scope_end}{scope_row}")
-        scope_cell = worksheet.cell(row=scope_row, column=1)
-        scope_cell.font = Font(italic=True, size=9, color="666666")
-        scope_cell.alignment = Alignment(horizontal="left", vertical="center")
-        worksheet.row_dimensions[scope_row].height = 18
     status_col = headers.get("Status")
-    # Actual hub data starts at row 4.
-    start_row = 4
+    start_row = CONTENT_HUB_DATA_START_ROW
     end_row = worksheet.max_row
 
     if status_col and not DISABLE_DATA_VALIDATION and end_row >= start_row:
         dv = DataValidation(
             type="list",
-            formula1='"To Do,In Progress,Review,Completed"',
+            formula1=status_validation_list_formula(),
             allow_blank=True,
         )
-        # Header guidance is served via cell comments to avoid freeze-pane clipping.
-        dv.showInputMessage = False
+        dv.showInputMessage = True
+        dv.promptTitle = "Workflow status"
+        dv.prompt = "Track workflow state: To Do → In Progress → In Review → Done"
         worksheet.add_data_validation(dv)
         dv.add(
             f"{get_column_letter(status_col)}{start_row}:{get_column_letter(status_col)}{end_row}"
         )
     if status_col and end_row >= start_row and not DISABLE_CONDITIONAL_FORMATTING:
-        status_letter = get_column_letter(status_col)
-        for label, bg_hex, font_color in (
-            ("completed", "1F7A1F", "FFFFFF"),
-            ("in progress", "FFC000", "000000"),
-            ("review", "FFC000", "000000"),
-            ("to do", "D9D9D9", "000000"),
-            ("needs copy", "D9D9D9", "000000"),
-        ):
-            worksheet.conditional_formatting.add(
-                f"{status_letter}{start_row}:{status_letter}{end_row}",
-                FormulaRule(
-                    formula=[f'LOWER({status_letter}{start_row})="{label}"'],
-                    stopIfTrue=True,
-                    fill=PatternFill(
-                        start_color=bg_hex, end_color=bg_hex, fill_type="solid"
-                    ),
-                    font=Font(color=font_color, bold=True),
-                ),
-            )
+        apply_workflow_status_conditional_formatting(
+            worksheet,
+            status_col,
+            first_row=start_row,
+            last_row=end_row,
+        )
     if end_row >= start_row and not DISABLE_CONDITIONAL_FORMATTING:
         for score_header in (
             "On-Page Optimization Score",
@@ -531,9 +639,9 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
         ol = get_column_letter(owner_col)
         o_rng = f"{ol}{start_row}:{ol}{end_row}"
         for needle, bg_hex, font_color in (
-            ("copy writer", "92D050", "FFFFFF"),
-            ("developer", "5B9BD5", "FFFFFF"),
-            ("server", "ED7D31", "FFFFFF"),
+            ("copy writer", HUB_OWNER_COPYWRITER_FILL, STD_WHITE),
+            ("developer", HUB_OWNER_DEVELOPER_FILL, STD_WHITE),
+            ("server", HUB_OWNER_SERVER_FILL, STD_WHITE),
         ):
             worksheet.conditional_formatting.add(
                 o_rng,
@@ -603,14 +711,10 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
         "H6 Health",
     )
     if not DISABLE_CONDITIONAL_FORMATTING and end_row >= start_row:
-        green_h = PatternFill(
-            start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"
-        )
-        red_h = PatternFill(
-            start_color="F4CCCC", end_color="F4CCCC", fill_type="solid"
-        )
+        green_h = PatternFill(start_color=RAG_GREEN, end_color=RAG_GREEN, fill_type="solid")
+        red_h = PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid")
         orange_h = PatternFill(
-            start_color="FCE4D6", end_color="FCE4D6", fill_type="solid"
+            start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid"
         )
         for hname in health_headers:
             cix = headers.get(hname)
@@ -627,7 +731,7 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
                     ],
                     stopIfTrue=True,
                     fill=green_h,
-                    font=Font(color="006100", bold=False),
+                    font=Font(color=RAG_GREEN_FONT, bold=False),
                 ),
             )
             worksheet.conditional_formatting.add(
@@ -638,7 +742,7 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
                     ],
                     stopIfTrue=True,
                     fill=red_h,
-                    font=Font(color="9C0006", bold=True),
+                    font=Font(color=RAG_RED_FONT, bold=True),
                 ),
             )
             worksheet.conditional_formatting.add(
@@ -650,7 +754,7 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
                     ],
                     stopIfTrue=True,
                     fill=orange_h,
-                    font=Font(color="833C0C", bold=True),
+                    font=Font(color=RAG_AMBER_FONT, bold=True),
                 ),
             )
 
@@ -669,8 +773,8 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
                     f'ISNUMBER(SEARCH("Missing",{health_letter}{start_row})))'
                 ],
                 stopIfTrue=True,
-                fill=PatternFill("solid", fgColor="FCE4D6"),
-                font=Font(color="833C0C", bold=True),
+                fill=PatternFill("solid", fgColor=RAG_AMBER),
+                font=Font(color=RAG_AMBER_FONT, bold=True),
             ),
         )
 
@@ -704,7 +808,7 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
 
     url_col_idx = headers.get("URL")
     if url_col_idx and end_row >= start_row:
-        link_font = Font(color="0563C1", underline="single")
+        link_font = Font(color=STD_BLUE, underline="single")
         for rr in range(start_row, end_row + 1):
             ucell = worksheet.cell(row=rr, column=url_col_idx)
             uv = ucell.value
@@ -712,12 +816,12 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
                 ucell.font = link_font
     open_in_main_col_idx = headers.get("Open in Main")
     if open_in_main_col_idx and end_row >= start_row:
-        link_font = Font(color="0563C1", underline="single")
+        link_font = Font(color=STD_BLUE, underline="single")
         for rr in range(start_row, end_row + 1):
             worksheet.cell(row=rr, column=open_in_main_col_idx).font = link_font
     og_image_url_col_idx = headers.get("Current OG-Image URL")
     if og_image_url_col_idx and end_row >= start_row:
-        link_font = Font(color="0563C1", underline="single")
+        link_font = Font(color=STD_BLUE, underline="single")
         for rr in range(start_row, end_row + 1):
             worksheet.cell(row=rr, column=og_image_url_col_idx).font = link_font
 
@@ -786,8 +890,8 @@ def apply_psi_conditional_rules(worksheet: Worksheet) -> None:
                 FormulaRule(
                     formula=[f"{col}{start_row}>=90"],
                     stopIfTrue=True,
-                    fill=PatternFill("solid", fgColor="C6EFCE"),
-                    font=Font(color="006100"),
+                    fill=PatternFill("solid", fgColor=RAG_GREEN),
+                    font=Font(color=RAG_GREEN_FONT),
                 ),
             )
             worksheet.conditional_formatting.add(
@@ -795,8 +899,8 @@ def apply_psi_conditional_rules(worksheet: Worksheet) -> None:
                 FormulaRule(
                     formula=[f"AND({col}{start_row}>=50,{col}{start_row}<90)"],
                     stopIfTrue=True,
-                    fill=PatternFill("solid", fgColor="FFEB9C"),
-                    font=Font(color="9C6500"),
+                    fill=PatternFill("solid", fgColor=RAG_AMBER),
+                    font=Font(color=RAG_AMBER_FONT),
                 ),
             )
             worksheet.conditional_formatting.add(
@@ -804,8 +908,8 @@ def apply_psi_conditional_rules(worksheet: Worksheet) -> None:
                 FormulaRule(
                     formula=[f"{col}{start_row}<50"],
                     stopIfTrue=True,
-                    fill=PatternFill("solid", fgColor="FFC7CE"),
-                    font=Font(color="9C0006"),
+                    fill=PatternFill("solid", fgColor=RAG_RED),
+                    font=Font(color=RAG_RED_FONT),
                 ),
             )
     if mobile_lcp_col and not DISABLE_CONDITIONAL_FORMATTING:
@@ -816,7 +920,7 @@ def apply_psi_conditional_rules(worksheet: Worksheet) -> None:
             FormulaRule(
                 formula=[f"{col}{start_row}<=2.5"],
                 stopIfTrue=True,
-                fill=PatternFill("solid", fgColor="C6EFCE"),
+                fill=PatternFill("solid", fgColor=RAG_GREEN),
             ),
         )
         worksheet.conditional_formatting.add(
@@ -824,7 +928,7 @@ def apply_psi_conditional_rules(worksheet: Worksheet) -> None:
             FormulaRule(
                 formula=[f"{col}{start_row}>4.0"],
                 stopIfTrue=True,
-                fill=PatternFill("solid", fgColor="FFC7CE"),
+                fill=PatternFill("solid", fgColor=RAG_RED),
             ),
         )
 
@@ -904,13 +1008,13 @@ def _add_color_scale_higher_better(
         ColorScaleRule(
             start_type="num",
             start_value=0,
-            start_color="F8696B",
+            start_color=HEATMAP_LOW,
             mid_type="num",
             mid_value=50,
-            mid_color="FFEB84",
+            mid_color=HEATMAP_MID,
             end_type="num",
             end_value=100,
-            end_color="63BE7B",
+            end_color=HEATMAP_HIGH,
         ),
     )
 
@@ -920,12 +1024,12 @@ def _add_color_scale_lower_better(worksheet: Worksheet, rng: str) -> None:
         rng,
         ColorScaleRule(
             start_type="min",
-            start_color="63BE7B",
+            start_color=HEATMAP_HIGH,
             mid_type="percentile",
             mid_value=50,
-            mid_color="FFEB84",
+            mid_color=HEATMAP_MID,
             end_type="max",
-            end_color="F8696B",
+            end_color=HEATMAP_LOW,
         ),
     )
 
@@ -936,7 +1040,7 @@ def _add_data_bar_blue(worksheet: Worksheet, rng: str) -> None:
         DataBarRule(
             start_type="min",
             end_type="max",
-            color="638EC6",
+            color=DATA_BAR_BLUE,
             showValue=True,
         ),
     )
@@ -950,8 +1054,8 @@ def _add_text_semantic_highlights(
     end_row: int,
 ) -> None:
     """Red/pink for Critical / Non-Pass / Error; yellow/orange for Warning / Needs Work."""
-    critical_fill = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
-    warn_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    critical_fill = PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid")
+    warn_fill = PatternFill(start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid")
     for name in header_names:
         col_idx = headers.get(name)
         if not col_idx:
@@ -1056,8 +1160,8 @@ def apply_merged_tabs_conditional_formatting(
                 CellIsRule(
                     operator="greaterThan",
                     formula=["60"],
-                    fill=PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
-                    font=Font(bold=True, color="9C0006"),
+                    fill=PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"),
+                    font=Font(bold=True, color=RAG_RED_FONT),
                 ),
             )
             worksheet.conditional_formatting.add(
@@ -1065,7 +1169,7 @@ def apply_merged_tabs_conditional_formatting(
                 CellIsRule(
                     operator="between",
                     formula=["31", "60"],
-                    fill=PatternFill(start_color="FFEB84", end_color="FFEB84", fill_type="solid"),
+                    fill=PatternFill(start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid"),
                 ),
             )
         status_col = headers.get("Status")
@@ -1097,7 +1201,7 @@ def apply_merged_tabs_conditional_formatting(
                 CellIsRule(
                     operator="lessThanOrEqual",
                     formula=["2"],
-                    fill=PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
+                    fill=PatternFill(start_color=RAG_GREEN, end_color=RAG_GREEN, fill_type="solid"),
                 ),
             )
             worksheet.conditional_formatting.add(
@@ -1105,7 +1209,7 @@ def apply_merged_tabs_conditional_formatting(
                 CellIsRule(
                     operator="between",
                     formula=["2.01", "4"],
-                    fill=PatternFill(start_color="FFEB84", end_color="FFEB84", fill_type="solid"),
+                    fill=PatternFill(start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid"),
                 ),
             )
         _add_text_semantic_highlights(
@@ -1125,25 +1229,27 @@ def apply_merged_tabs_conditional_formatting(
                 CellIsRule(
                     operator="greaterThanOrEqual",
                     formula=["400"],
-                    fill=PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
-                    font=Font(bold=True, color="9C0006"),
+                    fill=PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"),
+                    font=Font(bold=True, color=RAG_RED_FONT),
                 ),
             )
 
 
-def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
+def apply_main_sheet_heatmaps(
+    worksheet: Worksheet, *, header_row: int = 1
+) -> None:
     """Apply traffic-light and data-bar formatting to Main sheet key columns."""
     if DISABLE_CONDITIONAL_FORMATTING:
         return
-    if worksheet.max_row <= 1:
+    if worksheet.max_row <= header_row:
         return
 
-    start_row = 2
+    start_row = header_row + 1
     end_row = worksheet.max_row
     if end_row < start_row:
         return
 
-    headers = header_index(worksheet)
+    headers = header_index(worksheet, header_row)
 
     def col_range(col_name: str) -> str | None:
         col_idx = headers.get(col_name)
@@ -1155,13 +1261,13 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
     red_green_scale = ColorScaleRule(
         start_type="num",
         start_value=0,
-        start_color="FFC7CE",
+        start_color=HEATMAP_LOW,
         mid_type="num",
         mid_value=50,
-        mid_color="FFCC99",
+        mid_color=HEATMAP_MID,
         end_type="num",
         end_value=100,
-        end_color="C6EFCE",
+        end_color=HEATMAP_HIGH,
     )
 
     for col_name in (
@@ -1185,13 +1291,13 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
             ColorScaleRule(
                 start_type="num",
                 start_value=0,
-                start_color="C6EFCE",
+                start_color=HEATMAP_HIGH,
                 mid_type="num",
                 mid_value=2.5,
-                mid_color="FFCC99",
+                mid_color=HEATMAP_MID,
                 end_type="num",
                 end_value=10.0,
-                end_color="FFC7CE",
+                end_color=HEATMAP_LOW,
             ),
         )
 
@@ -1202,8 +1308,8 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
             CellIsRule(
                 operator="greaterThanOrEqual",
                 formula=["400"],
-                fill=PatternFill(start_color="FFC1C1", end_color="FFC1C1", fill_type="solid"),
-                font=Font(bold=True, color="991B1B"),
+                fill=PatternFill(start_color=RAG_RED_SOFT, end_color=RAG_RED_SOFT, fill_type="solid"),
+                font=Font(bold=True, color=HTTP_STATUS_ERROR_FONT),
             ),
         )
         worksheet.conditional_formatting.add(
@@ -1211,8 +1317,8 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
             CellIsRule(
                 operator="equal",
                 formula=['"Timeout"'],
-                fill=PatternFill(start_color="FFCC99", end_color="FFCC99", fill_type="solid"),
-                font=Font(bold=True, color="924012"),
+                fill=PatternFill(start_color=RAG_AMBER_SOFT, end_color=RAG_AMBER_SOFT, fill_type="solid"),
+                font=Font(bold=True, color=HTTP_STATUS_TIMEOUT_FONT),
             ),
         )
 
@@ -1236,13 +1342,13 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
             ColorScaleRule(
                 start_type="num",
                 start_value=0,
-                start_color="FFC7CE",
+                start_color=HEATMAP_LOW,
                 mid_type="num",
                 mid_value=5,
-                mid_color="FFCC99",
+                mid_color=HEATMAP_MID,
                 end_type="num",
                 end_value=10,
-                end_color="C6EFCE",
+                end_color=HEATMAP_HIGH,
             ),
         )
 
@@ -1253,7 +1359,7 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
             CellIsRule(
                 operator="greaterThan",
                 formula=["0"],
-                fill=PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+                fill=PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"),
             ),
         )
         worksheet.conditional_formatting.add(
@@ -1261,7 +1367,7 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
             CellIsRule(
                 operator="equal",
                 formula=["0"],
-                fill=PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
+                fill=PatternFill(start_color=RAG_GREEN, end_color=RAG_GREEN, fill_type="solid"),
             ),
         )
 
@@ -1272,7 +1378,7 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
             CellIsRule(
                 operator="equal",
                 formula=["-1"],
-                fill=PatternFill(start_color="FFCC99", end_color="FFCC99", fill_type="solid"),
+                fill=PatternFill(start_color=RAG_AMBER_SOFT, end_color=RAG_AMBER_SOFT, fill_type="solid"),
                 font=Font(italic=True),
             ),
         )
@@ -1284,17 +1390,17 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
             CellIsRule(
                 operator="greaterThan",
                 formula=["1024"],
-                fill=PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+                fill=PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"),
             ),
         )
 
     badge_rng = col_range("Severity Badge")
     if badge_rng:
         for val, colour in (
-            ("Critical", "FFC1C1"),
-            ("Warning", "FFCC99"),
-            ("Observation", "DBEAFE"),
-            ("Unmeasured", "E5E7EB"),
+            ("Critical", RAG_RED_SOFT),
+            ("Warning", RAG_AMBER_SOFT),
+            ("Observation", SEVERITY_OBSERVATION_FILL),
+            ("Unmeasured", SEVERITY_UNMEASURED_FILL),
         ):
             worksheet.conditional_formatting.add(
                 badge_rng,
@@ -1313,7 +1419,7 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
                 CellIsRule(
                     operator="equal",
                     formula=["TRUE"],
-                    fill=PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+                    fill=PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"),
                 ),
             )
 
@@ -1324,7 +1430,7 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
             CellIsRule(
                 operator="greaterThan",
                 formula=["730"],
-                fill=PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
+                fill=PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"),
             ),
         )
         worksheet.conditional_formatting.add(
@@ -1332,7 +1438,7 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
             CellIsRule(
                 operator="greaterThan",
                 formula=["365"],
-                fill=PatternFill(start_color="FFCC99", end_color="FFCC99", fill_type="solid"),
+                fill=PatternFill(start_color=RAG_AMBER_SOFT, end_color=RAG_AMBER_SOFT, fill_type="solid"),
             ),
         )
 
@@ -1346,9 +1452,9 @@ def apply_main_sheet_heatmaps(worksheet: Worksheet) -> None:
                 operator="greaterThan",
                 formula=["160"],
                 fill=PatternFill(
-                    start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"
+                    start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"
                 ),
-                font=Font(color="9C0006"),
+                font=Font(color=RAG_RED_FONT),
             ),
         )
 
@@ -1379,7 +1485,7 @@ def apply_dashboard_metric_conditional_rules(worksheet: Worksheet) -> None:
         CellIsRule(
             operator="lessThan",
             formula=["-10"],
-            fill=PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid"),
+            fill=PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"),
         ),
     )
     worksheet.conditional_formatting.add(
@@ -1519,7 +1625,7 @@ def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
     # ── Page link column: hyperlinks + shrink-to-fit ────────────────────────
     page_link_col = headers.get("Page link")
     if page_link_col:
-        link_font = Font(color="0563C1", underline="single")
+        link_font = Font(color=STD_BLUE, underline="single")
         for row_idx in range(2, last_row + 1):
             cell = worksheet.cell(row=row_idx, column=page_link_col)
             url_val = str(cell.value or "").strip()

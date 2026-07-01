@@ -20,7 +20,8 @@ Requires-Dist: simhash==2.1.2
 Requires-Dist: python-dateutil==2.9.0.post0
 Requires-Dist: pyyaml==6.0.2
 Requires-Dist: reportlab==4.4.2
-Requires-Dist: rich>=13.7
+Requires-Dist: rich==15.0.0
+Requires-Dist: structlog==26.1.0
 Provides-Extra: semantic
 Requires-Dist: spacy>=3.8.14; extra == "semantic"
 Requires-Dist: en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl ; extra == "semantic"
@@ -62,7 +63,7 @@ Concurrent **Python 3.12** pipeline for large-scale URL crawling, structured ext
 | `src/hype_frog/analysis/` | Post-crawl analysis | Canonical/hreflang chains, link equity, snippets, topical authority, similarity, competitors, delta. |
 | `src/hype_frog/pipeline/` | Enrichment engine | Graph intelligence, scoring glue, image/OG probes, sanitisation, assemble/merge. |
 | `src/hype_frog/rules/` | Issue registry | `IssueRule` dataclass, 99 summary rules, playbook metadata. |
-| `src/hype_frog/reporter/` | Reporting engine | Excel sheets with separate I/O, formatting, row-shaping, TOC/navigation, and guardrails modules. |
+| `src/hype_frog/reporter/` | Reporting engine | Excel I/O, formatting, TOC/navigation, guardrails, HTML/PDF executive reports, Catppuccin Mocha theme (`mocha_theme.py`). |
 | `src/hype_frog/checkpoint/` | Durable state | Stores resumable crawl progress for long-running jobs. |
 
 Runtime execution follows: **`orchestration/` -> `crawler/` + `extractors/` -> `analysis/` + `pipeline/` -> `reporter/`**.
@@ -120,32 +121,62 @@ playwright install chromium
 - **PSI:** set `PSI_API_KEY` in `.env` when you want PageSpeed Insights lab data. The key must belong to a Google Cloud project with the PageSpeed Insights API enabled.
 - **GSC:** the app uses the **OAuth desktop** flow via `secrets/client_secrets.json` and `secrets/token.json` (see `.env.example`). Run `uv run hype-frog --gsc-auth` once per machine to create or refresh `secrets/token.json`. Legacy fallbacks: the same filenames under `src/hype_frog/` or the repo root. The signed-in user needs Search Console access to a property that matches the crawl target; the code requests read-only scope `https://www.googleapis.com/auth/webmasters.readonly`.
 - **Optional flags:** `--check-og-images`, `--check-images`, `--gsc-url-inspection`, `--gsc-url-inspection-full`, `--competitors`, `--benchmarks`, `--previous-run`, `--streaming`, `--max-memory-mb`, `--export-pdf`, `--psi-delay` (see `uv run hype-frog --help`).
-- **Environment:** `HF_COMPETITORS`, `HF_STREAMING`, `HF_MAX_MEMORY_MB`, `GSC_URL_INSPECTION`, `CHECK_CONTENT_IMAGES`, `CHECK_OG_IMAGES`, `HF_EXPORT_PDF`, `HF_EXPORT_HTML`, `HF_OUTPUT_FILENAME`, `HF_MAX_DEPTH`, `HF_FULL_SMOKE_URL_COUNT`.
-- **HTML/PDF report branding (optional):** `HF_REPORT_PREPARED_BY`, `HF_REPORT_CLIENT_NAME`, `HF_REPORT_LOGO_PATH`, `HF_REPORT_BRAND_COLOUR`, `HF_REPORT_ACCENT_COLOUR` (HTML); `HF_PDF_CLIENT_NAME`, `HF_PDF_PREPARED_BY`, `HF_PDF_LOGO_PATH`, `HF_PDF_BRAND_COLOUR` (PDF). See `.env.example`.
+- **Environment:** `HF_COMPETITORS`, `HF_STREAMING`, `HF_MAX_MEMORY_MB`, `GSC_URL_INSPECTION`, `CHECK_CONTENT_IMAGES`, `CHECK_OG_IMAGES`, `HF_EXPORT_PDF`, `HF_EXPORT_HTML`, `HF_OUTPUT_FILENAME`, `HF_MAX_DEPTH`, `HF_FULL_SMOKE_URL_COUNT`, `HF_REPORT_THEME`, `HF_EXCEL_THEME`.
+- **HTML/PDF report branding (optional):** `HF_REPORT_PREPARED_BY`, `HF_REPORT_CLIENT_NAME`, `HF_REPORT_LOGO_PATH`, `HF_REPORT_BRAND_COLOUR`, `HF_REPORT_ACCENT_COLOUR`, `HF_REPORT_THEME` (HTML); `HF_PDF_CLIENT_NAME`, `HF_PDF_PREPARED_BY`, `HF_PDF_LOGO_PATH`, `HF_PDF_BRAND_COLOUR` (PDF). **Catppuccin Mocha:** `HF_REPORT_THEME=mocha` (dark HTML + JetBrains Mono) and/or `HF_EXCEL_THEME=mocha` (workbook RAG palette). See [`docs/excel_reporting_standards.md`](docs/excel_reporting_standards.md) and `.env.example`.
 - Interactive runs prompt for crawl profile, suite mode, checkpoint interval, and optional previous workbook path.
 
 ## Running
+
+**CLI source of truth:** structured subcommands below. Legacy flags (`--quick-test`, `--validate`, `--gsc-auth`, …) remain supported for scripts and CI.
+
+| Command | Purpose |
+|---------|---------|
+| `uv run hype-frog crawl` | Interactive crawl (prompts for URL, limits, profile) |
+| `uv run hype-frog crawl --url https://example.com/` | Non-interactive crawl with defaults |
+| `uv run hype-frog validate` | Check GSC/PSI/LLM credentials (no crawl) |
+| `uv run hype-frog auth gsc` | OAuth desktop flow for Search Console |
+| `uv run hype-frog setup playwright` | Install Chromium for accurate crawl mode |
+| `uv run hype-frog test quick` | Comprehensive smoke gate (preflight + pytest + crawl + audit) |
+| `uv run hype-frog test full-smoke` | Pre-export scale simulation |
+
+Full flag reference: [`commands.md`](commands.md).
 
 From the repository root, install the package into the uv environment (once per clone or after layout changes), then start the CLI:
 
 ```bash
 uv sync
-uv run hype-frog
-# equivalent:
+uv run hype-frog crawl
+# equivalent entrypoints:
+uv run hype-frog          # legacy interactive (same as crawl)
 uv run python -m hype_frog.main
 ```
 
-Follow CLI prompts for target URL or sitemap, limits, and profiles.
+Follow CLI prompts for target URL or sitemap, limits, and profiles when running without `--url`.
+
+### Distribution bundle (`dist/`)
+
+To ship a self-contained copy for internal teams (requires **uv** and **Python 3.12+** on the target machine — no PyInstaller executable):
+
+```bash
+uv run python scripts/build.py
+cd dist/hype-frog-0.3.0
+uv sync
+uv run hype-frog --help
+```
+
+The bundle includes `src/`, `docs/`, `scripts/`, `README.md`, `commands.md`, `pyproject.toml`, `uv.lock`, and `.env.example`.
 
 ### Validate secrets and APIs (no crawl)
 
 Check GSC OAuth files, PSI API access, and optional LLM keys before a full run:
 
 ```bash
+uv run hype-frog validate
+# legacy equivalent:
 uv run hype-frog --validate
 
 # Also confirm a crawl target matches a visible Search Console property
-uv run hype-frog --validate --validate-url "https://example.com/"
+uv run hype-frog validate --validate-url "https://example.com/"
 ```
 
 Exit code `0` means all required checks passed; `1` means at least one failed.
@@ -216,7 +247,32 @@ Output: `reports/full_smoke_test/`. Tune synthetic sitemap volume: `HF_FULL_SMOK
 
 If Playwright is not installed, accurate mode falls back to fast HTTP with a warning; the run still completes. Output lands under `reports/latest/` unless `HF_OUTPUT_FILENAME` overrides it.
 
+### Report-only regeneration (`--regen-report`)
+
+After a normal crawl, post-enrichment row data is saved to `.cache/crawl_snapshots.sqlite`. Re-run export only (no crawl) when iterating on reporter or workbook layout:
+
+```bash
+uv run hype-frog --regen-report
+uv run hype-frog --regen-report --snapshot-id <uuid>
+```
+
+Replay uses the same `export_flow` as a live run and writes a new workbook under `reports/latest/` with a `_regen_` suffix. See [`commands.md`](commands.md) for env vars (`HF_REGEN_REPORT`, `HF_SNAPSHOT_RETENTION_PER_DOMAIN`) and the manual regression workflow.
+
 **`ModuleNotFoundError: No module named 'hype_frog'`** means the editable project is not installed in the active venv. Run **`uv sync`** from the repo root (not only `uv venv` without syncing the project). Then retry `uv run …`.
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|----------------|-----|
+| `PSI_API_KEY` missing / PSI columns empty | Key not set or API disabled | Add key to `.env`; enable PageSpeed Insights API in Google Cloud |
+| GSC columns empty or auth errors | Missing OAuth files or wrong property | Run `uv run hype-frog auth gsc`; confirm the signed-in user has access to the crawl domain |
+| `403` / `429` from PSI | Quota or rate limiting | Increase `--psi-delay`; reduce URL cap; retry later |
+| Playwright / accurate mode unavailable | Browser binaries not installed | `uv sync --extra render` then `uv run hype-frog setup playwright` |
+| Workbook won't open / TOC mismatch | Client edited protected view state | Re-export; see [`docs/excel_reporting_standards.md`](docs/excel_reporting_standards.md) |
+| High memory on large crawls | Full in-memory row retention | Use `--streaming` or `HF_STREAMING=1`; lower URL cap or `--max-memory-mb` |
+| Permission denied writing reports | Output path not writable | Set `HF_OUTPUT_FILENAME` to a writable directory; ensure parent folders exist |
+
+For credential validation without a crawl: `uv run hype-frog validate`.
 
 ## Tests
 
@@ -231,7 +287,7 @@ Re-run the suite after substantive changes to crawl, pipeline, or reporting code
 Canonical technical manuals (keep in sync with code changes):
 
 - [`docs/system_architecture.md`](docs/system_architecture.md) — layers, staged pipeline, **BFS spider**, fetch modes, **AEO**, **search intent**, **ROI**, executive dashboard, workbook integrity pointers.
-- [`docs/data_contracts.md`](docs/data_contracts.md) — `main` / `extra` envelopes, Pydantic contracts, additive keys, checkpoints.
+- [`docs/data_contracts.md`](docs/data_contracts.md) — `main` / `extra` envelopes, Pydantic contracts, additive keys, checkpoints, **crawl replay snapshots**.
 - [`docs/excel_reporting_standards.md`](docs/excel_reporting_standards.md) — reporter module split, sanitization, ghost/nuclear view state, TOC, Content Hub literals.
 
 ## Governance

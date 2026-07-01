@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
 from hype_frog.core.numeric_utils import safe_int
+from hype_frog.core.path_utils import path_exists
 
 SNAPSHOT_VERSION = 1
 BASELINE_DELTA_NOTE = "No previous run found — this is a baseline report."
@@ -110,7 +110,7 @@ def companion_summary_path(path: str) -> str:
     if path.lower().endswith(".json"):
         return path
     candidate = delta_summary_path_for_workbook(path)
-    return candidate if os.path.exists(candidate) else ""
+    return candidate if path_exists(candidate) else ""
 
 @dataclass
 class IssueRecord:

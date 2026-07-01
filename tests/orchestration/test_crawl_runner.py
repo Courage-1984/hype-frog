@@ -46,6 +46,7 @@ from hype_frog.orchestration.crawl_runner import (
     cms_action_exclusion_keys,
     execute_crawl,
 )
+from hype_frog.orchestration.crawl_payload_loader import load_crawl_row_payloads
 from hype_frog.orchestration.run_setup import RunSetup
 
 
@@ -143,16 +144,29 @@ def _install_runner_mocks(
 
     def _upsert_results(batch: list[Any]) -> None:
         stored_results.extend(batch)
+        cache_stub.row_count.return_value = len(stored_results)
 
     def _iter_results() -> Any:
         for item in stored_results:
             yield item
 
+    def _iter_results_chunked(chunk_size: int = 500) -> Any:
+        for index in range(0, len(stored_results), chunk_size):
+            yield stored_results[index : index + chunk_size]
+
     cache_stub = MagicMock(name="AuditCache_stub")
     cache_stub.upsert_results = _upsert_results
     cache_stub.iter_results = _iter_results
+    cache_stub.iter_results_chunked = _iter_results_chunked
+    cache_stub.row_count = MagicMock(return_value=0)
     cache_stub.all_results = MagicMock(return_value=list(stored_results))
     cache_stub.close = MagicMock()
+
+    def _refresh_row_count() -> int:
+        cache_stub.row_count.return_value = len(stored_results)
+        return len(stored_results)
+
+    cache_stub._refresh_row_count = _refresh_row_count
     monkeypatch.setattr(
         "hype_frog.orchestration.crawl_runner.AuditCache",
         lambda *_a, **_k: cache_stub,
@@ -391,8 +405,9 @@ async def test_execute_crawl_bfs_visits_depth_1_before_depth_2(
     assert result.crawl_duration_seconds >= 0.0
 
     # Rule #3: every emitted payload carries an explicit Extraction State.
-    assert len(result.crawl_rows) == 7
-    for row in result.crawl_rows:
+    crawl_rows = load_crawl_row_payloads(result)
+    assert len(crawl_rows) == 7
+    for row in crawl_rows:
         assert row.main.values["Extraction State"] == "complete"
         assert row.extra.values["Extraction State"] in {
             "complete",
@@ -590,7 +605,10 @@ async def test_execute_crawl_sets_discovered_on_url_for_non_sitemap_pages(
 
     setup = _build_run_setup(target=sitemap_url)
     result = await execute_crawl(setup)
-    by_url = {str(row.main.values.get("URL")): row for row in result.crawl_rows}
+    by_url = {
+        str(row.main.values.get("URL")): row
+        for row in load_crawl_row_payloads(result)
+    }
 
     assert by_url[s1].main.values.get("Discovered On URL") == ""
     assert by_url[child].main.values.get("Discovered On URL") == s1

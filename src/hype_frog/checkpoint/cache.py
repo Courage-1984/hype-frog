@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
+from pathlib import Path
 from typing import Iterator
 
 from hype_frog.core.models import CrawlResult
+from hype_frog.core.path_utils import path_exists
 
 
 class AuditCache:
@@ -54,6 +55,10 @@ class AuditCache:
         )
         self.conn.commit()
 
+    def row_count(self) -> int:
+        cur = self.conn.execute("SELECT COUNT(*) FROM crawl_results")
+        return int(cur.fetchone()[0])
+
     def iter_results(self) -> Iterator[CrawlResult]:
         cur = self.conn.execute(
             "SELECT main_json, extra_json FROM crawl_results ORDER BY id ASC"
@@ -84,5 +89,5 @@ class AuditCache:
         try:
             self.conn.close()
         finally:
-            if cleanup_file and os.path.exists(self.db_path):
-                os.remove(self.db_path)
+            if cleanup_file and path_exists(self.db_path):
+                Path(self.db_path).unlink()

@@ -92,8 +92,12 @@ def write_executive_reports(
             accent_colour=shared_accent_colour,
             theme=report_theme,
         )
-    except Exception as exc:
-        logger.warning("Could not build executive report context (non-fatal): %s", exc)
+    except Exception:
+        logger.exception(
+            "executive_report_context_build_failed",
+            phase="export",
+            output_filename=output_filename,
+        )
 
     if export_pdf and report_ctx is not None:
         try:
@@ -107,8 +111,12 @@ def write_executive_reports(
                 run_date="",
                 logo_path=resolved_logo,
             )
-        except Exception as exc:
-            logger.warning("Could not export executive summary PDF: %s", exc)
+        except Exception:
+            logger.exception(
+                "executive_summary_pdf_export_failed",
+                phase="export",
+                output_filename=output_filename,
+            )
 
     if export_html and report_ctx is not None:
         try:
@@ -116,5 +124,9 @@ def write_executive_reports(
 
             _html_path = Path(output_filename).with_suffix(".html")
             _write_html(report_ctx, _html_path)
-        except Exception as exc:
-            logger.warning("HTML report generation failed (non-fatal): %s", exc)
+        except Exception:
+            logger.exception(
+                "html_report_generation_failed",
+                phase="export",
+                output_filename=output_filename,
+            )

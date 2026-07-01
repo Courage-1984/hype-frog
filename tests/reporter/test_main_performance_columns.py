@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
 
+from hype_frog.reporter.sheets.config import MAIN_TRIAGE_COLUMN_COUNT
 from hype_frog.reporter.sheets.layout import (
     MAIN_COLUMN_GROUP_DEFINITIONS,
     PERFORMANCE_CWV_GROUP_COLUMNS,
+    apply_main_triage_column_layout,
     reorder_columns,
 )
 
@@ -52,3 +55,36 @@ def test_reorder_columns_places_performance_block_after_sprint() -> None:
     assert reordered.index("CWV LCP (s)") < reordered.index("CrUX Level")
     assert reordered.index("CrUX Level") < reordered.index("Lab TBT (Mobile) (ms)")
     assert reordered.index("Lab TBT (Mobile) (ms)") < reordered.index("GSC Clicks")
+
+
+def test_main_triage_layout_collapses_columns_after_action_needed() -> None:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Main"
+    headers = [
+        "Health Icon",
+        "URL",
+        "Status Code",
+        "Indexability",
+        "Load Time (s)",
+        "Title",
+        "Meta Description",
+        "Word Count (Body)",
+        "SEO Health Score",
+        "Severity Badge",
+        "Action Needed",
+        "Owner",
+        "Status",
+        "GSC Clicks",
+    ]
+    for col_idx, header in enumerate(headers, start=1):
+        ws.cell(row=2, column=col_idx, value=header)
+
+    apply_main_triage_column_layout(ws, header_row=2)
+
+    for col in range(1, MAIN_TRIAGE_COLUMN_COUNT + 1):
+        letter = get_column_letter(col)
+        assert ws.column_dimensions[letter].hidden is not True
+
+    first_advanced = get_column_letter(MAIN_TRIAGE_COLUMN_COUNT + 1)
+    assert ws.column_dimensions[first_advanced].hidden is True

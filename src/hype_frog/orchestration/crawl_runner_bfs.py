@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 from collections import deque
 from dataclasses import dataclass
 from typing import Any
+
+from hype_frog.core.path_utils import ensure_parent_dir, path_exists
 
 from rich.progress import (
     BarColumn,
@@ -25,7 +26,7 @@ from hype_frog.core import get_logger
 from hype_frog.core.console import log_phase_banner
 from hype_frog.core.crawl_log import CrawlLogCollector
 from hype_frog.core.logger import console
-from hype_frog.core.memory_guard import check_memory_limit, warn_if_large_crawl
+from hype_frog.core.memory_guard import check_memory_limit, memory_circuit_breaker, warn_if_large_crawl
 from hype_frog.core.models import CrawlResult, CrawlRowPayload
 from hype_frog.extractors.semantic_engine import IntentAnalyzer
 from hype_frog.orchestration.crawl_runner_frontier import (
@@ -68,6 +69,8 @@ class CrawlExecutionResult:
     crawl_log_entries: list[Any] | None = None
     robots_by_domain: dict[str, dict[str, Any]] | None = None
     competitor_domains: tuple[str, ...] = ()
+    audit_cache: Any | None = None
+    crawl_row_count: int = 0
 
 
 async def apply_search_intent(
@@ -88,10 +91,10 @@ async def apply_search_intent(
     try:
         extra_values["Search Intent"] = await analyzer.analyze_intent(rendered_text)
     except Exception as exc:  # pragma: no cover - defensive guard
-        logger.warning(
-            "Search intent classification failed for %s: %s",
-            main_values.get("URL"),
-            exc,
+        logger.exception(
+            "search_intent_classification_failed",
+            url=str(main_values.get("URL") or ""),
+            phase="intent",
         )
         extra_values["Search Intent"] = "Unknown"
         if crawl_log is not None:
@@ -127,9 +130,8 @@ async def run_bfs_crawl_loop(
     checkpoint_file = output_filename.replace(".xlsx", "_checkpoint.json")
     cache_file = output_filename.replace(".xlsx", "_temp_cache.db")
     cache = _crawl_runner.AuditCache(cache_file)
-    flush_batch_size = 250
-    output_dir = os.path.dirname(output_filename)
-    os.makedirs(output_dir, exist_ok=True)
+    flush_batch_size = 500
+    ensure_parent_dir(output_filename)
 
     crawl_started = time.perf_counter()
     if setup.streaming:
@@ -160,7 +162,7 @@ async def run_bfs_crawl_loop(
     resumed_results: list[CrawlResult] = []
     checkpoint_completed_urls: set[str] = set()
     bfs_state: dict[str, object] = {}
-    if os.path.exists(checkpoint_file):
+    if path_exists(checkpoint_file):
         if setup.resume_checkpoint_mode == "prompt":
             resume_choice = (
                 await asyncio.to_thread(
@@ -188,8 +190,12 @@ async def run_bfs_crawl_loop(
                     len(checkpoint_completed_urls),
                     len(urls),
                 )
-            except Exception as exc:
-                logger.warning("Could not load checkpoint. Starting fresh. (%s)", exc)
+            except Exception:
+                logger.exception(
+                    "checkpoint_load_failed",
+                    checkpoint_file=checkpoint_file,
+                    phase="crawl",
+                )
                 resumed_results = []
                 checkpoint_completed_urls = set()
                 bfs_state = {}
@@ -367,6 +373,7 @@ async def run_bfs_crawl_loop(
                     cache.upsert_results(pending_batch)
                     pending_batch = []
                     check_memory_limit(setup.max_memory_mb)
+                    memory_circuit_breaker()
                 done_count = crawled_count
                 if checkpoint_every > 0 and done_count % checkpoint_every == 0:
                     if pending_batch:
@@ -405,46 +412,21 @@ async def run_bfs_crawl_loop(
     if checkpoint_every > 0:
         delete_checkpoint(checkpoint_file)
 
-    typed_results: list[CrawlRowPayload] = []
-    for cached in cache.iter_results():
-        typed_results.append(
-            CrawlRowPayload.model_validate(
-                {"main": cached.get("main", {}), "extra": cached.get("extra", {})}
-            )
-        )
-
-    rendered_rows = sum(
-        1
-        for row in typed_results
-        if row.main.values.get("Extraction Source") == "rendered_browser"
-    )
-    raw_rows = sum(
-        1
-        for row in typed_results
-        if row.main.values.get("Extraction Source") == "raw_http"
-    )
-    fallback_rows = sum(
-        1 for row in typed_results if row.extra.values.get("Extraction Source Fallback")
-    )
+    crawl_row_count = cache.row_count()
     crawl_duration_seconds = round(time.perf_counter() - crawl_started, 1)
     log_phase_banner("FINALIZE: Crawl complete, generating Excel report")
     logger.info(
-        "Crawl finished in %.1fs (%s URLs, %s workers).",
-        crawl_duration_seconds,
-        len(typed_results),
-        workers,
+        "crawl_finished",
+        duration_s=crawl_duration_seconds,
+        url_count=crawl_row_count,
+        workers=workers,
+        phase="crawl",
     )
-    logger.info(
-        "Extraction sources: rendered_browser=%s raw_http=%s render_fallback=%s (crawl_mode=%s).",
-        rendered_rows,
-        raw_rows,
-        fallback_rows,
-        setup.crawl_mode,
-    )
-    cache.close(cleanup_file=True)
     return CrawlExecutionResult(
         output_filename=output_filename,
-        crawl_rows=typed_results,
+        crawl_rows=[],
+        audit_cache=cache,
+        crawl_row_count=crawl_row_count,
         target_input=setup.target_input,
         max_psi_urls=setup.max_psi_urls,
         crawl_urls=crawl_urls_runtime,

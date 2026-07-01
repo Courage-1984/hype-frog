@@ -103,6 +103,8 @@ class HypeFrogMochaSemantic:
     excel_brand_on: str = "CDD6F4"
     excel_blue: str = "74C7EC"
     excel_frog_green: str = "A6E3A1"
+    theme_header_bg: str = "1E1E2E"
+    theme_header_text: str = "CDD6F4"
     rag_red: str = "F5DCE3"
     rag_red_font: str = "8B2942"
     rag_amber: str = "FEF3D4"
@@ -228,9 +230,20 @@ def html_theme_css(brand_colour: str, accent_colour: str) -> str:
 
 
 def excel_palette_overrides() -> dict[str, str]:
-    """Return openpyxl hex overrides (no #) for HF_EXCEL_THEME=mocha."""
+    """Return openpyxl hex overrides (no #) for HF_EXCEL_THEME=mocha.
+
+    Known limitation: openpyxl has no API to set the Excel sheet canvas colour,
+    which is always white. These fills were designed against the HTML executive
+    report's dark (``#11111b``) background, so in Excel they render as dark fills
+    on a white canvas rather than a true dark mode — legible, but visually
+    inconsistent with the HTML report. Prefer the default (non-mocha) theme for
+    Excel output when a fully dark-mode look matters more than palette parity
+    with the HTML report.
+    """
     e = SEMANTIC
     return {
+        "THEME_HEADER_BG": e.theme_header_bg,
+        "THEME_HEADER_TEXT": e.theme_header_text,
         "STD_NAVY": e.excel_brand,
         "STD_WHITE": e.excel_brand_on,
         "STD_BLUE": e.excel_blue,

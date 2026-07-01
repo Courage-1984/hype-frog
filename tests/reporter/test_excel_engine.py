@@ -142,12 +142,12 @@ def assert_action_required_guardrails(ws: Worksheet) -> None:
 
     c2 = ws.cell(row=2, column=col)
     assert c2.value == "Complete"
-    assert _fill_hex_upper(c2) == "C6EFCE"
+    assert _fill_hex_upper(c2) == "E6F4EA"
 
     c3 = ws.cell(row=3, column=col)
     assert c3.value == "Needs Copy", f"row 3 expected Needs Copy, got {c3.value!r}"
-    assert _fill_hex_upper(c3) == "FFC7CE", (
-        f"row 3 fill expected FFC7CE (canonical RAG red), got {_fill_hex_upper(c3)!r}"
+    assert _fill_hex_upper(c3) == "FCE8E6", (
+        f"row 3 fill expected FCE8E6 (canonical RAG red), got {_fill_hex_upper(c3)!r}"
     )
 
     c4 = ws.cell(row=4, column=col)
@@ -155,11 +155,11 @@ def assert_action_required_guardrails(ws: Worksheet) -> None:
 
     c5 = ws.cell(row=5, column=col)
     assert c5.value == "Needs Copy"
-    assert _fill_hex_upper(c5) == "FFC7CE"
+    assert _fill_hex_upper(c5) == "FCE8E6"
 
 
 def test_friendly_toc_description_known_tabs() -> None:
-    assert "Executive overview" in friendly_toc_description("Dashboard")
+    assert "Primary executive landing" in friendly_toc_description("Executive Briefing")
     assert "Diagnostic command center" in friendly_toc_description(
         "Content Optimisation Hub"
     )
@@ -233,8 +233,8 @@ def test_mock_workbook_guardrails() -> None:
     apply_workbook_export_guardrails(wb)
     assert_action_required_guardrails(wb["Content Optimization"])
     assert_toc_no_generic_fallback(wb)
-    # C2 freeze on data sheet (TOC excluded inside helper)
-    assert wb["Content Optimization"].freeze_panes == "C2"
+    # C3 freeze on data sheet (return strip row + header; TOC excluded inside helper)
+    assert wb["Content Optimization"].freeze_panes == "C3"
 
 
 def test_pick_latest_returns_none_when_no_xlsx(tmp_path: Path) -> None:

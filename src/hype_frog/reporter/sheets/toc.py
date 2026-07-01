@@ -13,9 +13,11 @@ from hype_frog.reporter.sheets.config import (
     CONTENT_OPTIMISATION_HUB_SHEET,
     CONTENT_PLANNER_SHEET,
     CRAWL_LOG_SHEET,
-    EXECUTIVE_DASHBOARD_SHEET,
+    EXECUTIVE_BRIEFING_FREEZE_PANES,
+    EXECUTIVE_BRIEFING_SHEET,
     REDIRECT_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
+    SHEET_ZOOM_OVERRIDES,
 )
 from hype_frog.reporter.sheets.workbook_layout import (
     ADVANCED_WORKBOOK_TAB_ORDER,
@@ -161,7 +163,7 @@ def apply_workbook_toc_and_links(
     link_map = {
         "Issue Register": "Reference Area",
         "FixPlan": "Detail Reference Tab",
-        "Dashboard": "Target Tab",
+        "Executive Briefing": "Target Tab",
         AIOSEO_RECOMMENDATIONS_SHEET: "Reference Tab",
     }
     for sheet_name, col_header in link_map.items():
@@ -181,17 +183,23 @@ def apply_workbook_toc_and_links(
                 cell.style = "Hyperlink"
     for tab_name in wb.sheetnames:
         ws = wb[tab_name]
+        # Uniform, final pass — overrides any earlier per-builder gridline/zoom
+        # settings so every tab looks consistent regardless of build order.
+        ws.sheet_view.showGridLines = False
+        zoom = SHEET_ZOOM_OVERRIDES.get(tab_name)
+        if zoom:
+            ws.sheet_view.zoomScale = zoom
         if tab_name == "Table of Contents":
             _set_freeze_panes_safe(ws, "A3")
             continue
-        if tab_name == EXECUTIVE_DASHBOARD_SHEET:
-            _set_freeze_panes_safe(ws, "A8")
+        if tab_name == EXECUTIVE_BRIEFING_SHEET:
+            _set_freeze_panes_safe(ws, EXECUTIVE_BRIEFING_FREEZE_PANES)
             _clear_orphaned_selection(ws)
             continue
         if disable_non_core_freeze_panes and tab_name not in {
             "Main",
             "Dashboard",
-            EXECUTIVE_DASHBOARD_SHEET,
+            EXECUTIVE_BRIEFING_SHEET,
         }:
             _set_freeze_panes_safe(ws, None)
             _clear_orphaned_selection(ws)

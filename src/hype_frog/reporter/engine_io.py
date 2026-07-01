@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import gc
 import re
+from collections.abc import Iterable, Iterator
 from typing import Any
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 import pandas as pd
+from openpyxl.cell import WriteOnlyCell
+from openpyxl.styles import Font, NamedStyle, PatternFill
 from openpyxl.utils import get_column_letter
 
 from hype_frog.checkpoint.cache import AuditCache
@@ -13,8 +16,12 @@ from hype_frog.core import get_logger
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.core.url_normalization import normalize_url_key
 from hype_frog.pipeline.broken_links import link_inventory_broken_per_source_formula
+from hype_frog.reporter.sheets.config import THEME_HEADER_BG, THEME_HEADER_TEXT
+from hype_frog.reporter.stream_workbook import is_write_only_writer
 
 logger = get_logger(__name__)
+
+_HEADER_STYLE_NAME = "hf_table_header"
 
 _ILLEGAL_XLSX_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]")
 _INVALID_SHEET_CHARS_RE = re.compile(r"[:\\/*?\[\]]")
@@ -102,19 +109,121 @@ def apply_link_intelligence_summary_broken_formulas(workbook: Any) -> None:
             )
 
 
+def _ensure_header_named_style(workbook: Any) -> str:
+    if _HEADER_STYLE_NAME in workbook.named_styles:
+        return _HEADER_STYLE_NAME
+    header_style = NamedStyle(
+        name=_HEADER_STYLE_NAME,
+        font=Font(bold=True, color=THEME_HEADER_TEXT),
+        fill=PatternFill("solid", fgColor=THEME_HEADER_BG),
+    )
+    workbook.add_named_style(header_style)
+    return _HEADER_STYLE_NAME
+
+
+def _append_header_row(ws: Any, workbook: Any, columns: list[str]) -> None:
+    if getattr(workbook, "write_only", False):
+        style_name = _ensure_header_named_style(workbook)
+        header_cells = []
+        for col in columns:
+            cell = WriteOnlyCell(ws, value=col)
+            cell.style = style_name
+            header_cells.append(cell)
+        ws.append(header_cells)
+        return
+    ws.append(columns)
+
+
+def _get_or_create_sheet(writer: Any, sheet_name: str) -> Any:
+    safe_name = _safe_sheet_name(sheet_name)
+    if sheet_name in writer.sheets:
+        return writer.sheets[sheet_name]
+    ws = writer.book.create_sheet(title=safe_name)
+    writer.sheets[sheet_name] = ws
+    return ws
+
+
+def _pad_write_only_sheet(writer: Any, sheet_name: str, target_row: int) -> Any:
+    """Pad a write-only sheet with blank rows until ``target_row`` (1-based)."""
+    ws = _get_or_create_sheet(writer, sheet_name)
+    if not is_write_only_writer(writer):
+        return ws
+    current = writer.sheet_row_count(sheet_name)
+    pad_needed = max(0, target_row - 1 - current)
+    for _ in range(pad_needed):
+        ws.append([])
+    if pad_needed and hasattr(writer, "record_rows_appended"):
+        writer.record_rows_appended(sheet_name, pad_needed)
+    return ws
+
+
+def write_dataframe_sheet(
+    writer: Any,
+    df: pd.DataFrame,
+    sheet_name: str,
+    *,
+    startrow: int = 1,
+    include_header: bool = True,
+) -> None:
+    """Write a DataFrame via append (write-only safe) or pandas fallback."""
+    if df.empty and not include_header:
+        return
+    if not is_write_only_writer(writer):
+        from hype_frog.pipeline.export import to_excel_safe
+
+        kwargs: dict[str, Any] = {"index": False}
+        if startrow > 1:
+            kwargs["startrow"] = startrow - 1
+        to_excel_safe(df, writer, sheet_name, **kwargs)
+        return
+
+    ws = _pad_write_only_sheet(writer, sheet_name, startrow)
+    columns = [str(col) for col in df.columns]
+    rows_appended = 0
+    if include_header:
+        _append_header_row(ws, writer.book, columns)
+        rows_appended += 1
+    for row in df.itertuples(index=False, name=None):
+        ws.append([_sanitize_excel_value(value) for value in row])
+        rows_appended += 1
+    if hasattr(writer, "record_rows_appended"):
+        writer.record_rows_appended(sheet_name, rows_appended)
+
+
 def write_dict_rows_sheet(
     writer: Any,
     sheet_name: str,
     columns: list[str],
-    rows: list[dict[str, Any] | MainRowPayload | ExtraRowPayload],
+    rows: Iterable[dict[str, Any] | MainRowPayload | ExtraRowPayload],
 ) -> None:
-    """Write row payloads to sheet; conversion occurs right before write."""
-    ws = writer.book.create_sheet(title=_safe_sheet_name(sheet_name))
-    writer.sheets[sheet_name] = ws
-    ws.append(columns)
-    for row in rows:
-        row_mapping = _row_to_mapping(row)
+    """Write row payloads to sheet; accepts iterators for streaming export."""
+    ws = _get_or_create_sheet(writer, sheet_name)
+    row_iter = iter(rows)
+    try:
+        first_row = next(row_iter)
+    except StopIteration:
+        if columns:
+            _append_header_row(ws, writer.book, columns)
+            if hasattr(writer, "record_rows_appended"):
+                writer.record_rows_appended(sheet_name, 1)
+        return
+
+    if not columns:
+        columns = list(_row_to_mapping(first_row).keys())
+    _append_header_row(ws, writer.book, columns)
+    rows_written = 1
+
+    def _append_mapping(row_mapping: dict[str, Any]) -> None:
+        nonlocal rows_written
         ws.append([_sanitize_excel_value(row_mapping.get(col)) for col in columns])
+        rows_written += 1
+
+    _append_mapping(_row_to_mapping(first_row))
+    for row in row_iter:
+        _append_mapping(_row_to_mapping(row))
+
+    if hasattr(writer, "record_rows_appended"):
+        writer.record_rows_appended(sheet_name, rows_written)
 
 
 def _sanitize_excel_url(url_value: Any) -> str:
@@ -157,10 +266,9 @@ def write_cached_sheet_chunked(
     a manual ``gc.collect()`` is triggered after every chunk to keep the
     high-water mark flat on 10k+ page audits.
     """
-    ws = writer.book.create_sheet(title=_safe_sheet_name(sheet_name))
-    writer.sheets[sheet_name] = ws
-    ws.append(columns)
-    rows_written = 0
+    ws = _get_or_create_sheet(writer, sheet_name)
+    _append_header_row(ws, writer.book, columns)
+    rows_written = 1
     aggressive_gc = chunk_size >= _GC_COLLECT_CHUNK_THRESHOLD
     for chunk in cache.iter_results_chunked(chunk_size):
         for result in chunk:
@@ -181,3 +289,31 @@ def write_cached_sheet_chunked(
                 collected,
                 rows_written,
             )
+    if hasattr(writer, "record_rows_appended"):
+        writer.record_rows_appended(sheet_name, rows_written)
+
+
+def write_link_inventory_sheet_streamed(
+    writer: Any,
+    cache: Any,
+    *,
+    sheet_name: str,
+    columns: list[str],
+    chunk_size: int = 500,
+) -> int:
+    """Stream deduped Link Inventory rows from SQLite into the workbook."""
+    from hype_frog.core.memory_guard import memory_circuit_breaker
+
+    ws = _get_or_create_sheet(writer, sheet_name)
+    _append_header_row(ws, writer.book, columns)
+    rows_written = 1
+    aggressive_gc = chunk_size >= _GC_COLLECT_CHUNK_THRESHOLD
+    for chunk in cache.iter_rows(chunk_size=chunk_size):
+        for row in chunk:
+            ws.append([_sanitize_excel_value(row.get(col)) for col in columns])
+            rows_written += 1
+        chunk.clear()
+        memory_circuit_breaker()
+        if aggressive_gc:
+            gc.collect()
+    return rows_written

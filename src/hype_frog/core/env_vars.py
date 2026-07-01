@@ -208,6 +208,26 @@ def get_hf_excel_theme() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Logging / observability
+# ---------------------------------------------------------------------------
+
+
+def get_hf_log_level(default: str = "DEBUG") -> str:
+    """File handler minimum level (DEBUG, INFO, WARNING, ERROR, CRITICAL)."""
+    return _env_str("HF_LOG_LEVEL") or default
+
+
+def get_hf_console_log_level(default: str = "INFO") -> str:
+    """Console handler minimum level (DEBUG, INFO, WARNING, ERROR, CRITICAL)."""
+    return _env_str("HF_CONSOLE_LOG_LEVEL") or default
+
+
+def get_hf_run_id() -> str:
+    """Optional process correlation ID; auto-generated when unset."""
+    return _env_str("HF_RUN_ID")
+
+
+# ---------------------------------------------------------------------------
 # Reporter debug / isolation flags
 # ---------------------------------------------------------------------------
 

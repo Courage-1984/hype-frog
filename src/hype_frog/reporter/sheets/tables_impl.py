@@ -9,12 +9,14 @@ from openpyxl.utils.cell import coordinate_to_tuple
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.worksheet import Worksheet
 
+from hype_frog.core import get_logger
 from hype_frog.reporter.help_layer import apply_semantic_aeo_tooltips
 from hype_frog.reporter.engine_formatting import (
     apply_executive_priority_formatting,
     apply_fixplan_workflow_formatting,
     ensure_auto_filter,
     ensure_freeze_header,
+    ensure_print_setup,
 )
 from hype_frog.reporter.engine_guardrails import apply_header_tooltips
 from hype_frog.reporter.sheets.toc import apply_workbook_toc_and_links
@@ -31,7 +33,9 @@ from hype_frog.reporter.sheets.conditional import (
 )
 from hype_frog.reporter.sheets.config import (
     AIOSEO_RECOMMENDATIONS_SHEET,
-    EXECUTIVE_DASHBOARD_SHEET,
+    CONTENT_HUB_DATA_START_ROW,
+    EXECUTIVE_BRIEFING_FREEZE_PANES,
+    EXECUTIVE_BRIEFING_SHEET,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     CONTENT_PLANNER_SHEET,
@@ -46,11 +50,11 @@ from hype_frog.reporter.sheets.config import (
 )
 from hype_frog.reporter.sheets.dashboard import style_dashboard
 from hype_frog.reporter.sheets.layout import (
-    MAIN_COLUMN_GROUP_DEFINITIONS,
-    apply_column_grouping,
     apply_column_widths,
     apply_display_header_aliases,
     apply_intelligent_sorting,
+    apply_main_column_group_header_tints,
+    apply_main_triage_column_layout,
     hide_noisy_columns,
     reorder_columns,
     sheet_data_column_range,
@@ -58,9 +62,13 @@ from hype_frog.reporter.sheets.layout import (
 from hype_frog.reporter.engine_rows import content_hub_column_letter
 from hype_frog.reporter.sheets.links import apply_editor_url_column_hyperlinks
 from hype_frog.reporter.sheets.navigation import (
-    add_back_to_dashboard_link,
+    add_return_to_briefing_strip,
     add_url_navigation_links,
     apply_cross_sheet_links,
+)
+from hype_frog.reporter.sheets.sheet_rows import (
+    sheet_data_header_row,
+    sheet_data_start_row,
 )
 from hype_frog.reporter.sheets.number_formats import apply_south_african_formats
 from hype_frog.reporter.sheets.tables import (
@@ -73,7 +81,6 @@ from hype_frog.reporter.sheets.validation import (
     add_all_header_tooltips,
     add_header_tooltips,
     apply_status_dropdown,
-    apply_status_dropdown_to_inventory,
 )
 from hype_frog.reporter.sheets.view_state import (
     apply_optimal_view_state,
@@ -83,6 +90,8 @@ from hype_frog.reporter.sheets.view_state import (
     set_freeze_panes_safe,
 )
 from hype_frog.reporter.sheets.style_helpers import header_index
+
+logger = get_logger(__name__)
 
 # Sprint 4 + Sprint 5 — structural / security / i18n diagnostic
 # tooltips and the new "ghost data" surfaced from Sprint 2's rendered
@@ -233,7 +242,7 @@ def _apply_content_hub_assigned_owner_validation(worksheet) -> None:
         return
     headers = _hub_headers_row2(worksheet)
     col = headers.get("Assigned Owner")
-    if not col or worksheet.max_row < 4:
+    if not col or worksheet.max_row < CONTENT_HUB_DATA_START_ROW:
         return
     letter = get_column_letter(col)
     dv = DataValidation(
@@ -246,7 +255,7 @@ def _apply_content_hub_assigned_owner_validation(worksheet) -> None:
     )
     dv.errorStyle = "stop"
     worksheet.add_data_validation(dv)
-    dv.add(f"{letter}4:{letter}{worksheet.max_row}")
+    dv.add(f"{letter}{CONTENT_HUB_DATA_START_ROW}:{letter}{worksheet.max_row}")
 
 
 def _apply_content_hub_copywriter_column_layout(worksheet) -> None:
@@ -274,7 +283,7 @@ def _apply_content_hub_copywriter_column_layout(worksheet) -> None:
     header_lower_by_col: dict[int, str] = {
         col_idx: str(name).lower() for name, col_idx in headers.items()
     }
-    for r in range(4, worksheet.max_row + 1):
+    for r in range(CONTENT_HUB_DATA_START_ROW, worksheet.max_row + 1):
         for c in range(1, worksheet.max_column + 1):
             cell = worksheet.cell(row=r, column=c)
             prev = cell.alignment
@@ -286,7 +295,8 @@ def _apply_content_hub_copywriter_column_layout(worksheet) -> None:
 
 def _link_main_technical_health_to_diagnostics(worksheet) -> None:
     """Keep Main Technical Health synced from Technical Diagnostics by URL lookup."""
-    headers = header_index(worksheet)
+    header_row = sheet_data_header_row("Main")
+    headers = header_index(worksheet, header_row)
     url_col = headers.get("URL")
     technical_health_col = headers.get("Technical Health")
     if not url_col or not technical_health_col:
@@ -295,7 +305,8 @@ def _link_main_technical_health_to_diagnostics(worksheet) -> None:
     technical_health_letter = get_column_letter(technical_health_col)
     td_url = sheet_data_column_range("Technical Diagnostics", "URL")
     td_health = sheet_data_column_range("Technical Diagnostics", "SEO Health Score")
-    for row_idx in range(2, worksheet.max_row + 1):
+    data_start = sheet_data_start_row("Main")
+    for row_idx in range(data_start, worksheet.max_row + 1):
         worksheet[f"{technical_health_letter}{row_idx}"] = (
             f"=IFERROR(INDEX({td_health},MATCH({url_letter}{row_idx},{td_url},0)),\"\")"
         )
@@ -303,7 +314,7 @@ def _link_main_technical_health_to_diagnostics(worksheet) -> None:
 
 def _link_hub_scores_from_main(worksheet: Worksheet) -> None:
     """Replace static Hub score copies with live INDEX/MATCH lookups on Main."""
-    if worksheet.max_row < 3:
+    if worksheet.max_row < CONTENT_HUB_DATA_START_ROW:
         return
     hub_url_l = content_hub_column_letter("URL")
     score_pairs = (
@@ -315,20 +326,50 @@ def _link_hub_scores_from_main(worksheet: Worksheet) -> None:
     for hub_header, main_header in score_pairs:
         hub_l = content_hub_column_letter(hub_header)
         main_col = sheet_data_column_range("Main", main_header)
-        for row_idx in range(4, worksheet.max_row + 1):
+        for row_idx in range(CONTENT_HUB_DATA_START_ROW, worksheet.max_row + 1):
             worksheet[f"{hub_l}{row_idx}"] = (
-                f"=IFERROR(INDEX({main_col},MATCH({hub_url_l}{row_idx},{main_url},0)),\"\")"
+                f"=IFERROR(INDEX({main_col},MATCH(TRIM({hub_url_l}{row_idx}),{main_url},0)),\"\")"
             )
+
+
+_EMPTY_STATE_MESSAGE = "No items to report for this run."
+_EMPTY_STATE_SHEETS: frozenset[str] = frozenset({"FixPlan", "Quick Wins"})
+
+
+def _write_empty_state_message(worksheet: Worksheet, header_row: int) -> None:
+    """Replace a bare empty grid with a friendly, muted 'nothing to report' note."""
+    max_col = worksheet.max_column
+    if max_col < 1:
+        return
+    data_start = header_row + 1
+    for row_idx in range(data_start, worksheet.max_row + 1):
+        for col_idx in range(1, max_col + 1):
+            value = worksheet.cell(row=row_idx, column=col_idx).value
+            if value is not None and str(value).strip():
+                return
+    cell = worksheet.cell(row=data_start, column=1, value=_EMPTY_STATE_MESSAGE)
+    cell.font = Font(italic=True, color="808080")
+    cell.alignment = Alignment(horizontal="left", vertical="center")
+    end_col = get_column_letter(max(1, min(max_col, 8)))
+    if end_col != "A":
+        try:
+            worksheet.merge_cells(f"A{data_start}:{end_col}{data_start}")
+        except Exception as exc:  # pragma: no cover - defensive merge guard
+            logger.debug("Empty-state merge skipped on %s: %s", worksheet.title, exc)
+    worksheet.row_dimensions[data_start].height = 20
 
 
 def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
     worksheet = writer.sheets[sheet_name]
-    if sheet_name == EXECUTIVE_DASHBOARD_SHEET:
-        set_freeze_panes_safe(worksheet, "A8")
+    if sheet_name == EXECUTIVE_BRIEFING_SHEET:
+        set_freeze_panes_safe(worksheet, EXECUTIVE_BRIEFING_FREEZE_PANES)
+        ensure_print_setup(worksheet)
         return
     reorder_columns(worksheet, sheet_name)
+    add_return_to_briefing_strip(worksheet, sheet_name)
+    header_row = sheet_data_header_row(sheet_name)
     if sheet_name == "Main":
-        apply_column_grouping(worksheet, MAIN_COLUMN_GROUP_DEFINITIONS)
+        apply_main_triage_column_layout(worksheet, header_row=header_row)
     if sheet_name in {
         "FixPlan",
         "Main",
@@ -337,11 +378,11 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
         AIOSEO_RECOMMENDATIONS_SHEET,
     }:
         apply_intelligent_sorting(worksheet, sheet_name)
-    apply_generic_sheet_coloring(worksheet, sheet_name)
+    apply_generic_sheet_coloring(worksheet, sheet_name, header_row=header_row)
     apply_column_widths(worksheet)
     if sheet_name == "Main":
         _link_main_technical_health_to_diagnostics(worksheet)
-        apply_main_sheet_heatmaps(worksheet)
+        apply_main_sheet_heatmaps(worksheet, header_row=header_row)
     apply_wrapped_row_heights(worksheet)
     if sheet_name == "FixPlan":
         apply_fixplan_workflow_formatting(worksheet)
@@ -350,18 +391,15 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
     collapse_technical_deep_dive_columns(
         worksheet, sheet_name, header_index_fn=header_index
     )
-    add_url_navigation_links(writer, worksheet, sheet_name)
-    apply_cross_sheet_links(writer, worksheet, sheet_name)
-    if sheet_name == AIOSEO_RECOMMENDATIONS_SHEET:
-        status_col = header_index(worksheet).get("Status")
+    add_url_navigation_links(writer, worksheet, sheet_name, header_row=header_row)
+    apply_cross_sheet_links(writer, worksheet, sheet_name, header_row=header_row)
+    if sheet_name in {AIOSEO_RECOMMENDATIONS_SHEET, "FixPlan", "IssueInventory"}:
+        status_col = header_index(worksheet, header_row).get("Status")
         if status_col:
-            apply_status_dropdown(worksheet, status_col)
-    if sheet_name in {"FixPlan", "IssueInventory"}:
-        apply_status_dropdown_to_inventory(worksheet)
-    add_back_to_dashboard_link(worksheet, sheet_name)
+            apply_status_dropdown(worksheet, status_col, header_row=header_row)
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
-        _link_hub_scores_from_main(worksheet)
         apply_content_hub_conditional_rules(worksheet, writer)
+        _link_hub_scores_from_main(worksheet)
         # Sprint 6 — Semantic AEO heatmap on the Hub (Instant Priority
         # moved to Content Hub Metrics). Runs AFTER the Hub conditional
         # pipeline so the banner row insert in
@@ -369,7 +407,9 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
         # headers to row 2 / data to row 3.
         apply_executive_priority_formatting(worksheet, header_row=2)
     elif sheet_name == CONTENT_HUB_METRICS_SHEET:
-        apply_executive_priority_formatting(worksheet, header_row=1)
+        # Content Hub Metrics carries a row-1 return banner, so the real
+        # headers (incl. "Instant Priority") live on row 2.
+        apply_executive_priority_formatting(worksheet, header_row=2)
     apply_sheet_text_wrap_columns(worksheet, sheet_name)
     if sheet_name in {
         CONTENT_OPTIMISATION_HUB_SHEET,
@@ -392,7 +432,8 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
     if sheet_name == "Dashboard" and not DEBUG_EXCEL_ISOLATION_MODE:
         style_dashboard(worksheet, writer)
     if sheet_name != "Dashboard":
-        header_row = 2 if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET else 1
+        if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
+            header_row = 2
         normalize_table_headers(worksheet, header_row=header_row)
         header_values = [
             worksheet.cell(row=header_row, column=c).value
@@ -418,6 +459,8 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
                     min_row=min_row,
                     max_row=max_row,
                 )
+        if sheet_name == "Main":
+            apply_main_column_group_header_tints(worksheet, header_row=header_row)
         if sheet_name in (
             "Technical Diagnostics",
             "Content & AI Readiness",
@@ -449,9 +492,12 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
         apply_header_tooltips(worksheet, header_row=2)
         apply_semantic_aeo_tooltips(worksheet, header_row=2)
         _apply_diagnostic_header_tooltips(worksheet, header_row=2)
+    if sheet_name in _EMPTY_STATE_SHEETS:
+        _write_empty_state_message(worksheet, header_row)
     ensure_auto_filter(worksheet)
     if sheet_name != "Dashboard":
         ensure_freeze_header(worksheet)
+    ensure_print_setup(worksheet)
     apply_optimal_view_state(worksheet, sheet_name)
     sanitize_sheet_view_selection(worksheet)
     audit_non_overlapping_merges(worksheet)

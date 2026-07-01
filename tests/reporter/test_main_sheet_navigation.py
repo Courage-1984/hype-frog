@@ -1,11 +1,12 @@
-"""Main sheet navigation columns must not duplicate on repeated formatting."""
+"""Main sheet navigation: row-1 return strip (no trailing BACK TO DASHBOARD column)."""
 
 from __future__ import annotations
 
 from openpyxl import Workbook
 
-from hype_frog.reporter.sheets.links import apply_cross_sheet_links
-from hype_frog.reporter.sheets.navigation import add_back_to_dashboard_link
+from hype_frog.reporter.sheets.config import RETURN_TO_BRIEFING_LABEL
+from hype_frog.reporter.sheets.navigation import add_return_to_briefing_strip
+from hype_frog.reporter.sheets.sheet_rows import sheet_data_header_row
 from hype_frog.reporter.sheets.style_helpers import header_index
 from hype_frog.reporter.sheets.tables import normalize_table_headers
 
@@ -15,9 +16,9 @@ class _WriterStub:
         self.book = book
 
 
-def _main_headers(worksheet) -> list[str]:
+def _header_labels(worksheet, header_row: int) -> list[str]:
     return [
-        str(worksheet.cell(row=1, column=c).value or "")
+        str(worksheet.cell(row=header_row, column=c).value or "")
         for c in range(1, worksheet.max_column + 1)
     ]
 
@@ -33,45 +34,48 @@ def _build_main_workbook() -> tuple[_WriterStub, Workbook]:
     ws.cell(row=3, column=1, value="https://example.com/page-b")
     ws.cell(row=3, column=2, value=65.0)
     wb.create_sheet("Technical Diagnostics")
-    wb.create_sheet("Dashboard")
+    wb.create_sheet("Executive Briefing")
     return _WriterStub(wb), wb
 
 
-def test_main_navigation_columns_survive_double_format_pass() -> None:
+def test_main_return_strip_survives_double_format_pass() -> None:
     """Simulate export_flow calling adjust_sheet_format twice on Main."""
+    from hype_frog.reporter.sheets.navigation import apply_cross_sheet_links
+
     writer, wb = _build_main_workbook()
     ws = wb["Main"]
 
     for _ in range(2):
-        apply_cross_sheet_links(
-            writer,
-            ws,
-            "Main",
-            debug_excel_isolation_mode=False,
-            header_index_fn=header_index,
-        )
-        add_back_to_dashboard_link(ws, "Main")
-        normalize_table_headers(ws, header_row=1)
+        add_return_to_briefing_strip(ws, "Main")
+        header_row = sheet_data_header_row("Main")
+        apply_cross_sheet_links(writer, ws, "Main", header_row=header_row)
+        normalize_table_headers(ws, header_row=header_row)
 
-    headers = _main_headers(ws)
+    assert str(ws["A1"].value) == RETURN_TO_BRIEFING_LABEL
+    assert ws["A1"].hyperlink is not None
+
+    header_row = sheet_data_header_row("Main")
+    headers = _header_labels(ws, header_row)
+    assert "BACK TO DASHBOARD" not in headers
     assert headers.count("Technical View") == 1
-    assert headers.count("BACK TO DASHBOARD") == 1
     assert not any(h.endswith("_1") for h in headers)
 
-    tech_col = header_index(ws)["Technical View"]
-    assert str(ws.cell(row=2, column=tech_col).value or "").startswith("=IFERROR(HYPERLINK")
-    back_col = header_index(ws)["BACK TO DASHBOARD"]
-    assert ws.cell(row=1, column=back_col).hyperlink is not None
+    tech_col = header_index(ws, header_row)["Technical View"]
+    data_start = header_row + 1
+    assert str(ws.cell(row=data_start, column=tech_col).value or "").startswith(
+        "=IFERROR(HYPERLINK"
+    )
 
 
-def test_back_to_dashboard_skips_when_header_already_present() -> None:
+def test_return_strip_skips_when_already_present() -> None:
     wb = Workbook()
     ws = wb.active
     ws.title = "Summary"
-    ws.cell(row=1, column=1, value="Section")
-    ws.cell(row=1, column=2, value="BACK TO DASHBOARD")
+    ws.cell(row=1, column=1, value=RETURN_TO_BRIEFING_LABEL)
+    ws.cell(row=2, column=1, value="Section")
+    ws.cell(row=2, column=2, value="Severity")
 
-    add_back_to_dashboard_link(ws, "Summary")
+    add_return_to_briefing_strip(ws, "Summary")
 
-    assert ws.max_column == 2
-    assert _main_headers(ws).count("BACK TO DASHBOARD") == 1
+    assert ws.max_row == 2
+    assert str(ws["A1"].value) == RETURN_TO_BRIEFING_LABEL

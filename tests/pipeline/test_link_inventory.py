@@ -84,7 +84,7 @@ def test_annotate_blank_external_when_sniff_disabled() -> None:
 
 async def test_sniff_external_domains_head_one_probe_per_host(monkeypatch) -> None:
     probe = AsyncMock(return_value=200)
-    monkeypatch.setattr(link_inventory, "check_url_status_light", probe)
+    monkeypatch.setattr(link_inventory, "check_url_status_light_limited", probe)
 
     row = _extra_with_links(
         "https://s.test/page",
@@ -92,7 +92,26 @@ async def test_sniff_external_domains_head_one_probe_per_host(monkeypatch) -> No
     )
     session = MagicMock()
 
+    link_inventory.clear_external_head_cache()
     result = await sniff_external_domains_head(session, [row])
 
     assert result == {"ext.test": 200}
+    probe.assert_awaited_once()
+
+
+async def test_sniff_external_domains_head_ttl_cache_skips_second_probe(monkeypatch) -> None:
+    probe = AsyncMock(return_value=200)
+    monkeypatch.setattr(link_inventory, "check_url_status_light_limited", probe)
+    link_inventory.clear_external_head_cache()
+
+    row = _extra_with_links(
+        "https://s.test/page",
+        [{"Link Type": "External", "Target URL": "https://ext.test/landing"}],
+    )
+    session = MagicMock()
+
+    first = await sniff_external_domains_head(session, [row])
+    second = await sniff_external_domains_head(session, [row])
+
+    assert first == second == {"ext.test": 200}
     probe.assert_awaited_once()

@@ -9,6 +9,8 @@ from hype_frog.reporter.sheets.config import (
     CONTENT_OPTIMISATION_HUB_SHEET,
     DISABLE_DATA_VALIDATION,
     DISABLE_TOOLTIPS,
+    STATUS_OPTIONS,
+    status_validation_list_formula,
 )
 from hype_frog.reporter.sheets.style_helpers import header_index
 
@@ -580,45 +582,24 @@ def add_header_tooltips(worksheet: Worksheet) -> None:
     )
 
 
-def apply_status_dropdown(worksheet: Worksheet, status_col: int) -> None:
-    """Add controlled status dropdown validation for remediation fields.
+def apply_workflow_status_dropdown(
+    worksheet: Worksheet,
+    status_col: int,
+    *,
+    header_row: int = 1,
+) -> None:
+    """Apply unified workflow status list to a ``Status`` column.
 
-    Args:
-        worksheet: Worksheet to update.
-        status_col: 1-based column index for the ``Status`` field.
+    Permitted values: ``STATUS_OPTIONS`` (To Do, In Progress, In Review, Done).
     """
     if DISABLE_DATA_VALIDATION:
         return
-    if status_col <= 0 or worksheet.max_row <= 1:
+    if status_col <= 0 or worksheet.max_row <= header_row:
         return
-    status_dv = DataValidation(
-        type="list", formula1='"To Do,In Progress,Fixed"', allow_blank=True
-    )
-    worksheet.add_data_validation(status_dv)
-    status_dv.add(
-        f"{get_column_letter(status_col)}2:{get_column_letter(status_col)}{worksheet.max_row}"
-    )
-
-
-def apply_status_dropdown_to_inventory(worksheet: Worksheet) -> None:
-    """Apply strict status dropdown validation using the sheet's Status column.
-
-    Args:
-        worksheet: Target worksheet (for example FixPlan or IssueInventory).
-    """
-    if DISABLE_DATA_VALIDATION:
-        return
-    if worksheet.max_row <= 1:
-        return
-
-    headers = header_index(worksheet)
-    status_col = headers.get("Status")
-    if status_col is None:
-        return
-
+    data_start = header_row + 1
     status_dv = DataValidation(
         type="list",
-        formula1='"Open,In Progress,In Review,Done"',
+        formula1=status_validation_list_formula(),
         allow_blank=True,
     )
     status_dv.showErrorMessage = True
@@ -626,8 +607,31 @@ def apply_status_dropdown_to_inventory(worksheet: Worksheet) -> None:
     status_dv.error = "Select a value from the dropdown list."
     worksheet.add_data_validation(status_dv)
     status_dv.add(
-        f"{get_column_letter(status_col)}2:{get_column_letter(status_col)}{worksheet.max_row}"
+        f"{get_column_letter(status_col)}{data_start}:"
+        f"{get_column_letter(status_col)}{worksheet.max_row}"
     )
+
+
+def apply_status_dropdown(worksheet: Worksheet, status_col: int, *, header_row: int = 1) -> None:
+    """Add controlled status dropdown validation for remediation fields."""
+    apply_workflow_status_dropdown(worksheet, status_col, header_row=header_row)
+
+
+def apply_status_dropdown_to_inventory(
+    worksheet: Worksheet, *, header_row: int = 1
+) -> None:
+    """Apply strict status dropdown validation using the sheet's Status column."""
+    if DISABLE_DATA_VALIDATION:
+        return
+    if worksheet.max_row <= header_row:
+        return
+
+    headers = header_index(worksheet, header_row)
+    status_col = headers.get("Status")
+    if status_col is None:
+        return
+
+    apply_workflow_status_dropdown(worksheet, status_col, header_row=header_row)
 
 
 __all__ = [
@@ -635,8 +639,10 @@ __all__ = [
     "HELP_DESCRIPTION_PREFIX",
     "SCHEMA_METADATA_HEADER_TOOLTIP_BODIES",
     "apply_comment_dimensions",
+    "apply_workflow_status_dropdown",
     "apply_status_dropdown",
     "apply_status_dropdown_to_inventory",
+    "STATUS_OPTIONS",
     "add_all_header_tooltips",
     "add_header_tooltips",
     "curated_help_keys_by_sheet",

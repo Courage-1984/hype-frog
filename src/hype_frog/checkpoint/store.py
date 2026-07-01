@@ -1,20 +1,20 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from hype_frog.core import get_logger
 from hype_frog.core.models import CheckpointPayload, CrawlResult
-
+from hype_frog.core.path_utils import path_exists
 logger = get_logger(__name__)
 
 
 def load_checkpoint(
     checkpoint_file: str,
 ) -> tuple[list[CrawlResult], set[str], dict[str, Any]]:
-    if not os.path.exists(checkpoint_file):
+    if not path_exists(checkpoint_file):
         return [], set(), {}
     with open(checkpoint_file, "r", encoding="utf-8") as handle:
         checkpoint_data = json.load(handle)
@@ -65,12 +65,15 @@ def save_checkpoint(
                 "crawl_urls_runtime": bfs_state.get("crawl_urls_runtime") or [],
             }
         )
-    tmp_path = f"{checkpoint_file}.tmp"
-    with open(tmp_path, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, ensure_ascii=True, indent=2)
-    os.replace(tmp_path, checkpoint_file)
+    tmp_path = Path(f"{checkpoint_file}.tmp")
+    tmp_path.write_text(
+        json.dumps(payload, ensure_ascii=True, indent=2),
+        encoding="utf-8",
+    )
+    tmp_path.replace(Path(checkpoint_file))
 
 
 def delete_checkpoint(checkpoint_file: str) -> None:
-    if os.path.exists(checkpoint_file):
-        os.unlink(checkpoint_file)
+    target = Path(checkpoint_file)
+    if path_exists(target):
+        target.unlink()

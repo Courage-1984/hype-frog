@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
+from hype_frog.core.path_utils import path_exists
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +23,7 @@ from hype_frog.analysis.delta_models import (
 
 def load_run_snapshot(path: str) -> RunSnapshot | None:
     """Load a prior run from compact JSON or legacy xlsx export."""
-    if not path or not os.path.exists(path):
+    if not path or not path_exists(path):
         return None
     lowered = path.lower()
     if lowered.endswith(".json"):

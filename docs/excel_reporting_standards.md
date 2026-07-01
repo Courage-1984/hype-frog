@@ -65,13 +65,17 @@ bare-name fallback only applies to legacy/plain rows.
 
 ### Landing tab and view state
 
-- The workbook **opens on the Dashboard** (`apply_workbook_active_tab`, run last in
+- The workbook **opens on Executive Briefing** (`apply_workbook_active_tab`, run last in
   `apply_workbook_export_guardrails`); the Table of Contents stays left-most at index 0.
 - `apply_freeze_c2_data_sheets` is the **final freeze authority** for ordinary data
-  sheets (normalised to `C2`). Sheets with bespoke layouts are exempt via
-  `FREEZE_C2_EXEMPT_SHEETS` (TOC `A3`, Content Optimisation Hub, Executive Dashboard `A8`).
-- The **Executive Dashboard** is not a navigation dead-end: it carries `BACK TO
-  DASHBOARD` / `BACK TO CONTENTS` links (column N, on the frozen header rows).
+  sheets (normalised to `C3` — return strip row 1 + header row 2 above the data grid).
+  Sheets with bespoke layouts are exempt via
+  `FREEZE_C2_EXEMPT_SHEETS` (TOC `A3`, Content Optimisation Hub, Content Planner `E2`,
+  Executive Briefing `A10` — pins the title/KPI/insights band above the
+  non-overlapping chart grid; the four chart bands are spaced ~19 rows apart with
+  the triage matrix and chart source tables stacked well below them).
+- The legacy **Dashboard** tab remains exported one release (hidden) for backward
+  compatibility; **Executive Briefing** is the primary executive landing tab.
 
 ### Tooltips and dropdowns
 
@@ -86,7 +90,7 @@ A contract test keeps curated keys aligned with exported column headers.
 
 ### Advanced-sheet navigation
 
-The Dashboard "Advanced Sheets" panel surfaces a **curated subset** of the advanced
+The Executive Briefing "Advanced Sheets" panel surfaces a **curated subset** of the advanced
 tabs (relocated below the Owner Issue Summary at row 32+ to avoid column overlap); the
 TOC's "Technical & Historical (Advanced)" section remains the complete index of every
 advanced sheet (`ADVANCED_WORKBOOK_TAB_ORDER`). **Issue Register** is the canonical issue
@@ -136,8 +140,13 @@ A separate **Status** column (data-validation list `To Do, In Progress, Review, 
 **Single source of truth.** Status colours are defined once in `reporter/sheets/config.py`
 as the canonical **RAG palette** (`RAG_RED` / `RAG_AMBER` / `RAG_GREEN` with matching
 `*_FONT` colours, plus `RAG_RED_SOFT` / `RAG_AMBER_SOFT`, `RAG_NEUTRAL`, `ZEBRA_BAND`) and a
-single Office heatmap scale (`HEATMAP_LOW`/`MID`/`HIGH`) and `DATA_BAR_BLUE`. Prefer importing
-these constants over inline hex literals. `dashboard_config` RAG names (`GOOD_COLOR`,
+single Office heatmap scale (`HEATMAP_LOW`/`MID`/`HIGH`) and `DATA_BAR_BLUE`. Table headers use
+`THEME_HEADER_BG` (`#222A35`) and `THEME_HEADER_TEXT` (`#FFFFFF`) with left-aligned text /
+right-aligned numeric headers. Tab colours follow persona grouping in `workbook_layout.py`
+— six genuinely distinct hues so the tab bar reads at a glance (Management `#2C3E50`, Content
+`#27AE60`, Technical `#2980B9` including AIOSEO, Inventory `#E67E22`, Advanced `#8E44AD`,
+Historical `#95A5A6` — grey reserved for archival tabs only). Prefer importing these constants over
+inline hex literals. `dashboard_config` RAG names (`GOOD_COLOR`,
 `WARN_COLOR`, `ALERT_COLOR`, `SOFT_ALERT_COLOR`, `SOFT_WARN_COLOR`) are thin aliases of the
 canonical palette so the dashboards and the data sheets stay in lockstep.
 
@@ -177,19 +186,19 @@ HF_EXCEL_THEME=mocha
 
 | Constant | Default | Mocha |
 |----------|---------|-------|
-| `STD_NAVY` | `2F3A4A` | `1E1E2E` (base) |
-| `STD_WHITE` | `FFFFFF` | `CDD6F4` (text) |
+| `THEME_HEADER_BG` / `STD_NAVY` | `222A35` | `1E1E2E` (base) |
+| `THEME_HEADER_TEXT` / `STD_WHITE` | `FFFFFF` | `CDD6F4` (text) |
 | `STD_BLUE` | `2F6FA3` | `74C7EC` (sapphire) |
 | `STD_FROG_GREEN` | `92D050` | `A6E3A1` (Catppuccin green) |
 
-**RAG fills (mocha)** — light tints derived from Mocha accents so cells stay legible on white Excel backgrounds:
+**RAG fills (default theme, Phase 1 refurbishment)** — muted pastels with dark text:
 
 | Constant | Hex | Role |
 |----------|-----|------|
-| `RAG_RED` / `RAG_RED_FONT` | `F5DCE3` / `8B2942` | Critical / fail |
-| `RAG_AMBER` / `RAG_AMBER_FONT` | `FEF3D4` / `7A5C00` | Warning |
-| `RAG_GREEN` / `RAG_GREEN_FONT` | `DFF5DD` / `2D6A3A` | Pass / good |
-| `RAG_RED_SOFT` / `RAG_AMBER_SOFT` | `F8E0E8` / `FFF0CC` | Softer severity striping |
+| `RAG_RED` / `RAG_RED_FONT` | `FCE8E6` / `A51D24` | Critical / fail |
+| `RAG_AMBER` / `RAG_AMBER_FONT` | `FEF3D6` / `8F6B00` | Warning |
+| `RAG_GREEN` / `RAG_GREEN_FONT` | `E6F4EA` / `137333` | Pass / good |
+| `RAG_RED_SOFT` / `RAG_AMBER_SOFT` | `FFF0F0` / `FFFAED` | Softer severity striping |
 | `RAG_NEUTRAL` | `45475A` | N/A / to-do |
 | `ZEBRA_BAND` | `313244` | Alternating rows |
 
@@ -239,9 +248,46 @@ Canonical tab order and default visibility: `reporter/sheets/workbook_layout.py`
 
 `build_link_inventory_rows` deduplicates rows on **`(Source URL, Target URL, Anchor Text)`** before write so repeated anchor edges from multi-page discovery do not inflate the sheet.
 
+## Return navigation (Phase 3)
+
+Standard data sheets insert a row-1 strip: **`← Return to Executive Briefing`**
+(blue italic hyperlink to `Executive Briefing`!A1). The legacy trailing **BACK TO DASHBOARD**
+column is removed. The banner merge spans the sheet's **real columns only** (capped at
+column H); it must **not** force a minimum width, otherwise narrow sheets (e.g. the empty
+3-column FixPlan) gain a phantom `Column_N` header via `normalize_table_headers`. Content
+Optimisation Hub embeds the same return link in its row-1 banner.
+
 ## Duplicate column prevention
 
-`reporter/sheets/style_helpers.header_exists_in_worksheet` prevents inserting a second **BACK TO DASHBOARD** navigation column (`navigation.py`).
+`navigation.add_return_to_briefing_strip` is idempotent (skips when row 1 already
+carries the return label) and deletes a trailing legacy **BACK TO DASHBOARD** column
+when present before inserting the strip.
+
+## Column widths, wrap policy, and empty states
+
+- **`layout.apply_column_widths` resolves the true header row** via
+  `sheet_data_header_row(worksheet.title)` (data sheets carry a row-1 banner, so
+  headers live on row 2) and **always assigns a concrete width** — the previous
+  routine computed a max length but never wrote `column_dimensions[...].width`.
+- **Per-header width contract:** `URL_LIKE_HEADERS` (URL, Final URL, Canonical URL,
+  Direct Edit Link, …) get a fixed single-line width (`45`); `PROSE_HEADERS`
+  (Affected URLs, How to Fix in AIOSEO, Why It Matters, Recommended Fix, …) get a
+  generous wrapped width (`55`); everything else auto-fits from non-formula content
+  clamped to `[10, 48]`. Formula strings never drive auto-fit.
+- **Wrap policy:** URL / hyperlink / short-scalar cells stay **single-line**
+  (`wrap_text=False`); only prose columns wrap. `conditional.apply_wrapped_row_heights`
+  inflates row heights **only** for prose columns and skips URL-type columns so URLs
+  never stack into tall thin strips. Header rows get a min height (`30`) so wrapped
+  two-line labels are never clipped.
+- **AIOSEO `Direct Edit Link`** renders as a clean blue hyperlink (no dark button
+  fill) — a dark fill combined with the blue link font re-applied by
+  `apply_editor_url_column_hyperlinks` previously produced unreadable dark-on-dark.
+- **Empty-state messaging:** FixPlan and Quick Wins with no data rows show a single
+  merged, muted italic **"No items to report for this run."** message under the
+  headers instead of a bare grid (`tables_impl._write_empty_state_message`).
+- **Content Hub Metrics headers stay intact:** the former write-time `A2:…2` merge
+  clobbered the metrics header/first-data row (B–K); it has been removed so all
+  metric headers and data survive the formatting pass.
 
 ## IssueInventory and Issue Register scope branching
 

@@ -8,17 +8,23 @@ from openpyxl.workbook.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.reporter.sheets.config import (
+    CONTENT_HUB_FREEZE_PANES,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     CONTENT_PLANNER_SHEET,
     CRAWL_LOG_SHEET,
-    EXECUTIVE_DASHBOARD_SHEET,
+    DATA_SHEET_FREEZE_PANES,
+    EXECUTIVE_BRIEFING_FREEZE_PANES,
+    EXECUTIVE_BRIEFING_SHEET,
     RAG_AMBER,
     RAG_GREEN,
     RAG_RED,
     RAG_RED_FONT,
     REDIRECT_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
+)
+from hype_frog.reporter.sheets.large_sheet_presentation import (
+    apply_large_sheet_presentation,
 )
 from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
 from hype_frog.reporter.sheets.workbook_layout import apply_workbook_active_tab
@@ -33,10 +39,10 @@ _BANNED_TOC_FALLBACK = "Detailed URL diagnostic data"
 # Manual TOC blurbs (authoritative for export guardrails and initial TOC seed).
 _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "Dashboard": (
-        "Executive overview of site-wide SEO performance and critical alerts."
+        "Legacy formula dashboard (hidden one release — use Executive Briefing)."
     ),
-    "Executive Dashboard": (
-        "Visual KPI cards and charts (health, issues, priority URLs, content readiness)."
+    "Executive Briefing": (
+        "Primary executive landing: KPI cards, charts, owner triage, and navigation."
     ),
     CONTENT_OPTIMISATION_HUB_SHEET: (
         "Diagnostic command center: live title, meta, and H1–H6 health plus on-page score."
@@ -224,7 +230,7 @@ _HEADER_TOOLTIP_MESSAGES: dict[str, str] = {
     ),
     "Status": (
         "Workflow state for this URL row. Use the list to move through To Do, "
-        "In Progress, Review, and Completed."
+        "In Progress, In Review, and Done."
     ),
     "URL": ("Canonical audited URL. Use links to open the live page or related tabs."),
     "Target Keywords": (
@@ -412,13 +418,14 @@ def refresh_toc_descriptions_dynamic(wb: Workbook) -> None:
 #: Sheets whose bespoke freeze contracts must survive the final C2 normalisation:
 #: the Table of Contents (``A3``), the Content Optimisation Hub (banner-aware freeze),
 #: the Content Planner (``E2`` — columns A–D locked for hierarchy + page link),
-#: and the Executive Dashboard (``A8`` above the chart band).
+#: and Executive Briefing (``A10`` — pins the title/KPI/insights band above the
+#: non-overlapping chart grid).
 FREEZE_C2_EXEMPT_SHEETS: frozenset[str] = frozenset(
     {
         "Table of Contents",
         CONTENT_OPTIMISATION_HUB_SHEET,
         CONTENT_PLANNER_SHEET,
-        EXECUTIVE_DASHBOARD_SHEET,
+        EXECUTIVE_BRIEFING_SHEET,
     }
 )
 
@@ -437,7 +444,26 @@ def apply_freeze_c2_data_sheets(
     for name in wb.sheetnames:
         if name in skip:
             continue
-        set_freeze_panes_safe(wb[name], "C2")
+        set_freeze_panes_safe(wb[name], DATA_SHEET_FREEZE_PANES)
+
+
+def apply_bespoke_freeze_panes(wb: Workbook) -> None:
+    """Re-apply sheet-specific freeze contracts after ``apply_freeze_c2_data_sheets``.
+
+    Exempt sheets skip C2 normalisation but earlier formatting passes may leave
+    stale or corrupted freeze targets (e.g. Content Planner ``E194``). This pass
+    is the final authority for bespoke layouts.
+    """
+    if "Table of Contents" in wb.sheetnames:
+        set_freeze_panes_safe(wb["Table of Contents"], "A3")
+    if CONTENT_PLANNER_SHEET in wb.sheetnames:
+        set_freeze_panes_safe(wb[CONTENT_PLANNER_SHEET], "E2")
+    if CONTENT_OPTIMISATION_HUB_SHEET in wb.sheetnames:
+        set_freeze_panes_safe(
+            wb[CONTENT_OPTIMISATION_HUB_SHEET], CONTENT_HUB_FREEZE_PANES
+        )
+    if EXECUTIVE_BRIEFING_SHEET in wb.sheetnames:
+        set_freeze_panes_safe(wb[EXECUTIVE_BRIEFING_SHEET], EXECUTIVE_BRIEFING_FREEZE_PANES)
 
 
 def apply_workbook_export_guardrails(wb: Workbook) -> None:
@@ -448,5 +474,8 @@ def apply_workbook_export_guardrails(wb: Workbook) -> None:
         apply_action_required_guardrails(wb[name])
     refresh_toc_descriptions_dynamic(wb)
     apply_freeze_c2_data_sheets(wb)
-    # Last write wins: open the workbook on the Dashboard (TOC stays left-most).
+    apply_bespoke_freeze_panes(wb)
+    for name in wb.sheetnames:
+        apply_large_sheet_presentation(wb[name], name)
+    # Last write wins: open the workbook on Executive Briefing (TOC stays left-most).
     apply_workbook_active_tab(wb)

@@ -180,8 +180,8 @@ CMS_ACTION_URLS_COLUMNS: list[str] = [
 ]
 
 _FULL_SUITE_FORMAT_SHEETS: list[str] = [
+    "Executive Briefing",
     "Dashboard",
-    "Executive Dashboard",
     "Summary",
     "Priority URLs",
     "FixPlan",

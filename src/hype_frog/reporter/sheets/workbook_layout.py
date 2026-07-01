@@ -13,8 +13,9 @@ from hype_frog.reporter.sheets.config import (
     CONTENT_PLANNER_SHEET,
     CRAWL_LOG_SHEET,
     COMPETITOR_BENCHMARKS_SHEET,
-    EXECUTIVE_DASHBOARD_SHEET,
+    EXECUTIVE_BRIEFING_SHEET,
     IMAGE_INVENTORY_SHEET,
+    LEGACY_DASHBOARD_SHEET,
     LINK_EQUITY_MAP_SHEET,
     REDIRECT_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
@@ -23,22 +24,27 @@ from hype_frog.reporter.sheets.config import (
     STD_NAVY,
 )
 
-# Excel tab colours (RRGGBB — openpyxl ``tabColor``).
-TAB_COLOR_EXECUTIVE = "4472C4"
-TAB_COLOR_ACTIONABLE = "ED7D31"
-TAB_COLOR_CONTENT = "70AD47"
-TAB_COLOR_INVENTORY = "A6A6A6"
-TAB_COLOR_DIAGNOSTIC = "FFC000"
-TAB_COLOR_HISTORICAL = "D9D9D9"
-TAB_COLOR_REFERENCE = STD_NAVY
-TAB_COLOR_PLUGIN = "7030A0"
-TAB_COLOR_ADVANCED = "BFBFBF"
+# Excel tab colours (RRGGBB — openpyxl ``tabColor``) — persona grouping (Phase 1).
+# Six genuinely distinct hues (no grey-on-grey ambiguity in the tab bar); grey is
+# reserved for the archival/historical group only.
+TAB_COLOR_MANAGEMENT = "2C3E50"   # executive / summary / playbook (dark blue-grey)
+TAB_COLOR_CONTENT = "27AE60"    # content teams (green)
+TAB_COLOR_TECHNICAL = "2980B9"  # technical SEO / developers (blue)
+TAB_COLOR_INVENTORY = "E67E22"  # raw crawl inventories (orange)
+TAB_COLOR_ADVANCED = "8E44AD"   # hidden diagnostics (purple)
+TAB_COLOR_HISTORICAL = "95A5A6" # crawl log / delta / resolved (grey — archival only)
+
+# Backward-compatible aliases (tests and external refs during transition).
+TAB_COLOR_EXECUTIVE = TAB_COLOR_MANAGEMENT
+TAB_COLOR_ACTIONABLE = TAB_COLOR_TECHNICAL
+TAB_COLOR_DIAGNOSTIC = TAB_COLOR_TECHNICAL
+TAB_COLOR_REFERENCE = TAB_COLOR_MANAGEMENT
+TAB_COLOR_PLUGIN = TAB_COLOR_TECHNICAL
 
 # Visible left-to-right (after Table of Contents).
 VISIBLE_WORKBOOK_TAB_ORDER: tuple[str, ...] = (
     "Table of Contents",
-    "Dashboard",
-    EXECUTIVE_DASHBOARD_SHEET,
+    EXECUTIVE_BRIEFING_SHEET,
     "Summary",
     "Priority URLs",
     "FixPlan",
@@ -55,7 +61,7 @@ VISIBLE_WORKBOOK_TAB_ORDER: tuple[str, ...] = (
     "Playbook",
 )
 
-# Technical / historical tabs (hidden by default; linked from Dashboard + TOC).
+# Technical / historical tabs (hidden by default; linked from Executive Briefing + TOC).
 ADVANCED_WORKBOOK_TAB_ORDER: tuple[str, ...] = (
     "Issue Register",
     "Technical Diagnostics",
@@ -84,7 +90,12 @@ PREFERRED_WORKBOOK_TAB_ORDER: tuple[str, ...] = (
 
 _PREFERRED_TAB_SET: frozenset[str] = frozenset(PREFERRED_WORKBOOK_TAB_ORDER)
 
-HIDDEN_SHEETS_BY_DEFAULT: frozenset[str] = frozenset(ADVANCED_WORKBOOK_TAB_ORDER)
+# Legacy formula Dashboard retained one release (hidden); advanced tabs stay hidden.
+LEGACY_HIDDEN_SHEETS: frozenset[str] = frozenset({LEGACY_DASHBOARD_SHEET})
+
+HIDDEN_SHEETS_BY_DEFAULT: frozenset[str] = frozenset(
+    ADVANCED_WORKBOOK_TAB_ORDER
+) | LEGACY_HIDDEN_SHEETS
 
 SHEETS_EXCLUDED_FROM_TOC: frozenset[str] = frozenset({"IssueInventory"})
 
@@ -116,22 +127,22 @@ DASHBOARD_ADVANCED_SHEET_LINKS: tuple[tuple[str, str], ...] = (
 )
 
 _SHEET_TAB_COLORS: dict[str, str] = {
-    "Dashboard": TAB_COLOR_EXECUTIVE,
-    EXECUTIVE_DASHBOARD_SHEET: TAB_COLOR_EXECUTIVE,
-    "Summary": TAB_COLOR_EXECUTIVE,
-    "Priority URLs": TAB_COLOR_ACTIONABLE,
-    "FixPlan": TAB_COLOR_ACTIONABLE,
-    "Quick Wins": TAB_COLOR_ACTIONABLE,
+    EXECUTIVE_BRIEFING_SHEET: TAB_COLOR_MANAGEMENT,
+    LEGACY_DASHBOARD_SHEET: TAB_COLOR_MANAGEMENT,
+    "Summary": TAB_COLOR_MANAGEMENT,
+    "Playbook": TAB_COLOR_MANAGEMENT,
+    "Priority URLs": TAB_COLOR_TECHNICAL,
+    "FixPlan": TAB_COLOR_TECHNICAL,
+    "Quick Wins": TAB_COLOR_TECHNICAL,
+    "SitemapQA": TAB_COLOR_TECHNICAL,
+    "Template & Duplication Risks": TAB_COLOR_TECHNICAL,
+    AIOSEO_RECOMMENDATIONS_SHEET: TAB_COLOR_TECHNICAL,
     CONTENT_OPTIMISATION_HUB_SHEET: TAB_COLOR_CONTENT,
     CONTENT_PLANNER_SHEET: TAB_COLOR_CONTENT,
     CONTENT_HUB_METRICS_SHEET: TAB_COLOR_CONTENT,
     "Main": TAB_COLOR_INVENTORY,
-    AIOSEO_RECOMMENDATIONS_SHEET: TAB_COLOR_PLUGIN,
     "Link Inventory": TAB_COLOR_INVENTORY,
     "Broken Link Impact": TAB_COLOR_INVENTORY,
-    "SitemapQA": TAB_COLOR_DIAGNOSTIC,
-    "Template & Duplication Risks": TAB_COLOR_DIAGNOSTIC,
-    "Playbook": TAB_COLOR_REFERENCE,
     "Issue Register": TAB_COLOR_ADVANCED,
     "Technical Diagnostics": TAB_COLOR_ADVANCED,
     "Content & AI Readiness": TAB_COLOR_ADVANCED,
@@ -179,7 +190,11 @@ def apply_workbook_tab_colors(wb: Workbook) -> None:
 
 
 def apply_workbook_tab_visibility(wb: Workbook) -> None:
-    """Hide advanced / historical tabs by default."""
+    """Hide advanced / historical tabs and legacy Dashboard by default."""
+    from hype_frog.reporter.sheets.config import EXECUTIVE_DASHBOARD_SHEET
+
+    if EXECUTIVE_DASHBOARD_SHEET in wb.sheetnames:
+        del wb[EXECUTIVE_DASHBOARD_SHEET]
     for name in wb.sheetnames:
         ws = wb[name]
         if name in HIDDEN_SHEETS_BY_DEFAULT:
@@ -189,14 +204,14 @@ def apply_workbook_tab_visibility(wb: Workbook) -> None:
 
 
 # Tab the workbook should open on. The Table of Contents stays at index 0 (left-most),
-# but the client lands on the executive Dashboard rather than a wall of links.
-WORKBOOK_LANDING_SHEET: str = "Dashboard"
+# but the client lands on Executive Briefing rather than a wall of links.
+WORKBOOK_LANDING_SHEET: str = EXECUTIVE_BRIEFING_SHEET
 
 
 def apply_workbook_active_tab(
     wb: Workbook, *, landing_sheet: str = WORKBOOK_LANDING_SHEET
 ) -> None:
-    """Open the workbook on ``landing_sheet`` (default Dashboard); TOC stays index 0.
+    """Open the workbook on ``landing_sheet`` (default Executive Briefing); TOC stays index 0.
 
     Falls back to the Table of Contents when the landing sheet is absent. Ensures
     exactly one tab is selected so Excel lands deterministically on the target.
@@ -225,6 +240,7 @@ __all__ = [
     "DASHBOARD_ADVANCED_SHEET_LINKS",
     "DASHBOARD_ADVANCED_SHEETS_NOTE",
     "HIDDEN_SHEETS_BY_DEFAULT",
+    "LEGACY_HIDDEN_SHEETS",
     "PREFERRED_WORKBOOK_TAB_ORDER",
     "TOC_ADVANCED_SECTION_LABEL",
     "TOC_PRIMARY_SECTION_LABEL",

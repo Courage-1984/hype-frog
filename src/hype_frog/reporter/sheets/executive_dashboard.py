@@ -24,24 +24,30 @@ from hype_frog.reporter.dashboard_logic import (
 )
 from hype_frog.reporter.engine_io import _safe_sheet_name, _sanitize_excel_value
 from hype_frog.reporter.sheets.config import (
+    AUDIT_RUN_DETAILS_SHEET,
     DEBUG_EXCEL_ISOLATION_MODE,
+    EXECUTIVE_BRIEFING_FREEZE_PANES,
+    EXECUTIVE_BRIEFING_SHEET,
     EXECUTIVE_DASHBOARD_SHEET,
     STD_BLUE,
     STD_NAVY,
+)
+from hype_frog.reporter.sheets.dashboard import (
+    DASHBOARD_BRAND_A1,
+    apply_executive_briefing_triage,
 )
 from hype_frog.reporter.sheets.dashboard_config import (
     LIGHT_HEADER_COLOR,
     PANEL_BG_COLOR,
     VALUE_BLOCK_COLOR,
 )
+from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
 
 # Reuse the shared Dashboard structural palette so both dashboards read consistently.
 _KPI_FILL = PatternFill("solid", fgColor=VALUE_BLOCK_COLOR)
 _SECTION_FILL = PatternFill("solid", fgColor=LIGHT_HEADER_COLOR)
 _SOURCE_FILL = PatternFill("solid", fgColor="F3F4F6")
 _INSIGHT_FILL = PatternFill("solid", fgColor=PANEL_BG_COLOR)
-
-_KEY_INSIGHTS_ROW = 5
 
 # Curated tooltips for the less self-evident KPI cards (T5).
 _EXEC_CARD_TOOLTIPS: dict[str, str] = {
@@ -57,31 +63,38 @@ _EXEC_CARD_TOOLTIPS: dict[str, str] = {
     "Performance (PSI)": "Average mobile PageSpeed Insights performance score (0–100).",
 }
 
-# Visual grid: rows 1–58 are charts/KPIs; row 59 hint; source tables from row 60.
-_CHART_BAND_ROW_HEIGHT_PT = 15.0
+_KEY_INSIGHTS_ROW = 9
+
+# Visual grid (revised so charts never overlap): rows 1–8 header + KPI cards,
+# row 9 key insights, then four chart bands spaced ~19 rows apart (each chart is
+# ~8.4 cm ≈ 16–17 rows tall), the triage/navigation matrix, and finally the
+# chart source tables well below everything.
+_CHART_BAND_ROW_HEIGHT_PT = 24.0
 _LEFT_CHART_COL = "A"
 _RIGHT_CHART_COL = "G"
-_CHART_BAND_ROWS = 12
+_CHART_BAND_ROWS = 2
 
-_ROW_SEC_HEALTH = 6
-_ROW_CH_HEALTH = 7
+_ROW_SEC_HEALTH = 10
+_ROW_CH_HEALTH = 11
 
-_ROW_SEC_ISSUES = 19
-_ROW_CH_ISSUES = 20
+_ROW_SEC_ISSUES = 29
+_ROW_CH_ISSUES = 30
 
-_ROW_SEC_ACTIONS = 32
-_ROW_CH_ACTIONS = 33
+_ROW_SEC_ACTIONS = 48
+_ROW_CH_ACTIONS = 49
 
-_ROW_SEC_TOP_ISSUES = 45
-_ROW_CH_TOP_ISSUES = 46
+_ROW_SEC_TOP_ISSUES = 67
+_ROW_CH_TOP_ISSUES = 68
 
-_SOURCE_DATA_HINT_ROW = 59
+_BRIEFING_TRIAGE_START_ROW = 88
+
+_SOURCE_DATA_HINT_ROW = 112
 
 # Chart size presets (cm): full-width and half-sheet (A–F / G–L).
-_SIZE_HEALTH_FULL = (18.0, 7.8)
-_SIZE_HALF_CHART = (9.2, 7.0)
-_SIZE_DOUGHNUT = (9.0, 7.2)
-_SIZE_TOP_ISSUES = (18.0, 6.8)
+_SIZE_HEALTH_FULL = (18.0, 8.4)
+_SIZE_HALF_CHART = (9.2, 8.4)
+_SIZE_DOUGHNUT = (9.0, 8.4)
+_SIZE_TOP_ISSUES = (18.0, 8.4)
 
 _LOW_VALUE_URL_PATH_TOKENS: tuple[str, ...] = (
     "cart",
@@ -105,8 +118,9 @@ _LOW_VALUE_URL_PATH_TOKENS: tuple[str, ...] = (
     "terms",
 )
 
-# Chart tables in visible columns A–C below the chart area (Excel ignores hidden cols by default).
-CHART_SOURCE_FIRST_ROW = 60
+# Chart tables in visible columns A–C well below the chart area and the triage
+# matrix (Excel ignores hidden cols by default).
+CHART_SOURCE_FIRST_ROW = 114
 CHART_LABEL_COL = 1
 CHART_VALUE_COL = 2
 CHART_VALUE2_COL = 3
@@ -505,7 +519,7 @@ def _write_section_header(
     cell.fill = _SECTION_FILL
     cell.font = Font(bold=True, color=STD_NAVY, size=11)
     cell.alignment = Alignment(horizontal="left", vertical="center")
-    exec_ws.row_dimensions[row].height = 22
+    exec_ws.row_dimensions[row].height = 24
 
 
 def _write_key_insights(
@@ -521,7 +535,7 @@ def _write_key_insights(
     body.fill = _INSIGHT_FILL
     body.font = Font(size=9, color="1F2937")
     body.alignment = Alignment(wrap_text=True, vertical="center", horizontal="left")
-    exec_ws.row_dimensions[_KEY_INSIGHTS_ROW].height = 32
+    exec_ws.row_dimensions[_KEY_INSIGHTS_ROW].height = 36
 
 
 def _top_issues_by_impact(
@@ -942,6 +956,52 @@ def _add_top_issues_chart(
     _attach_chart(exec_ws, chart, anchor)
 
 
+def _write_briefing_header(
+    exec_ws: Worksheet,
+    *,
+    summary_metrics: SummaryMetricsPayload,
+) -> None:
+    """Rows 1–5: branded title block and audit run metadata."""
+    audit_esc = AUDIT_RUN_DETAILS_SHEET.replace("'", "''")
+    exec_ws.merge_cells("A1:L1")
+    title = exec_ws["A1"]
+    title.value = DASHBOARD_BRAND_A1
+    title.font = Font(bold=True, size=18, color=STD_NAVY)
+    title.alignment = Alignment(horizontal="left", vertical="center")
+    exec_ws.row_dimensions[1].height = 45
+
+    exec_ws.merge_cells("A2:L2")
+    subtitle = exec_ws["A2"]
+    subtitle.value = _build_projection_narrative(summary_metrics)
+    subtitle.alignment = Alignment(wrap_text=True, vertical="top")
+    subtitle.font = Font(size=13, color="374151")
+    exec_ws.row_dimensions[2].height = 52
+
+    meta_header_fill = PatternFill("solid", fgColor=LIGHT_HEADER_COLOR)
+    meta_header_font = Font(color="000000", bold=True, size=11)
+    exec_ws["A4"] = "Audit Run Details"
+    exec_ws["B4"] = "Value"
+    for ref in ("A4", "B4"):
+        exec_ws[ref].fill = meta_header_fill
+        exec_ws[ref].font = meta_header_font
+        exec_ws[ref].alignment = Alignment(horizontal="center", vertical="center")
+    exec_ws["A5"] = "Run Date"
+    exec_ws["B5"] = (
+        f'=IFERROR(INDEX(\'{audit_esc}\'!$B:$B,'
+        f'MATCH("Run Timestamp",\'{audit_esc}\'!$A:$A,0)),"")'
+    )
+    exec_ws.merge_cells("A3:L3")
+    exec_ws["A3"] = (
+        f'=IFERROR(INDEX(\'{audit_esc}\'!$B:$B,'
+        f'MATCH("Total URLs",\'{audit_esc}\'!$A:$A,0)),"") & " URLs crawled"'
+    )
+    exec_ws["A3"].font = Font(size=10, color=STD_NAVY, bold=True)
+    exec_ws["A3"].alignment = Alignment(horizontal="left", vertical="center")
+    for ref in ("A5", "B5"):
+        exec_ws[ref].fill = PatternFill("solid", fgColor=PANEL_BG_COLOR)
+        exec_ws[ref].alignment = Alignment(horizontal="center", vertical="center")
+
+
 def _write_kpi_cards(
     exec_ws: Worksheet,
     *,
@@ -950,35 +1010,6 @@ def _write_kpi_cards(
     traffic_lift: int,
     psi: float | None,
 ) -> None:
-    exec_ws.merge_cells("A1:L1")
-    title = exec_ws["A1"]
-    title.value = "Executive Dashboard — Visual Summary"
-    title.font = Font(bold=True, size=16, color=STD_NAVY)
-    title.alignment = Alignment(horizontal="left", vertical="center")
-
-    exec_ws.merge_cells("A2:L2")
-    subtitle = exec_ws["A2"]
-    subtitle.value = _build_projection_narrative(summary_metrics)
-    subtitle.alignment = Alignment(wrap_text=True, vertical="top")
-    subtitle.font = Font(size=9, color="374151")
-    exec_ws.row_dimensions[2].height = 40
-
-    # T5 — the Executive Dashboard must not be a navigation dead-end. Place return links
-    # in column N (clear of the A–L chart band) on the frozen header rows so they stay
-    # visible. Skipped in isolation mode, matching the standard nav helper.
-    if not DEBUG_EXCEL_ISOLATION_MODE:
-        for ref, target_sheet, label in (
-            ("N1", "Dashboard", "BACK TO DASHBOARD"),
-            ("N2", "Table of Contents", "BACK TO CONTENTS"),
-        ):
-            nav_cell = exec_ws[ref]
-            nav_cell.value = label
-            nav_cell.hyperlink = f"#'{target_sheet}'!A1"
-            nav_cell.style = "Hyperlink"
-            nav_cell.font = Font(color=STD_BLUE, underline="single", bold=True)
-            nav_cell.alignment = Alignment(horizontal="left", vertical="center")
-        exec_ws.column_dimensions["N"].width = 22
-
     cards: list[tuple[str, str]] = [
         ("SEO Health (now)", f"{summary_metrics.health_score_pct:.0f}%"),
         (
@@ -993,9 +1024,9 @@ def _write_kpi_cards(
             f"{psi:.0f}" if psi is not None else "N/A",
         ),
     ]
-    positions = [(1, 3), (3, 3), (5, 3), (7, 3), (9, 3), (11, 3)]
-    exec_ws.row_dimensions[3].height = 20
-    exec_ws.row_dimensions[4].height = 30
+    positions = [(1, 7), (3, 7), (5, 7), (7, 7), (9, 7), (11, 7)]
+    exec_ws.row_dimensions[7].height = 22
+    exec_ws.row_dimensions[8].height = 30
     for (col, row), (label, value) in zip(positions, cards, strict=False):
         end_col = col + 1
         label_merge = f"{get_column_letter(col)}{row}:{get_column_letter(end_col)}{row}"
@@ -1003,7 +1034,7 @@ def _write_kpi_cards(
         exec_ws.merge_cells(label_merge)
         exec_ws.merge_cells(value_merge)
         label_cell = exec_ws.cell(row=row, column=col, value=label)
-        label_cell.font = Font(bold=True, size=10, color=STD_NAVY)
+        label_cell.font = Font(bold=True, size=12, color=STD_NAVY)
         label_cell.fill = _KPI_FILL
         label_cell.alignment = Alignment(horizontal="center")
         tip = _EXEC_CARD_TOOLTIPS.get(label)
@@ -1015,7 +1046,7 @@ def _write_kpi_cards(
         value_cell.alignment = Alignment(horizontal="center")
 
 
-def write_executive_dashboard(
+def write_executive_briefing(
     writer: Any,
     *,
     summary_metrics: SummaryMetricsPayload,
@@ -1025,13 +1056,14 @@ def write_executive_dashboard(
     fixplan_rows: list[dict[str, Any]],
     hub_metrics_rows: list[dict[str, Any]] | None = None,
 ) -> None:
-    """Create visual Executive Dashboard worksheet with same-sheet chart sources."""
+    """Create Executive Briefing — merged visual dashboard and triage navigation."""
     book = writer.book
-    if EXECUTIVE_DASHBOARD_SHEET in book.sheetnames:
-        del book[EXECUTIVE_DASHBOARD_SHEET]
+    for legacy_name in (EXECUTIVE_DASHBOARD_SHEET, EXECUTIVE_BRIEFING_SHEET):
+        if legacy_name in book.sheetnames:
+            del book[legacy_name]
 
-    exec_ws = book.create_sheet(title=_safe_sheet_name(EXECUTIVE_DASHBOARD_SHEET))
-    writer.sheets[EXECUTIVE_DASHBOARD_SHEET] = exec_ws
+    exec_ws = book.create_sheet(title=_safe_sheet_name(EXECUTIVE_BRIEFING_SHEET))
+    writer.sheets[EXECUTIVE_BRIEFING_SHEET] = exec_ws
 
     extra_rows = [dict(row.values) for row in typed_extra_rows]
     fixplan_payloads = [
@@ -1057,6 +1089,7 @@ def write_executive_dashboard(
 
     psi = _avg_lighthouse_performance_mobile(extra_rows)
     traffic_lift = _traffic_lift_total(hub_metrics_rows)
+    _write_briefing_header(exec_ws, summary_metrics=summary_metrics)
     _write_kpi_cards(
         exec_ws,
         summary_metrics=summary_metrics,
@@ -1129,8 +1162,36 @@ def write_executive_dashboard(
         f"{_LEFT_CHART_COL}{_ROW_CH_TOP_ISSUES}",
     )
 
+    apply_executive_briefing_triage(
+        exec_ws,
+        dashboard_metrics=dashboard_metrics,
+        row_start=_BRIEFING_TRIAGE_START_ROW,
+    )
     _write_source_data_hint(exec_ws)
+    set_freeze_panes_safe(exec_ws, EXECUTIVE_BRIEFING_FREEZE_PANES)
     exec_ws.sheet_view.showGridLines = False
+
+
+def write_executive_dashboard(
+    writer: Any,
+    *,
+    summary_metrics: SummaryMetricsPayload,
+    typed_main_rows: list[MainRowPayload],
+    typed_extra_rows: list[ExtraRowPayload],
+    priority_rows: list[dict[str, Any]],
+    fixplan_rows: list[dict[str, Any]],
+    hub_metrics_rows: list[dict[str, Any]] | None = None,
+) -> None:
+    """Deprecated alias — writes :data:`EXECUTIVE_BRIEFING_SHEET` (Phase 2 merge)."""
+    write_executive_briefing(
+        writer,
+        summary_metrics=summary_metrics,
+        typed_main_rows=typed_main_rows,
+        typed_extra_rows=typed_extra_rows,
+        priority_rows=priority_rows,
+        fixplan_rows=fixplan_rows,
+        hub_metrics_rows=hub_metrics_rows,
+    )
 
 
 __all__ = [
@@ -1140,5 +1201,6 @@ __all__ = [
     "CHART_VALUE_COL",
     "ChartDataLayout",
     "populate_chart_data_sheet",
+    "write_executive_briefing",
     "write_executive_dashboard",
 ]

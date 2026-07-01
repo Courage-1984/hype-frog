@@ -8,9 +8,9 @@ from typing import Any, Callable
 from urllib.parse import urlparse
 
 import pandas as pd
-from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
+from hype_frog.checkpoint.link_inventory_cache import LinkInventoryCache
 from hype_frog.analysis.delta_engine import (
     RunSnapshot,
     build_delta_workbook_output,
@@ -63,13 +63,17 @@ from hype_frog.orchestration.export_workbook_constants import (
     PLAYBOOK_QUICK_REFERENCE_ROWS,
 )
 from hype_frog.orchestration.run_setup import RunSetup
-from hype_frog.pipeline.export import to_excel_safe
 from hype_frog.pipeline.image_inventory import (
     IMAGE_INVENTORY_COLUMNS,
     build_image_inventory_rows,
 )
+from hype_frog.pipeline.link_inventory_stream import populate_link_inventory_cache
 from hype_frog.pipeline.link_inventory import unique_external_health_counts
-from hype_frog.reporter.engine_io import apply_link_intelligence_summary_broken_formulas
+from hype_frog.reporter.engine_io import (
+    apply_link_intelligence_summary_broken_formulas,
+    write_dataframe_sheet,
+    write_link_inventory_sheet_streamed,
+)
 from hype_frog.reporter.engine_rows import (
     CONTENT_HUB_EXPORT_COLUMNS,
     CONTENT_HUB_METRICS_EXPORT_COLUMNS,
@@ -99,20 +103,20 @@ from hype_frog.reporter.sheets.config import (
     SCRIPT_INVENTORY_SHEET,
     SNIPPET_OPPORTUNITIES_SHEET,
 )
-from hype_frog.reporter.sheets.executive_dashboard import write_executive_dashboard
+from hype_frog.reporter.sheets.executive_dashboard import write_executive_briefing
 from hype_frog.reporter.sheets.merged_builders import (
     LINK_INTELLIGENCE_COLUMNS,
     build_broken_link_impact_rows,
     build_content_ai_readiness_rows,
     build_issue_register_rows,
     build_link_intelligence_rows,
-    build_link_inventory_rows,
     build_quick_wins_rows,
     build_redirect_map_rows,
     build_redirects_sheet_rows,
     build_technical_diagnostics_rows,
     build_template_duplication_risks_rows,
 )
+from hype_frog.reporter.stream_workbook import is_write_only_writer
 from hype_frog.reporter.summary_builder import (
     build_issue_inventory_rows,
     build_summary_rows,
@@ -122,6 +126,34 @@ from hype_frog.rules.playbook_entries import build_issue_playbook_rows
 from hype_frog.core.url_normalization import normalize_url_key
 
 logger = get_logger(__name__)
+
+
+def apply_deferred_readwrite_export_steps(
+    writer: Any,
+    *,
+    summary_metrics: SummaryMetricsPayload | None,
+    typed_main_rows: list[MainRowPayload],
+    typed_extra_rows: list[ExtraRowPayload],
+    priority_rows: list[dict[str, Any]],
+    fixplan_rows: list[dict[str, Any]],
+    hub_metrics_rows: list[dict[str, Any]] | None,
+) -> None:
+    """Run formula injection and briefing layout after a write_only streaming pass."""
+    apply_link_intelligence_summary_broken_formulas(writer.book)
+    if "Link Intelligence" in writer.book.sheetnames:
+        _ws_li = writer.book["Link Intelligence"]
+        _comp_idx = list(LINK_INTELLIGENCE_COLUMNS).index("Broken Links (computed)") + 1
+        _ws_li.column_dimensions[get_column_letter(_comp_idx)].hidden = True
+    if summary_metrics is not None:
+        write_executive_briefing(
+            writer,
+            summary_metrics=summary_metrics,
+            typed_main_rows=typed_main_rows,
+            typed_extra_rows=typed_extra_rows,
+            priority_rows=priority_rows,
+            fixplan_rows=fixplan_rows,
+            hub_metrics_rows=hub_metrics_rows,
+        )
 
 _AEO_ISSUE_NAMES = frozenset({
     "Low AEO Readiness Score",
@@ -167,6 +199,7 @@ class FullSuiteExportResult:
     run_timestamp: str
     summary_metrics: SummaryMetricsPayload | None
     current_snapshot: RunSnapshot | None
+    hub_metrics_rows: list[dict[str, Any]] | None = None
 
 
 def write_full_suite_workbook(
@@ -289,8 +322,8 @@ def write_full_suite_workbook(
     )
     logger.info("Writing summary and issue sheets...")
     summary_df = pd.DataFrame(summary_rows)
-    to_excel_safe(summary_df, writer, "Summary", index=False)
-    to_excel_safe(issue_inventory_df, writer, "IssueInventory", index=False)
+    write_dataframe_sheet(writer, summary_df, "Summary", startrow=1)
+    write_dataframe_sheet(writer, issue_inventory_df, "IssueInventory", startrow=1)
     template_duplication_rows = build_template_duplication_risks_rows(
         duplicate_rows=duplicate_rows,
         pattern_rows=pattern_rows,
@@ -330,30 +363,36 @@ def write_full_suite_workbook(
         cms_action_rows,
     )
     logger.info("Writing link and duplication analysis sheets...")
-    link_inventory_rows = build_link_inventory_rows(extra_rows)
-    write_dict_rows_sheet(
-        writer,
-        "Link Inventory",
-        merged_columns["Link Inventory"],
-        link_inventory_rows,
-    )
-    broken_link_impact_rows = build_broken_link_impact_rows(
-        link_inventory_rows, extra_rows
-    )
+    link_inventory_db = crawl_result.output_filename.replace(".xlsx", "_link_inventory.db")
+    link_inventory_cache = LinkInventoryCache(link_inventory_db)
+    try:
+        populate_link_inventory_cache(link_inventory_cache, extra_rows)
+        write_link_inventory_sheet_streamed(
+            writer,
+            link_inventory_cache,
+            sheet_name="Link Inventory",
+            columns=list(merged_columns["Link Inventory"]),
+        )
+        broken_link_impact_rows = build_broken_link_impact_rows(
+            link_inventory_cache.iter_rows_flat(),
+            extra_rows,
+        )
+        ok_unique_ext, total_unique_ext = unique_external_health_counts(
+            link_inventory_cache.iter_rows_flat()
+        )
+    finally:
+        link_inventory_cache.close(cleanup_file=True)
     write_dict_rows_sheet(
         writer,
         "Broken Link Impact",
         merged_columns["Broken Link Impact"],
         broken_link_impact_rows,
     )
-    ok_unique_ext, total_unique_ext = unique_external_health_counts(
-        link_inventory_rows
-    )
-
-    apply_link_intelligence_summary_broken_formulas(writer.book)
-    _ws_li = writer.book["Link Intelligence"]
-    _comp_idx = list(LINK_INTELLIGENCE_COLUMNS).index("Broken Links (computed)") + 1
-    _ws_li.column_dimensions[get_column_letter(_comp_idx)].hidden = True
+    if not is_write_only_writer(writer):
+        apply_link_intelligence_summary_broken_formulas(writer.book)
+        _ws_li = writer.book["Link Intelligence"]
+        _comp_idx = list(LINK_INTELLIGENCE_COLUMNS).index("Broken Links (computed)") + 1
+        _ws_li.column_dimensions[get_column_letter(_comp_idx)].hidden = True
 
     write_dict_rows_sheet(
         writer,
@@ -375,7 +414,7 @@ def write_full_suite_workbook(
         )
     else:
         fixplan_df = pd.DataFrame(columns=list(_FIXPLAN_TOP_BLOCKER_COLS))
-    to_excel_safe(fixplan_df, writer, "FixPlan", index=False)
+    write_dataframe_sheet(writer, fixplan_df, "FixPlan", startrow=1)
     quick_wins_rows = build_quick_wins_rows(
         extra_rows, fixplan_rows, summary_rules
     )
@@ -388,13 +427,6 @@ def write_full_suite_workbook(
     hub_base_rows, hub_metrics_rows = build_content_optimisation_hub_rows(
         typed_main_rows, typed_extra_rows, fixplan_rows
     )
-    _HUB_NOTE = (
-        "Scope note: Only indexable, crawlable pages with content improvement opportunities "
-        "are included. Non-indexable pages (4xx, noindex, blocked by robots) and pages with "
-        "no content-type issues are excluded. See Technical Diagnostics for the full URL inventory."
-    )
-    hub_base_rows = [{"Action Required": _HUB_NOTE}] + hub_base_rows
-    hub_metrics_rows = [{"URL": _HUB_NOTE}] + hub_metrics_rows
     content_hub_cols = list(CONTENT_HUB_EXPORT_COLUMNS)
     write_dict_rows_sheet(
         writer, CONTENT_OPTIMISATION_HUB_SHEET, content_hub_cols, hub_base_rows
@@ -406,11 +438,6 @@ def write_full_suite_workbook(
         _metrics_cols,
         hub_metrics_rows,
     )
-    _ws_met = writer.book[CONTENT_HUB_METRICS_SHEET]
-    _ws_met.merge_cells(f"A2:{get_column_letter(len(_metrics_cols))}2")
-    _ws_met["A2"].font = Font(italic=True, size=9, color="666666")
-    _ws_met["A2"].alignment = Alignment(horizontal="left", vertical="center")
-    _ws_met.row_dimensions[2].height = 18
     _parsed = urlparse(setup.target_input)
     _root_url = f"{_parsed.scheme}://{_parsed.netloc}/"
     content_planner_rows = build_content_planner_rows(typed_extra_rows, root_url=_root_url)
@@ -428,7 +455,7 @@ def write_full_suite_workbook(
         owner_for_issue_fn=owner_for_issue,
     )
     priority_df = pd.DataFrame(priority_rows)
-    to_excel_safe(priority_df, writer, "Priority URLs", index=False)
+    write_dataframe_sheet(writer, priority_df, "Priority URLs", startrow=1)
     total_urls = len(typed_extra_rows)
     pass_count = sum(
         1
@@ -502,7 +529,10 @@ def write_full_suite_workbook(
             "Value": summary_metrics.projected_pass_rate_pct,
         },
     ]
-    to_excel_safe(pd.DataFrame(dashboard_rows), writer, "Dashboard", index=False)
+    # TODO: [Next Major Release] Remove legacy hidden Dashboard tab — delete this write block
+    # and ``style_dashboard`` once Executive Briefing bookmark migration is complete.
+    # Tab hiding is enforced via ``LEGACY_HIDDEN_SHEETS`` in ``workbook_layout``.
+    write_dataframe_sheet(writer, pd.DataFrame(dashboard_rows), "Dashboard", startrow=1)
     critical_issues_rows = [
         {"Block": "Critical Issues", "URL": row.get("URL"), "Issue": row.get("Matched Issues")}
         for row in extra_rows
@@ -527,34 +557,34 @@ def write_full_suite_workbook(
     ][:10]
     action_hub_df = pd.DataFrame(critical_issues_rows + dashboard_quick_win_rows + growth_rows)
     if not action_hub_df.empty:
-        to_excel_safe(action_hub_df, writer, "Dashboard", index=False, startrow=20)
+        write_dataframe_sheet(writer, action_hub_df, "Dashboard", startrow=20)
     immediate_action_cols = ["URL", "Business Risk Score", "Why Prioritized", "Action Needed", "Owner", "Status"]
     immediate_actions_df = priority_df.reindex(columns=immediate_action_cols).head(5).copy()
     immediate_actions_df.insert(0, "Rank", range(1, len(immediate_actions_df) + 1))
     immediate_actions_startrow = len(dashboard_rows) + len(top_blockers) + 7
-    to_excel_safe(
-        pd.DataFrame([{"Immediate Actions": "Top 5 URLs by Business Risk Score"}]),
+    write_dataframe_sheet(
         writer,
+        pd.DataFrame([{"Immediate Actions": "Top 5 URLs by Business Risk Score"}]),
         "Dashboard",
-        index=False,
         startrow=immediate_actions_startrow,
     )
-    to_excel_safe(
+    write_dataframe_sheet(
+        writer,
         immediate_actions_df,
-        writer,
         "Dashboard",
-        index=False,
         startrow=immediate_actions_startrow + 2,
+        include_header=True,
     )
-    write_executive_dashboard(
-        writer,
-        summary_metrics=summary_metrics,
-        typed_main_rows=typed_main_rows,
-        typed_extra_rows=typed_extra_rows,
-        priority_rows=priority_rows,
-        fixplan_rows=fixplan_rows,
-        hub_metrics_rows=hub_metrics_rows,
-    )
+    if not is_write_only_writer(writer):
+        write_executive_briefing(
+            writer,
+            summary_metrics=summary_metrics,
+            typed_main_rows=typed_main_rows,
+            typed_extra_rows=typed_extra_rows,
+            priority_rows=priority_rows,
+            fixplan_rows=fixplan_rows,
+            hub_metrics_rows=hub_metrics_rows,
+        )
     playbook_rows = list(PLAYBOOK_QUICK_REFERENCE_ROWS)
 
     playbook_rows.extend(
@@ -677,8 +707,8 @@ def write_full_suite_workbook(
             "Value": int(1 if setup.check_og_images else 0),
         },
     ]
-    to_excel_safe(
-        pd.DataFrame(run_meta_rows), writer, AUDIT_RUN_DETAILS_SHEET, index=False
+    write_dataframe_sheet(
+        writer, pd.DataFrame(run_meta_rows), AUDIT_RUN_DETAILS_SHEET, startrow=1
     )
     delta_rows, resolved_issues_df, current_snapshot = build_delta_workbook_output(
         issue_inventory_df=issue_inventory_df,
@@ -690,8 +720,8 @@ def write_full_suite_workbook(
         output_path=output_filename,
         run_date=run_timestamp,
     )
-    to_excel_safe(pd.DataFrame(delta_rows), writer, "DeltaFromPreviousRun", index=False)
-    to_excel_safe(resolved_issues_df, writer, "ResolvedIssues", index=False)
+    write_dataframe_sheet(writer, pd.DataFrame(delta_rows), "DeltaFromPreviousRun", startrow=1)
+    write_dataframe_sheet(writer, resolved_issues_df, "ResolvedIssues", startrow=1)
     playbook_rows.extend(
         [
             {"Section": "", "Item": "", "Guideline": "", "Why It Matters": ""},
@@ -712,13 +742,13 @@ def write_full_suite_workbook(
                 "Why It Matters": row.get("Meaning", ""),
             }
         )
-    to_excel_safe(pd.DataFrame(playbook_rows), writer, "Playbook", index=False)
+    write_dataframe_sheet(writer, pd.DataFrame(playbook_rows), "Playbook", startrow=1)
     sitemap_rows = build_sitemapqa_rows(
         sitemap_meta=sitemap_meta,
         sitemap_files_meta=sitemap_files_meta,
         extra_rows=extra_rows,
     )
-    to_excel_safe(pd.DataFrame(sitemap_rows), writer, "SitemapQA", index=False)
+    write_dataframe_sheet(writer, pd.DataFrame(sitemap_rows), "SitemapQA", startrow=1)
     write_dict_rows_sheet(
         writer,
         "Redirects",
@@ -798,4 +828,5 @@ def write_full_suite_workbook(
         run_timestamp=run_timestamp,
         summary_metrics=summary_metrics,
         current_snapshot=current_snapshot,
+        hub_metrics_rows=hub_metrics_rows,
     )

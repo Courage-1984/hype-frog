@@ -130,8 +130,8 @@ async def _probe_image(
                         pass
                 if not is_success_status(status):
                     return result
-        except Exception as exc:
-            logger.debug("Image probe HEAD failed %r: %s", url, exc)
+        except Exception:
+            logger.debug("image_probe_head_failed", url=url, exc_info=True)
             return result
 
         try:
@@ -147,8 +147,8 @@ async def _probe_image(
                 else:
                     result["broken"] = True
                     return result
-        except Exception as exc:
-            logger.debug("Image probe GET failed %r: %s", url, exc)
+        except Exception:
+            logger.debug("image_probe_get_failed", url=url, exc_info=True)
             return result
 
     large_kb = get_large_image_size_kb()

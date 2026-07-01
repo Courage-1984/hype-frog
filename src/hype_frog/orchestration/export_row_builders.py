@@ -34,16 +34,24 @@ def _detect_wp_page_type(url: str, post_id: int) -> str:
 def _to_int(value: object, fallback: int = 0) -> int:
     try:
         return int(float(value)) if value is not None else fallback
-    except Exception as exc:
-        logger.debug("Could not coerce value to int (%r): %s", value, exc)
+    except Exception:
+        logger.debug(
+            "coerce_to_int_failed",
+            value=repr(value),
+            exc_info=True,
+        )
         return fallback
 
 
 def _to_float(value: object, fallback: float = 0.0) -> float:
     try:
         return float(value) if value is not None else fallback
-    except Exception as exc:
-        logger.debug("Could not coerce value to float (%r): %s", value, exc)
+    except Exception:
+        logger.debug(
+            "coerce_to_float_failed",
+            value=repr(value),
+            exc_info=True,
+        )
         return fallback
 
 

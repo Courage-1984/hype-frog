@@ -28,9 +28,11 @@ from hype_frog.analysis.snippet_opportunities import enrich_snippet_opportunity_
 from hype_frog.analysis.third_party_scripts import enrich_third_party_script_fields
 from hype_frog.analysis.topical_authority import enrich_topical_authority_fields
 from hype_frog.core.crawl_log import CrawlLogCollector
+from hype_frog.core.memory_guard import memory_circuit_breaker
 from hype_frog.crawler.robots_mapping import enrich_extra_rows_robots_mapping
+from hype_frog.orchestration.crawl_payload_loader import load_enrichment_row_pairs
 from hype_frog.orchestration.crawl_runner import CrawlExecutionResult
-from hype_frog.core.models import CrawlRowPayload, ExtraRowPayload, MainRowPayload
+from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.pipeline.assemble import (
     assemble_enriched_row,
     build_inlinks_map,
@@ -205,9 +207,8 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
     crawl_log = CrawlLogCollector()
     if crawl_result.crawl_log_entries is not None:
         crawl_log.entries.extend(crawl_result.crawl_log_entries)
-    crawl_rows: list[CrawlRowPayload] = list(crawl_result.crawl_rows)
-    main_rows = [row.main for row in crawl_rows]
-    extra_rows = [row.extra for row in crawl_rows]
+    main_rows, extra_rows = load_enrichment_row_pairs(crawl_result)
+    memory_circuit_breaker()
     sitemap_url_keys = {normalize_url_key(url) for url in crawl_result.sitemap_meta.keys()}
     async with create_session() as session:
         log_phase_banner("ENRICHMENT PHASE 1/5: Load GSC analytics context")
@@ -216,8 +217,12 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                 gsc_ctx = await asyncio.to_thread(
                     load_gsc_enrichment_context, crawl_result.target_input
                 )
-        except Exception as exc:
-            logger.error("GSC metrics unavailable due to runtime error: %s", exc)
+        except Exception:
+            logger.exception(
+                "gsc_analytics_context_load_failed",
+                phase="enrichment",
+                target=crawl_result.target_input,
+            )
             gsc_ctx = GSCEnrichmentContext({}, False, None, None)
         gsc_metrics = gsc_ctx.page_metrics
         gsc_data_freshness = format_gsc_data_freshness(
@@ -273,7 +278,11 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                         unique_inspection_urls,
                     )
             except Exception as exc:
-                logger.error("GSC URL Inspection batch failed: %s", exc)
+                logger.exception(
+                    "gsc_url_inspection_batch_failed",
+                    phase="enrichment",
+                    url_count=len(unique_inspection_urls),
+                )
                 inspection_by_url = {}
                 crawl_log.record(
                     url=crawl_result.target_input,

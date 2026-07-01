@@ -14,8 +14,10 @@ from typing import Any
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+from hype_frog.core.path_bootstrap import bootstrap_src_path, repo_root
+
+bootstrap_src_path(anchor=Path(__file__))
+ROOT = repo_root()
 
 from hype_frog.config import load_environment  # noqa: E402
 from hype_frog.core import configure_logging, get_logger  # noqa: E402

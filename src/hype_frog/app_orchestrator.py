@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 import time
 from urllib.parse import urlparse
+
+from hype_frog.core.path_utils import path_exists
 
 from hype_frog.core import get_logger
 from hype_frog.core.console import log_completion_panel
@@ -17,6 +18,7 @@ from hype_frog.orchestration.crawl_runner import execute_crawl
 from hype_frog.orchestration.enrichment_flow import run_enrichment
 from hype_frog.orchestration.export_flow import execute_export
 from hype_frog.orchestration.export_row_builders import build_aeo_rows, build_aioseo_rows
+from hype_frog.orchestration.crawl_payload_loader import crawl_row_count, release_audit_cache
 from hype_frog.orchestration.run_setup import RunSetup, resolve_run_setup
 from hype_frog.pipeline.enrich import value_or_default as _value_or_default_pipeline
 from hype_frog.snapshots import (
@@ -127,7 +129,7 @@ async def main(
             output_filename=output_filename,
             url_count=url_count,
             elapsed_seconds=time.perf_counter() - _start,
-            pdf_filename=_pdf if os.path.exists(_pdf) else None,
+            pdf_filename=_pdf if path_exists(_pdf) else None,
         )
         return
 
@@ -136,12 +138,13 @@ async def main(
     snapshot = build_crawl_replay_snapshot(setup, crawl_result, enrichment_result)
     save_crawl_snapshot(snapshot)
     output_filename = _execute_export_bundle(setup, crawl_result, enrichment_result)
+    release_audit_cache(crawl_result)
     _pdf = output_filename.replace(".xlsx", "_executive_summary.pdf")
     log_completion_panel(
         output_filename=output_filename,
-        url_count=len(crawl_result.crawl_rows),
+        url_count=crawl_row_count(crawl_result),
         elapsed_seconds=time.perf_counter() - _start,
-        pdf_filename=_pdf if os.path.exists(_pdf) else None,
+        pdf_filename=_pdf if path_exists(_pdf) else None,
     )
 
 

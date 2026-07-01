@@ -1,8 +1,21 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _hype_frog_test_logging(caplog: pytest.LogCaptureFixture, tmp_path: Path) -> None:
+    """Bootstrap hype_frog logging so caplog assertions work across the suite."""
+    from hype_frog.core.logger import configure_logging, reset_logging_for_tests
+
+    reset_logging_for_tests()
+    configure_logging(log_dir=tmp_path / "run_logs", console_level=logging.CRITICAL)
+    caplog.set_level(logging.DEBUG, logger="hype_frog")
+    yield
+    reset_logging_for_tests()
 
 
 @pytest.fixture

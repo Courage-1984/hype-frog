@@ -11,7 +11,7 @@ from openpyxl import load_workbook
 
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload, SummaryMetricsPayload
 from hype_frog.reporter.chart_compat import patch_xlsx_app_xml_for_excel_compatibility
-from hype_frog.reporter.sheets.config import EXECUTIVE_DASHBOARD_SHEET
+from hype_frog.reporter.sheets.config import EXECUTIVE_BRIEFING_SHEET
 from hype_frog.reporter.excel_engine import (
     adjust_sheet_format,
     apply_tab_hyperlinks,
@@ -206,7 +206,7 @@ def test_executive_dashboard_writes_charts_with_visible_source_rows(
     patch_xlsx_app_xml_for_excel_compatibility(out)
 
     wb = load_workbook(out)
-    exec_ws = wb[EXECUTIVE_DASHBOARD_SHEET]
+    exec_ws = wb[EXECUTIVE_BRIEFING_SHEET]
     assert len(exec_ws._charts) >= 4
     titles = {_chart_title_text(chart) for chart in exec_ws._charts}
     assert "Health components — current vs illustrative projected" in titles
@@ -214,7 +214,7 @@ def test_executive_dashboard_writes_charts_with_visible_source_rows(
     assert any("Content & AEO readiness" in title for title in titles)
     assert any("Top issues by URL impact" in title for title in titles)
     assert "High-intent pages by business risk" in titles
-    assert "Key insights:" in str(exec_ws.cell(row=5, column=1).value or "")
+    assert "Key insights:" in str(exec_ws.cell(row=9, column=1).value or "")
     assert exec_ws.cell(row=CHART_SOURCE_FIRST_ROW + 2, column=2).value is not None
     health_data_start = CHART_SOURCE_FIRST_ROW + 3
     health_labels = [
@@ -282,10 +282,10 @@ def test_adjust_sheet_format_tolerates_executive_dashboard_merges(
         fixplan_rows=sample_export_context["fixplan_rows"],  # type: ignore[arg-type]
         hub_metrics_rows=sample_export_context["hub_metrics_rows"],  # type: ignore[arg-type]
     )
-    adjust_sheet_format(writer, EXECUTIVE_DASHBOARD_SHEET)
+    adjust_sheet_format(writer, EXECUTIVE_BRIEFING_SHEET)
     writer.close()
     wb = load_workbook(out)
-    assert wb[EXECUTIVE_DASHBOARD_SHEET].freeze_panes == "A8"
+    assert wb[EXECUTIVE_BRIEFING_SHEET].freeze_panes == "A10"
     wb.close()
 
 
@@ -305,11 +305,11 @@ def test_executive_dashboard_survives_export_finalization(
         hub_metrics_rows=sample_export_context["hub_metrics_rows"],  # type: ignore[arg-type]
     )
     apply_tab_hyperlinks(writer)
-    adjust_sheet_format(writer, EXECUTIVE_DASHBOARD_SHEET)
+    adjust_sheet_format(writer, EXECUTIVE_BRIEFING_SHEET)
     apply_workbook_export_guardrails(writer.book)
     writer.close()
     patch_xlsx_app_xml_for_excel_compatibility(out)
     wb = load_workbook(out)
-    assert wb[EXECUTIVE_DASHBOARD_SHEET].freeze_panes == "A8"
-    assert len(wb[EXECUTIVE_DASHBOARD_SHEET]._charts) >= 4
+    assert wb[EXECUTIVE_BRIEFING_SHEET].freeze_panes == "A10"
+    assert len(wb[EXECUTIVE_BRIEFING_SHEET]._charts) >= 4
     wb.close()

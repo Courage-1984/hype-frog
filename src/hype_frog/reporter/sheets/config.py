@@ -10,25 +10,32 @@ from hype_frog.core.env_vars import (
     get_hf_excel_theme,
 )
 
-STD_NAVY: str = "2F3A4A"
-STD_WHITE: str = "FFFFFF"
+# ── Modern workbook theme (Phase 1 UI/UX refurbishment) ─────────────────────
+THEME_HEADER_BG: str = "222A35"   # slate/charcoal table headers
+THEME_HEADER_TEXT: str = "FFFFFF"
+GRID_BORDER: str = "E0E0E0"       # light grid lines (large inventory sheets)
+ZEBRA_FAINT: str = "FAFAFA"       # CF zebra anchor (sheets > 500 rows; Phase 4C)
+LARGE_SHEET_ROW_THRESHOLD: int = 500
+
+# Legacy brand aliases — prefer THEME_HEADER_* for new layout code.
+STD_NAVY: str = THEME_HEADER_BG
+STD_WHITE: str = THEME_HEADER_TEXT
 STD_BLUE: str = "2F6FA3"
 STD_FROG_GREEN: str = "92D050"
 
 # ── Canonical RAG palette (single source of truth) ───────────────────────────
-# Prefer these over inline hex literals so status colours read consistently
-# across every sheet and degrade acceptably in greyscale / for colour-blind
-# users. Fills pair with the matching *_FONT colour for legible text.
-RAG_RED: str = "FFC7CE"        # critical / fail fill
-RAG_RED_FONT: str = "9C0006"   # legible text on a red fill
-RAG_AMBER: str = "FFEB9C"      # warning fill
-RAG_AMBER_FONT: str = "9C6500"
-RAG_GREEN: str = "C6EFCE"      # pass / good fill
-RAG_GREEN_FONT: str = "006100"
-RAG_RED_SOFT: str = "FFC1C1"   # softer critical (e.g. severity row striping)
-RAG_AMBER_SOFT: str = "FFCC99" # softer warning (e.g. severity row striping)
+# Muted pastel fills with dark text for contrast compliance. Prefer importing
+# these over inline hex literals across conditional formatting passes.
+RAG_RED: str = "FCE8E6"        # critical / fail fill
+RAG_RED_FONT: str = "A51D24"   # legible text on a red fill
+RAG_AMBER: str = "FEF3D6"      # warning fill
+RAG_AMBER_FONT: str = "8F6B00"
+RAG_GREEN: str = "E6F4EA"      # pass / good fill
+RAG_GREEN_FONT: str = "137333"
+RAG_RED_SOFT: str = "FFF0F0"   # softer critical (severity row striping) — lighter than RAG_RED
+RAG_AMBER_SOFT: str = "FFFAED" # softer warning striping — lighter than RAG_AMBER
 RAG_NEUTRAL: str = "D9D9D9"    # not-applicable / to-do
-ZEBRA_BAND: str = "F7F7F7"     # alternating-row striping
+ZEBRA_BAND: str = "F7F7F7"     # legacy static zebra (≤500 rows; superseded by CF)
 
 # Office-style 3-stop heatmap scale (low → mid → high), reused by colour scales.
 HEATMAP_LOW: str = "F8696B"
@@ -36,7 +43,54 @@ HEATMAP_MID: str = "FFEB84"
 HEATMAP_HIGH: str = "63BE7B"
 DATA_BAR_BLUE: str = "638EC6"  # canonical data-bar colour
 
-# Canonical UK spelling for the Content Hub worksheet title (must match workbook-wide).
+# Navigation (Phase 3) — row-1 return strips land on the Executive Briefing tab.
+RETURN_TO_BRIEFING_LABEL: str = "← Return to Executive Briefing"
+WORKBOOK_NAV_TARGET_SHEET: str = "Executive Briefing"
+DATA_SHEET_FREEZE_PANES: str = "C3"  # return strip row + header row above data grid
+
+# Severity badge fills beyond core RAG (Main sheet).
+SEVERITY_OBSERVATION_FILL: str = "DBEAFE"
+SEVERITY_UNMEASURED_FILL: str = "E5E7EB"
+HTTP_STATUS_ERROR_FONT: str = "991B1B"
+HTTP_STATUS_TIMEOUT_FONT: str = "924012"
+
+# Unified workflow Status column (Phase 5) — FixPlan, Hub, AIOSEO, IssueInventory.
+STATUS_OPTIONS: tuple[str, ...] = ("To Do", "In Progress", "In Review", "Done")
+STATUS_TODO_FILL: str = "F8F9FA"   # neutral slate background
+STATUS_TODO_FONT: str = "222A35"   # legible text on todo fill
+# Hub grid: row 1 banner, row 2 headers, row 3+ data (Phase 4A — no scope-note row).
+CONTENT_HUB_DATA_START_ROW: int = 3
+
+
+def status_validation_list_formula() -> str:
+    """Excel ``DataValidation`` list literal for workflow ``Status`` columns."""
+    return '"' + ",".join(STATUS_OPTIONS) + '"'
+
+
+# Content Hub banner / workflow accents (non-RAG but canonicalised).
+HUB_BANNER_FILL: str = "BFE9E4"
+HUB_SCOPE_NOTE_FONT: str = "666666"
+HUB_STATUS_COMPLETED_BG: str = "137333"
+HUB_STATUS_PROGRESS_BG: str = "FFC000"
+HUB_OWNER_COPYWRITER_FILL: str = "92D050"
+HUB_OWNER_DEVELOPER_FILL: str = "5B9BD5"
+HUB_OWNER_SERVER_FILL: str = "ED7D31"
+
+# Main sheet triage columns visible by default (A–K).
+MAIN_TRIAGE_VISIBLE_HEADERS: tuple[str, ...] = (
+    "Health Icon",
+    "URL",
+    "Status Code",
+    "Indexability",
+    "Load Time (s)",
+    "Title",
+    "Meta Description",
+    "Word Count (Body)",
+    "SEO Health Score",
+    "Severity Badge",
+    "Action Needed",
+)
+MAIN_TRIAGE_COLUMN_COUNT: int = len(MAIN_TRIAGE_VISIBLE_HEADERS)
 CONTENT_OPTIMISATION_HUB_SHEET: str = "Content Optimisation Hub"
 CONTENT_PLANNER_SHEET: str = "Content Planner"
 # Companion sheet: per-URL crawl metrics and executive ROI fields split from the Hub.
@@ -52,10 +106,23 @@ LINK_EQUITY_MAP_SHEET: str = "Link Equity Map"
 ANCHOR_TEXT_AUDIT_SHEET: str = "Anchor Text Audit"
 SNIPPET_OPPORTUNITIES_SHEET: str = "Snippet Opportunities"
 COMPETITOR_BENCHMARKS_SHEET: str = "Competitor Benchmarks"
+EXECUTIVE_BRIEFING_SHEET: str = "Executive Briefing"
+# Freeze just the title + KPI + key-insights band (rows 1–9) so the KPI summary
+# stays visible while scrolling through the taller, non-overlapping chart grid.
+EXECUTIVE_BRIEFING_FREEZE_PANES: str = "A10"
+LEGACY_DASHBOARD_SHEET: str = "Dashboard"
+# Deprecated alias — Executive Dashboard tab removed in Phase 2.
 EXECUTIVE_DASHBOARD_SHEET: str = "Executive Dashboard"
 CHART_DATA_SHEET: str = "Chart Data"
 # Freeze through Assigned Owner + URL Slug Normalization; URL scrolls from column I.
 CONTENT_HUB_FREEZE_PANES: str = "I3"
+
+# Sheets that benefit from a reduced zoom level so dense card/triage layouts fit on
+# screen without horizontal scrolling (applied once, late, in workbook finalisation).
+SHEET_ZOOM_OVERRIDES: dict[str, int] = {
+    EXECUTIVE_BRIEFING_SHEET: 85,
+    "Main": 85,
+}
 
 DATA_HEAVY_TABS: set[str] = {
     "Main",
@@ -84,6 +151,8 @@ if get_hf_excel_theme() == "mocha":
     from hype_frog.reporter.mocha_theme import excel_palette_overrides
 
     _mocha = excel_palette_overrides()
+    THEME_HEADER_BG = _mocha["THEME_HEADER_BG"]
+    THEME_HEADER_TEXT = _mocha["THEME_HEADER_TEXT"]
     STD_NAVY = _mocha["STD_NAVY"]
     STD_WHITE = _mocha["STD_WHITE"]
     STD_BLUE = _mocha["STD_BLUE"]
@@ -105,6 +174,11 @@ if get_hf_excel_theme() == "mocha":
 
 
 __all__ = [
+    "THEME_HEADER_BG",
+    "THEME_HEADER_TEXT",
+    "GRID_BORDER",
+    "ZEBRA_FAINT",
+    "LARGE_SHEET_ROW_THRESHOLD",
     "STD_NAVY",
     "STD_WHITE",
     "STD_BLUE",
@@ -123,6 +197,27 @@ __all__ = [
     "HEATMAP_MID",
     "HEATMAP_HIGH",
     "DATA_BAR_BLUE",
+    "RETURN_TO_BRIEFING_LABEL",
+    "WORKBOOK_NAV_TARGET_SHEET",
+    "DATA_SHEET_FREEZE_PANES",
+    "status_validation_list_formula",
+    "STATUS_OPTIONS",
+    "STATUS_TODO_FILL",
+    "STATUS_TODO_FONT",
+    "CONTENT_HUB_DATA_START_ROW",
+    "SEVERITY_OBSERVATION_FILL",
+    "SEVERITY_UNMEASURED_FILL",
+    "HTTP_STATUS_ERROR_FONT",
+    "HTTP_STATUS_TIMEOUT_FONT",
+    "HUB_BANNER_FILL",
+    "HUB_SCOPE_NOTE_FONT",
+    "HUB_STATUS_COMPLETED_BG",
+    "HUB_STATUS_PROGRESS_BG",
+    "HUB_OWNER_COPYWRITER_FILL",
+    "HUB_OWNER_DEVELOPER_FILL",
+    "HUB_OWNER_SERVER_FILL",
+    "MAIN_TRIAGE_VISIBLE_HEADERS",
+    "MAIN_TRIAGE_COLUMN_COUNT",
     "CONTENT_OPTIMISATION_HUB_SHEET",
     "CONTENT_PLANNER_SHEET",
     "CONTENT_HUB_METRICS_SHEET",
@@ -137,9 +232,13 @@ __all__ = [
     "ANCHOR_TEXT_AUDIT_SHEET",
     "SNIPPET_OPPORTUNITIES_SHEET",
     "COMPETITOR_BENCHMARKS_SHEET",
+    "EXECUTIVE_BRIEFING_SHEET",
+    "EXECUTIVE_BRIEFING_FREEZE_PANES",
+    "LEGACY_DASHBOARD_SHEET",
     "EXECUTIVE_DASHBOARD_SHEET",
     "CHART_DATA_SHEET",
     "CONTENT_HUB_FREEZE_PANES",
+    "SHEET_ZOOM_OVERRIDES",
     "DATA_HEAVY_TABS",
     "env_bool",
     "DEBUG_EXCEL_ISOLATION_MODE",

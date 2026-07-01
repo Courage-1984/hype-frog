@@ -89,26 +89,56 @@ playwright install chromium
 
 ## Running
 
+**CLI source of truth:** structured subcommands below. Legacy flags (`--quick-test`, `--validate`, `--gsc-auth`, …) remain supported for scripts and CI.
+
+| Command | Purpose |
+|---------|---------|
+| `uv run hype-frog crawl` | Interactive crawl (prompts for URL, limits, profile) |
+| `uv run hype-frog crawl --url https://example.com/` | Non-interactive crawl with defaults |
+| `uv run hype-frog validate` | Check GSC/PSI/LLM credentials (no crawl) |
+| `uv run hype-frog auth gsc` | OAuth desktop flow for Search Console |
+| `uv run hype-frog setup playwright` | Install Chromium for accurate crawl mode |
+| `uv run hype-frog test quick` | Comprehensive smoke gate (preflight + pytest + crawl + audit) |
+| `uv run hype-frog test full-smoke` | Pre-export scale simulation |
+
+Full flag reference: [`commands.md`](commands.md).
+
 From the repository root, install the package into the uv environment (once per clone or after layout changes), then start the CLI:
 
 ```bash
 uv sync
-uv run hype-frog
-# equivalent:
+uv run hype-frog crawl
+# equivalent entrypoints:
+uv run hype-frog          # legacy interactive (same as crawl)
 uv run python -m hype_frog.main
 ```
 
-Follow CLI prompts for target URL or sitemap, limits, and profiles.
+Follow CLI prompts for target URL or sitemap, limits, and profiles when running without `--url`.
+
+### Distribution bundle (`dist/`)
+
+To ship a self-contained copy for internal teams (requires **uv** and **Python 3.12+** on the target machine — no PyInstaller executable):
+
+```bash
+uv run python scripts/build.py
+cd dist/hype-frog-0.3.0
+uv sync
+uv run hype-frog --help
+```
+
+The bundle includes `src/`, `docs/`, `scripts/`, `README.md`, `commands.md`, `pyproject.toml`, `uv.lock`, and `.env.example`.
 
 ### Validate secrets and APIs (no crawl)
 
 Check GSC OAuth files, PSI API access, and optional LLM keys before a full run:
 
 ```bash
+uv run hype-frog validate
+# legacy equivalent:
 uv run hype-frog --validate
 
 # Also confirm a crawl target matches a visible Search Console property
-uv run hype-frog --validate --validate-url "https://example.com/"
+uv run hype-frog validate --validate-url "https://example.com/"
 ```
 
 Exit code `0` means all required checks passed; `1` means at least one failed.
@@ -191,6 +221,20 @@ uv run hype-frog --regen-report --snapshot-id <uuid>
 Replay uses the same `export_flow` as a live run and writes a new workbook under `reports/latest/` with a `_regen_` suffix. See [`commands.md`](commands.md) for env vars (`HF_REGEN_REPORT`, `HF_SNAPSHOT_RETENTION_PER_DOMAIN`) and the manual regression workflow.
 
 **`ModuleNotFoundError: No module named 'hype_frog'`** means the editable project is not installed in the active venv. Run **`uv sync`** from the repo root (not only `uv venv` without syncing the project). Then retry `uv run …`.
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|----------------|-----|
+| `PSI_API_KEY` missing / PSI columns empty | Key not set or API disabled | Add key to `.env`; enable PageSpeed Insights API in Google Cloud |
+| GSC columns empty or auth errors | Missing OAuth files or wrong property | Run `uv run hype-frog auth gsc`; confirm the signed-in user has access to the crawl domain |
+| `403` / `429` from PSI | Quota or rate limiting | Increase `--psi-delay`; reduce URL cap; retry later |
+| Playwright / accurate mode unavailable | Browser binaries not installed | `uv sync --extra render` then `uv run hype-frog setup playwright` |
+| Workbook won't open / TOC mismatch | Client edited protected view state | Re-export; see [`docs/excel_reporting_standards.md`](docs/excel_reporting_standards.md) |
+| High memory on large crawls | Full in-memory row retention | Use `--streaming` or `HF_STREAMING=1`; lower URL cap or `--max-memory-mb` |
+| Permission denied writing reports | Output path not writable | Set `HF_OUTPUT_FILENAME` to a writable directory; ensure parent folders exist |
+
+For credential validation without a crawl: `uv run hype-frog validate`.
 
 ## Tests
 

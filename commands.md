@@ -55,6 +55,22 @@ uv run hype-frog --gsc-auth    # OAuth only → secrets/token.json
 
 ## Run audits
 
+### Structured CLI (recommended)
+
+```powershell
+uv run hype-frog crawl --url "https://example.com/sitemap.xml" --mode fast
+uv run hype-frog crawl --url "https://example.com/" --mode accurate --streaming
+uv run hype-frog crawl                              # interactive prompts (same as bare hype-frog)
+uv run hype-frog validate --url "https://example.com/"
+uv run hype-frog auth gsc
+uv run hype-frog setup playwright
+uv run hype-frog setup semantic
+uv run hype-frog test quick
+uv run hype-frog test full-smoke --fast
+```
+
+Legacy flags remain supported (`--quick-test`, `--gsc-auth`, `--validate`, etc.).
+
 ```powershell
 uv run hype-frog                              # interactive prompts
 uv run hype-frog --quick-test                 # preflight + pytest + 10-URL crawl + workbook audit
@@ -258,12 +274,6 @@ cd dist
 
 
 
-
-https://africanmarketingconfederation.org/page-sitemap.xml
-https://ticonafrica.org/page-sitemap.xml
-
-
-
 Set-Location c:\Users\Dr0sera\Github\hype-frog
 .\.venv\Scripts\Activate.ps1
 
@@ -274,3 +284,13 @@ python scripts\_check_snapshot_state.py
 hype-frog --regen-report
 
 
+
+https://africanmarketingconfederation.org/page-sitemap.xml
+https://ticonafrica.org/page-sitemap.xml
+
+
+
+
+
+https://africanmarketingconfederation.org/page-sitemap.xml
+https://ticonafrica.org/page-sitemap.xml

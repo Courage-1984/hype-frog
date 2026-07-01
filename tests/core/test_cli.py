@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from hype_frog.core.cli import UserConfig, _resolve_crawl_engine, get_user_config
+from hype_frog.core.logger import resolve_console_level_from_cli
+from hype_frog.main import _parse_args
 
 
 def test_resolve_crawl_engine_maps_choices() -> None:
@@ -67,3 +71,17 @@ def test_get_user_config_ignores_invalid_limits(monkeypatch: pytest.MonkeyPatch)
     assert config.high_value_slugs == []
     assert config.render_wait_ms == 4000
     assert config.selector_wait_ms == 3000
+
+
+def test_parse_args_verbose_and_quiet_flags() -> None:
+    verbose = _parse_args(["--verbose"])
+    quiet = _parse_args(["--quiet"])
+    assert verbose.verbose is True
+    assert verbose.quiet is False
+    assert quiet.verbose is False
+    assert quiet.quiet is True
+
+
+def test_verbose_quiet_map_to_console_levels() -> None:
+    assert resolve_console_level_from_cli(verbose=True, quiet=False) == logging.DEBUG
+    assert resolve_console_level_from_cli(verbose=False, quiet=True) == logging.WARNING

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import Iterator
 from unittest.mock import patch
@@ -212,5 +213,45 @@ async def test_execute_export_full_suite_writes_core_sheets(
     finally:
         workbook.close()
 
+    audit_errors = audit_workbook(crawl_result.output_filename, require_full_suite_sheets=True)
+    assert not any("Missing required sheets" in err for err in audit_errors)
+
+
+@pytest.mark.asyncio
+async def test_execute_export_streaming_write_only_full_suite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("HF_EXPORT_PDF", raising=False)
+    monkeypatch.delenv("HF_EXPORT_HTML", raising=False)
+    fixture = build_full_smoke_fixture(url_count=5)
+    crawl_result = _build_crawl_result(
+        tmp_path,
+        fixture,
+        output_name="streaming_suite.xlsx",
+        url_count=3,
+        full_suite=True,
+    )
+    crawl_result = replace(crawl_result, streaming=True)
+    setup = replace(
+        _build_run_setup(full_suite=True, target_input=fixture.sitemap_url),
+        streaming=True,
+    )
+
+    with _offline_enrichment_patches(fixture):
+        enrichment = await run_enrichment(crawl_result)
+
+    summary = execute_export(
+        setup,
+        crawl_result,
+        enrichment,
+        value_or_default_fn=_value_or_default,
+        extract_subfolder_fn=_extract_subfolder,
+        build_aeo_rows_fn=_build_aeo_rows,
+        build_aioseo_rows_fn=_build_aioseo_rows,
+    )
+
+    assert summary.full_suite is True
+    assert Path(crawl_result.output_filename).is_file()
     audit_errors = audit_workbook(crawl_result.output_filename, require_full_suite_sheets=True)
     assert not any("Missing required sheets" in err for err in audit_errors)

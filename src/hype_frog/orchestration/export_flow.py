@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-import os
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Callable
 
 import pandas as pd
+
+from hype_frog.core.path_utils import path_exists
 
 from hype_frog.analysis.delta_engine import (
     RunSnapshot,
@@ -16,7 +18,8 @@ from hype_frog.analysis.delta_engine import (
 )
 from hype_frog.core import get_logger
 from hype_frog.core.console import log_phase_banner
-from hype_frog.core.models import SummaryMetricsPayload
+from hype_frog.core.memory_guard import get_process_rss_mb, memory_circuit_breaker
+from hype_frog.core.models import ExtraRowPayload, MainRowPayload, SummaryMetricsPayload
 from hype_frog.orchestration.crawl_runner import CrawlExecutionResult
 from hype_frog.orchestration.enrichment_flow import EnrichmentResult
 from hype_frog.orchestration.export_executive_reports import write_executive_reports
@@ -28,6 +31,7 @@ from hype_frog.orchestration.export_registry import (
 from hype_frog.orchestration.export_workbook import (
     FullSuiteExportResult,
     WorkbookExportContext,
+    apply_deferred_readwrite_export_steps,
     write_full_suite_workbook,
 )
 from hype_frog.orchestration.run_setup import RunSetup
@@ -36,6 +40,12 @@ from hype_frog.reporter import adjust_sheet_format, apply_tab_hyperlinks
 from hype_frog.reporter.chart_compat import patch_xlsx_app_xml_for_excel_compatibility
 from hype_frog.reporter.excel_engine import apply_workbook_export_guardrails, write_dict_rows_sheet
 from hype_frog.reporter.sheets.config import COMPETITOR_BENCHMARKS_SHEET
+from hype_frog.reporter.stream_workbook import (
+    FormattingWorkbookWriter,
+    StreamingExcelWriter,
+    is_write_only_writer,
+    reopen_workbook_for_formatting,
+)
 from hype_frog.core.url_normalization import normalize_url_key  # noqa: F401 — re-exported for tests
 from hype_frog.rules import get_summary_rules
 
@@ -53,7 +63,7 @@ class ExportSummary:
 
 
 def _load_previous_snapshot(previous_audit_path: str) -> RunSnapshot | None:
-    previous_audit_exists = bool(previous_audit_path) and os.path.exists(previous_audit_path)
+    previous_audit_exists = bool(previous_audit_path) and path_exists(previous_audit_path)
     if previous_audit_exists:
         previous_snapshot = load_run_snapshot(previous_audit_path)
         if previous_snapshot is not None:
@@ -76,7 +86,7 @@ def _load_previous_snapshot(previous_audit_path: str) -> RunSnapshot | None:
     return None
 
 
-def _finalize_workbook(writer: pd.ExcelWriter, *, full_suite: bool) -> None:
+def _finalize_workbook(writer: Any, *, full_suite: bool) -> None:
     registry_config = ExportRegistryConfig(full_suite=full_suite)
     logger.info("Applying workbook formatting...")
     for final_step in get_finalization_steps():
@@ -106,8 +116,33 @@ def _persist_delta_snapshot(output_filename: str, current_snapshot: RunSnapshot 
         summary_path = delta_summary_path_for_workbook(output_filename)
         save_run_snapshot_json(summary_path, current_snapshot)
         logger.info("Delta summary saved to %s", summary_path)
-    except Exception as exc:
-        logger.warning("Could not save delta summary JSON: %s", exc)
+    except Exception:
+        logger.exception(
+            "delta_summary_save_failed",
+            phase="export",
+            output_filename=output_filename,
+        )
+
+
+def _build_export_rows(
+    typed_rows: list[MainRowPayload] | list[ExtraRowPayload],
+    *,
+    streaming: bool,
+) -> list[dict[str, Any]]:
+    if streaming:
+        return [row.values for row in typed_rows]
+    return sanitize_rows([row.values for row in typed_rows])
+
+
+def _create_workbook_writer(
+    output_filename: str,
+    *,
+    streaming: bool,
+) -> StreamingExcelWriter | pd.ExcelWriter:
+    if streaming:
+        logger.info("Export streaming enabled (openpyxl write_only workbook).")
+        return StreamingExcelWriter(output_filename)
+    return pd.ExcelWriter(output_filename, engine="openpyxl")
 
 
 def execute_export(
@@ -129,11 +164,12 @@ def execute_export(
     full_suite = crawl_result.full_suite
     previous_audit_path = crawl_result.previous_audit_path
     high_value_slugs = setup.high_value_slugs
+    streaming = setup.streaming or crawl_result.streaming
 
-    typed_main_rows = list(enrichment.typed_main_rows)
-    typed_extra_rows = list(enrichment.typed_extra_rows)
-    main_rows = sanitize_rows([row.values for row in typed_main_rows])
-    extra_rows = sanitize_rows([row.values for row in typed_extra_rows])
+    typed_main_rows = enrichment.typed_main_rows
+    typed_extra_rows = enrichment.typed_extra_rows
+    main_rows = _build_export_rows(typed_main_rows, streaming=streaming)
+    extra_rows = _build_export_rows(typed_extra_rows, streaming=streaming)
     status_by_url = dict(enrichment.status_by_url)
     main_by_url = {
         str(row.get("URL") or "").strip(): row for row in main_rows if row.get("URL")
@@ -141,6 +177,7 @@ def execute_export(
     summary_rules = get_summary_rules()
     previous_snapshot = _load_previous_snapshot(previous_audit_path)
 
+    hub_metrics_rows: list[dict[str, Any]] | None = None
     summary_rows: list[dict[str, Any]] = []
     fixplan_rows: list[dict[str, Any]] = []
     quick_wins_rows: list[dict[str, Any]] = []
@@ -151,13 +188,23 @@ def execute_export(
     current_snapshot: RunSnapshot | None = None
 
     log_phase_banner("EXPORT: Building workbook")
-    writer: pd.ExcelWriter | None = None
+    writer: StreamingExcelWriter | pd.ExcelWriter | None = None
+    formatting_writer: FormattingWorkbookWriter | None = None
+    rss_before_write = get_process_rss_mb()
     try:
-        writer = pd.ExcelWriter(output_filename, engine="openpyxl")
+        writer = _create_workbook_writer(output_filename, streaming=streaming)
         main_cols = list(main_rows[0].keys()) if main_rows else []
         logger.info("Writing Main sheet (%d rows)...", len(main_rows))
-        write_dict_rows_sheet(writer, "Main", main_cols, typed_main_rows)
-        adjust_sheet_format(writer, "Main")
+        main_row_source: Iterable[MainRowPayload | dict[str, Any]] = (
+            typed_main_rows if streaming else main_rows
+        )
+        write_dict_rows_sheet(writer, "Main", main_cols, main_row_source)
+        if streaming:
+            memory_circuit_breaker()
+            logger.info(
+                "Main sheet streamed (write_only); RSS during write ~%.0f MB",
+                get_process_rss_mb() or 0.0,
+            )
 
         if full_suite:
             suite_result: FullSuiteExportResult = write_full_suite_workbook(
@@ -189,11 +236,42 @@ def execute_export(
             run_timestamp = suite_result.run_timestamp
             summary_metrics = suite_result.summary_metrics
             current_snapshot = suite_result.current_snapshot
+            hub_metrics_rows = suite_result.hub_metrics_rows
 
-        _finalize_workbook(writer, full_suite=full_suite)
+        if streaming:
+            assert writer is not None
+            writer.close()
+            writer = None
+            formatting_writer = reopen_workbook_for_formatting(output_filename)
+            if full_suite:
+                apply_deferred_readwrite_export_steps(
+                    formatting_writer,
+                    summary_metrics=summary_metrics,
+                    typed_main_rows=typed_main_rows,
+                    typed_extra_rows=typed_extra_rows,
+                    priority_rows=priority_rows,
+                    fixplan_rows=fixplan_rows,
+                    hub_metrics_rows=hub_metrics_rows,
+                )
+            _finalize_workbook(formatting_writer, full_suite=full_suite)
+            formatting_writer.close()
+            formatting_writer = None
+        else:
+            assert writer is not None
+            _finalize_workbook(writer, full_suite=full_suite)
+
         logger.info("Audit complete! Report saved to %s", output_filename)
+        if streaming:
+            rss_after_write = get_process_rss_mb()
+            logger.info(
+                "Export streaming RSS: before=%.0f MB after=%.0f MB",
+                rss_before_write or 0.0,
+                rss_after_write or 0.0,
+            )
         _persist_delta_snapshot(output_filename, current_snapshot)
     finally:
+        if formatting_writer is not None:
+            formatting_writer.close()
         if writer is not None:
             writer.close()
 

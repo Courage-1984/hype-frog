@@ -24,6 +24,7 @@ from hype_frog.diagnostics.integration_validator import (
     format_validation_report,
 )
 from hype_frog.core.run_config import RunConfig, quick_test_run_config
+from hype_frog.orchestration.crawl_payload_loader import crawl_row_count, load_crawl_row_payloads
 from hype_frog.orchestration.crawl_runner import CrawlExecutionResult, execute_crawl
 from hype_frog.orchestration.enrichment_flow import run_enrichment
 from hype_frog.orchestration.export_flow import execute_export
@@ -172,7 +173,7 @@ def run_quick_test_pytest(targets: tuple[str, ...] = _DEFAULT_PYTEST_TARGETS) ->
 
 
 def _validate_crawl_rows(crawl_result: CrawlExecutionResult) -> QuickTestPhaseResult:
-    rows = crawl_result.crawl_rows
+    rows = load_crawl_row_payloads(crawl_result)
     if not rows:
         return QuickTestPhaseResult(
             name="Crawl contracts",
@@ -318,11 +319,11 @@ async def run_quick_test_gate(options: QuickTestOptions | None = None) -> int:
 
     contract_phase = _validate_crawl_rows(crawl_result)
     report.phases.append(contract_phase)
-    report.urls_crawled = len(crawl_result.crawl_rows)
+    report.urls_crawled = crawl_row_count(crawl_result)
     report.output_filename = crawl_result.output_filename
     if contract_phase.detail:
         counts: Counter[str] = Counter()
-        for row in crawl_result.crawl_rows:
+        for row in load_crawl_row_payloads(crawl_result):
             state = str(row.main.values.get("Extraction State") or "").strip().lower()
             counts[state] += 1
         report.extraction_counts = dict(counts)

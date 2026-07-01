@@ -163,11 +163,11 @@ Applied after each crawl result is assembled and before cache persistence, using
 
 All ROI math is None-safe; missing or malformed inputs collapse to neutral values.
 
-## Executive dashboard aggregation
+## Executive Briefing aggregation
 
 The Content Optimisation Hub appends (without reordering existing columns): `Potential Traffic Lift`, `AEO Visibility Gain`, `Instant Priority`, `Search Intent`.
 
-The Executive Dashboard uses **`INDEX`/`MATCH`** on Hub columns (no hard-coded column letters): total estimated monthly traffic lift sums Hub lifts; critical priority pages counts Hub rows with `Instant Priority == CRITICAL`.
+Executive Briefing uses **`INDEX`/`MATCH`** on Hub columns (no hard-coded column letters): total estimated monthly traffic lift sums Hub lifts; critical priority pages counts Hub rows with `Instant Priority == CRITICAL`.
 
 Hub conditional formatting: colour scale on **`Semantic AEO Score`**; **`CRITICAL`** rows highlighted bold white-on-red.
 
@@ -179,9 +179,11 @@ Reporter output stays **openpyxl**-based; do not introduce XlsxWriter on the wor
 
 Tab order and visibility are defined in `reporter/sheets/workbook_layout.py`.
 
-**Primary (visible):** Table of Contents, Dashboard, Executive Dashboard, Summary, Priority URLs, FixPlan, Quick Wins, Content Optimisation Hub, Content Hub Metrics, Main, AIOSEO Recommendations, Link Inventory, Broken Link Impact, SitemapQA, Template & Duplication Risks, Playbook.
+**Primary (visible):** Table of Contents, Executive Briefing, Summary, Priority URLs, FixPlan, Quick Wins, Content Optimisation Hub, Content Planner, Content Hub Metrics, Main, AIOSEO Recommendations, Link Inventory, Broken Link Impact, SitemapQA, Template & Duplication Risks, Playbook.
 
-**Advanced (hidden by default, linked from Dashboard/TOC):** Issue Register (canonical backlog), Technical Diagnostics, Content & AI Readiness, Link Intelligence, CMS Action URLs, Redirects, Redirect Map, Robots.txt Analysis, Crawl Log, Link Equity Map, Anchor Text Audit, Snippet Opportunities, Competitor Benchmarks (when `--competitors` / `HF_COMPETITORS` set), Script Inventory, Image Inventory, ResolvedIssues, DeltaFromPreviousRun, Audit Run Details. Legacy **IssueInventory** is still exported for delta tooling but hidden and omitted from the TOC.
+**Legacy (hidden one release):** Dashboard (formula KPI alias).
+
+**Advanced (hidden by default, linked from Executive Briefing/TOC):** Issue Register (canonical backlog), Technical Diagnostics, Content & AI Readiness, Link Intelligence, CMS Action URLs, Redirects, Redirect Map, Robots.txt Analysis, Crawl Log, Link Equity Map, Anchor Text Audit, Snippet Opportunities, Competitor Benchmarks (when `--competitors` / `HF_COMPETITORS` set), Script Inventory, Image Inventory, ResolvedIssues, DeltaFromPreviousRun, Audit Run Details. Legacy **IssueInventory** is still exported for delta tooling but hidden and omitted from the TOC.
 
 Legacy standalone Technical/Content/AEO tabs are **not** emitted in full-suite mode; merged **Technical Diagnostics** and **Content & AI Readiness** supersede them.
 
