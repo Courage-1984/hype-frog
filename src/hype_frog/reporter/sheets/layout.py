@@ -828,6 +828,7 @@ URL_LIKE_HEADERS: frozenset[str] = frozenset(
         "Current OG-Image URL",
         "OG Image URL",
         "Redirect Target",
+        "Sitemap First Image",
     }
 )
 

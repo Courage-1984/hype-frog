@@ -414,6 +414,8 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "Last Updated": None,
     "Change Frequency": None,
     "Priority": None,
+    "Sitemap Image Count": None,
+    "Sitemap First Image": None,
     "Internal Links Count": 0,
     "External Links Count": 0,
     "Unique Internal Links Count": 0,

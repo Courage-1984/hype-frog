@@ -13,6 +13,22 @@ logger = get_logger(__name__)
 
 MAX_SITEMAP_RECURSION_DEPTH = 3
 
+# WordPress/Yoast (and the Google sitemap image extension) namespace for
+# <image:image><image:loc>...</image:loc></image:image> children of <url>.
+# ElementTree resolves declared prefixes to this URI regardless of the prefix
+# used in the source XML, so this must match the extension's actual URI —
+# a site using a non-standard image-sitemap URI will silently yield 0 images.
+_IMAGE_SITEMAP_NAMESPACE = {"image": "http://www.google.com/schemas/sitemap-image/1.1"}
+
+
+def _image_urls_for_url_node(url_node: ET.Element) -> list[str]:
+    urls: list[str] = []
+    for image_node in url_node.findall("image:image", _IMAGE_SITEMAP_NAMESPACE):
+        loc_node = image_node.find("image:loc", _IMAGE_SITEMAP_NAMESPACE)
+        if loc_node is not None and loc_node.text and loc_node.text.strip():
+            urls.append(loc_node.text.strip())
+    return urls
+
 
 async def _fetch_sitemap_xml(url: str, session: aiohttp.ClientSession) -> str:
     timeout = aiohttp.ClientTimeout(total=10)
@@ -93,6 +109,7 @@ async def parse_sitemap(
                 seen_page_urls.add(page_url)
                 discovered_urls.append(page_url)
             if page_url not in sitemap_meta:
+                image_urls = _image_urls_for_url_node(url_node)
                 sitemap_meta[page_url] = {
                     "changefreq": (
                         url_node.findtext("changefreq").strip()
@@ -111,6 +128,8 @@ async def parse_sitemap(
                     ),
                     "source_sitemap": sitemap_key,
                     "sitemap_kind": kind,
+                    "image_count": len(image_urls),
+                    "first_image_url": image_urls[0] if image_urls else None,
                 }
 
         sitemap_files_meta[sitemap_key] = {

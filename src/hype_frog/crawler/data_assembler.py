@@ -239,10 +239,17 @@ def init_rows(
     )
     main_data = main_payload.values
     extra = extra_payload.values
-    if sitemap_meta and url in sitemap_meta:
-        extra["Change Frequency"] = sitemap_meta[url].get("changefreq")
-        extra["Priority"] = sitemap_meta[url].get("priority")
-        extra["Last Updated"] = sitemap_meta[url].get("lastmod")
+    # sitemap_meta keys are normalised upstream in crawl_runner.execute_crawl()
+    # using the same normalize_url_key(); look up by normalized_url (not the
+    # raw url param) so this stays correct even if a future caller passes an
+    # un-normalized URL.
+    meta = (sitemap_meta or {}).get(normalized_url) or (sitemap_meta or {}).get(url)
+    if meta:
+        extra["Change Frequency"] = meta.get("changefreq")
+        extra["Priority"] = meta.get("priority")
+        extra["Last Updated"] = meta.get("lastmod")
+        extra["Sitemap Image Count"] = meta.get("image_count")
+        extra["Sitemap First Image"] = meta.get("first_image_url")
     return main_payload, extra_payload
 
 

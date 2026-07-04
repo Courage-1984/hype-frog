@@ -24,6 +24,24 @@ _INDEX = """<?xml version="1.0" encoding="UTF-8"?>
 </sitemapindex>
 """
 
+_URLSET_WITH_IMAGES = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>https://x.test/with-images</loc>
+    <image:image>
+      <image:loc>https://x.test/img1.jpg</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://x.test/img2.jpg</image:loc>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://x.test/no-images</loc>
+  </url>
+</urlset>
+"""
+
 
 class _FakeResponse:
     def __init__(self, status: int, text: str) -> None:
@@ -83,6 +101,16 @@ async def test_parse_sitemap_handles_http_error_gracefully() -> None:
     assert urls == []
     assert meta == {}
     assert files_meta == {}
+
+
+async def test_parse_urlset_extracts_image_image_locs() -> None:
+    session = _FakeSession({"https://x.test/images.xml": (200, _URLSET_WITH_IMAGES)})
+    _urls, meta, _files_meta = await parse_sitemap("https://x.test/images.xml", session)
+
+    assert meta["https://x.test/with-images"]["image_count"] == 2
+    assert meta["https://x.test/with-images"]["first_image_url"] == "https://x.test/img1.jpg"
+    assert meta["https://x.test/no-images"]["image_count"] == 0
+    assert meta["https://x.test/no-images"]["first_image_url"] is None
 
 
 async def test_parse_sitemap_dedupes_repeated_locs() -> None:

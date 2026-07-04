@@ -61,6 +61,43 @@ def test_build_sitemapqa_rows_skips_non_success_transport_status() -> None:
     assert crawled_missing[0]["Sitemap URL"] == "https://example.com/not-listed"
 
 
+def test_build_sitemapqa_rows_surfaces_sitemap_image_fields() -> None:
+    rows = build_sitemapqa_rows(
+        sitemap_meta={
+            "https://example.com/with-images": {
+                "lastmod": "2026-06-01",
+                "changefreq": "weekly",
+                "priority": "0.8",
+                "source_sitemap": "https://example.com/sitemap.xml",
+                "sitemap_kind": "image",
+                "image_count": 2,
+                "first_image_url": "https://example.com/hero.jpg",
+            },
+            "https://example.com/no-images": {
+                "lastmod": None,
+                "changefreq": None,
+                "priority": None,
+                "source_sitemap": "https://example.com/sitemap.xml",
+                "sitemap_kind": "urlset",
+                "image_count": 0,
+                "first_image_url": None,
+            },
+        },
+        sitemap_files_meta=None,
+        extra_rows=[],
+    )
+    with_images = next(
+        row for row in rows if row.get("Sitemap URL") == "https://example.com/with-images"
+    )
+    no_images = next(
+        row for row in rows if row.get("Sitemap URL") == "https://example.com/no-images"
+    )
+    assert with_images["Sitemap Image Count"] == 2
+    assert with_images["Sitemap First Image"] == "https://example.com/hero.jpg"
+    assert no_images["Sitemap Image Count"] == 0
+    assert no_images["Sitemap First Image"] is None
+
+
 def test_build_sitemapqa_rows_flags_crawled_missing_from_sitemap() -> None:
     rows = build_sitemapqa_rows(
         sitemap_meta={

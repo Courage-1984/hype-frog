@@ -184,6 +184,36 @@ Parsed once per domain during crawl (`crawler/robots_mapping.py`); per-URL `can_
 
 Full-suite exports add **Robots.txt Analysis** (raw file, rules, blocked URLs, sitemap vs robots conflicts).
 
+## Sitemap metadata
+
+`crawler/sitemap.py::parse_sitemap()` returns per-URL metadata keyed by the raw
+`<loc>` text: `changefreq`, `priority`, `lastmod`, `source_sitemap`,
+`sitemap_kind`, plus `image_count` / `first_image_url` parsed from
+`<image:image><image:loc>` children (the WordPress/Yoast sitemap image
+extension namespace `http://www.google.com/schemas/sitemap-image/1.1` —
+hardcoded; a site using a non-standard image-sitemap URI yields 0 images).
+`orchestration/crawl_runner.py::execute_crawl()` re-keys this dict with
+`normalize_url_key()` immediately after parsing, before it is threaded through
+the BFS loop — so by the time it reaches `crawler/data_assembler.py::init_rows()`
+both the row's `normalized_url` and the `sitemap_meta` keys use the same
+normalization and line up correctly.
+
+`init_rows()` copies these onto the Extra row (`EXTRA_ROW_DEFAULTS`):
+
+| Extra key | Source |
+|---|---|
+| `Change Frequency` | `sitemap_meta[url]["changefreq"]` |
+| `Priority` | `sitemap_meta[url]["priority"]` |
+| `Last Updated` | `sitemap_meta[url]["lastmod"]` |
+| `Sitemap Image Count` | `sitemap_meta[url]["image_count"]` |
+| `Sitemap First Image` | `sitemap_meta[url]["first_image_url"]` |
+
+The **SitemapQA** sheet (`orchestration/export_registry.py::build_sitemapqa_rows`)
+independently surfaces the same `sitemap_meta` values per sitemap URL as
+`Sitemap <lastmod>` / `Sitemap <changefreq>` / `Sitemap <priority>` /
+`Sitemap Image Count` / `Sitemap First Image`, computed directly from
+`sitemap_meta` rather than from the Extra row fields above.
+
 ## Crawl log (D7)
 
 **Crawl Log** sheet: errors/warnings only from fetch, render, extract, intent, PSI, and GSC phases. Columns: Timestamp, URL, Phase, Error Type, Error Detail, Recovery Action Taken. Empty runs show a baseline summary row.

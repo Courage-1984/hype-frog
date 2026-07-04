@@ -253,6 +253,42 @@ def test_assemble_character_encoding_remains_excel_safe_after_sanitize() -> None
     assert main_payload.values["Extraction State"] == "skipped"
 
 
+def test_init_rows_populates_sitemap_metadata_including_images() -> None:
+    sitemap_meta = {
+        "https://example.com/page": {
+            "changefreq": "weekly",
+            "priority": "0.8",
+            "lastmod": "2026-01-01",
+            "image_count": 2,
+            "first_image_url": "https://example.com/img1.jpg",
+        }
+    }
+    main_dict, extra_dict = init_rows("https://example.com/page", sitemap_meta)
+    extra_payload = ExtraRowPayload.model_validate(extra_dict)
+    assert extra_payload.values["Change Frequency"] == "weekly"
+    assert extra_payload.values["Priority"] == "0.8"
+    assert extra_payload.values["Last Updated"] == "2026-01-01"
+    assert extra_payload.values["Sitemap Image Count"] == 2
+    assert extra_payload.values["Sitemap First Image"] == "https://example.com/img1.jpg"
+
+
+def test_init_rows_sitemap_lookup_survives_url_normalization_mismatch() -> None:
+    # sitemap_meta keys are normalized upstream; init_rows must look up by the
+    # normalized URL, not require the raw url param to already match exactly.
+    sitemap_meta = {
+        "https://example.com/page": {
+            "changefreq": "monthly",
+            "priority": None,
+            "lastmod": None,
+            "image_count": 0,
+            "first_image_url": None,
+        }
+    }
+    main_dict, extra_dict = init_rows("https://example.com/page/", sitemap_meta)
+    extra_payload = ExtraRowPayload.model_validate(extra_dict)
+    assert extra_payload.values["Change Frequency"] == "monthly"
+
+
 def test_finalize_row_state_http_404_sets_not_indexable() -> None:
     main_dict, extra_dict = init_rows("https://example.com/missing", None)
     main_payload = MainRowPayload.model_validate(main_dict)

@@ -313,6 +313,15 @@ see fix below.)
 silently fell through to the `IFERROR` fallback (`FixPlan!A1`) instead of the
 correct row. It now matches against `'FixPlan'!A:A`.
 
+## SitemapQA — image/changefreq/priority columns
+
+Per sitemap-URL rows on **SitemapQA** (`export_registry.build_sitemapqa_rows`)
+carry `Sitemap <lastmod>` / `Sitemap <changefreq>` / `Sitemap <priority>` /
+`Sitemap Image Count` / `Sitemap First Image`, computed directly from
+`sitemap_meta` (see `docs/data_contracts.md` — Sitemap metadata). `Sitemap First
+Image` is in `URL_LIKE_HEADERS` (`layout.py`) so it renders as a fixed-width,
+single-line hyperlink-style cell rather than wrapping.
+
 ## Autofilter coverage
 
 Actionable workflow sheets in ``AUTO_FILTER_SHEETS`` (``config.py``) always receive
