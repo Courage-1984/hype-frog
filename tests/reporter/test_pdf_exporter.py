@@ -40,6 +40,13 @@ def _sample_ctx() -> ReportContext:
     return ctx
 
 
+def _extract_pdf_text(pdf_path: str) -> str:
+    from pypdf import PdfReader
+
+    reader = PdfReader(pdf_path)
+    return "\n".join(page.extract_text() or "" for page in reader.pages)
+
+
 def test_export_executive_summary_pdf_writes_file(tmp_path: Path) -> None:
     pytest.importorskip("reportlab")
     workbook = tmp_path / "audit.xlsx"
@@ -51,6 +58,30 @@ def test_export_executive_summary_pdf_writes_file(tmp_path: Path) -> None:
     assert pdf_path is not None
     assert Path(pdf_path).exists()
     assert Path(pdf_path).stat().st_size > 0
+
+
+def test_export_executive_summary_pdf_content_reflects_real_ctx_values(
+    tmp_path: Path,
+) -> None:
+    """Beyond file-exists/non-empty: extract real PDF text and assert the
+    actual KPI values, client name, and issue names from ReportContext appear
+    in the rendered document — not just that something got written."""
+    pytest.importorskip("reportlab")
+    workbook = tmp_path / "audit.xlsx"
+    workbook.write_bytes(b"")
+    pdf_path = export_executive_summary_pdf(
+        workbook_path=str(workbook),
+        ctx=_sample_ctx(),
+    )
+    assert pdf_path is not None
+    text = _extract_pdf_text(pdf_path)
+
+    assert "example.com" in text
+    assert "Example Co" in text
+    assert "Missing Meta Description" in text
+    assert "Missing Title" in text
+    assert "72" in text  # seo_health_mean
+    assert "65" in text  # aeo_readiness_mean
 
 
 def test_export_handles_empty_context(tmp_path: Path) -> None:

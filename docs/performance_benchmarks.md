@@ -202,3 +202,23 @@ Target diagnostic: `scripts/benchmark_crawl.py` — 100-URL subset profile.
 | Event-loop lag | Optional: `loop.slow_callback_duration` (3.12+) |
 
 Baseline numbers to be recorded after first benchmark run.
+
+---
+
+## Open performance work items
+
+Carried forward from the performance/concurrency sprint tracker (`PERF_TODO.md`, now archived — its completed items are reflected in the sections above):
+
+- Profile Link Inventory peak RAM on ~1k / 5k / 11k URL fixtures (live crawl).
+- Evaluate trimming `Link Details` from in-memory extra rows after the export sheet is built.
+- Extend `check_memory_limit` to sample RSS every N URLs, not only on batch flush.
+- Audit Playwright context retention on multi-domain crawls (close idle contexts?).
+- Offload `apply_search_intent` / spaCy to a thread pool (batch or per-URL).
+- Audit enrichment `asyncio.gather` fan-out vs. connector `limit_per_host`.
+- Measure event-loop lag under 4 workers + accurate mode.
+- Latency-aware jitter (increase delay when p95 TTFB rises).
+- Align `PLAYWRIGHT_MAX_SESSIONS` with interactive worker presets.
+- Document / tune `HTTP_CONNECTOR_LIMIT_PER_HOST` vs. worker count.
+- Regression gate: workbook row-hash comparison pre/post optimisation.
+- Serial external HEAD pacing in `link_inventory.py` (P2 hotspot, still open).
+- Intent classification serialised per URL on the crawl critical path in `crawl_runner_bfs.py` (P3 hotspot, still open).

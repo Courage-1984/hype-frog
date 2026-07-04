@@ -55,7 +55,7 @@
 
 9. **Consolidated layout.**
 
-* **`./docs/`** (Exactly 3): `system_architecture.md`, `data_contracts.md`, `excel_reporting_standards.md`.
+* **`./docs/`** (Exactly 5): `system_architecture.md`, `data_contracts.md`, `excel_reporting_standards.md`, `logging_architecture.md`, `performance_benchmarks.md`.
 * **`.cursor/rules/`** (Exactly 8): `architecture.mdc`, `auto_documentation.mdc`, `crawler_engine.mdc`, `excel_engine.mdc`, `analysis.mdc`, `orchestration.mdc`, `rules_engine.mdc`, `config.mdc`.
 * **Roots:** `README.md`, `.cursorrules`.
 * **Excluded from cap:** operational logs, backlog prompts, `reports/` output — not governance canon.

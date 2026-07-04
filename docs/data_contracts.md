@@ -48,7 +48,7 @@ This distinguishes “not in export” from a measured zero. `GSC Coverage Note`
 | `fn` | callable | Predicate on extra-row dict |
 | `scope` | str | `url` (default), `site`, or `server` |
 
-`get_summary_rules()` returns 99 rules. Non-URL scopes produce **aggregate** IssueInventory rows with `Affected URL Count` (`reporter/summary_builder.py`).
+`get_summary_rules()` returns 99 rules. Non-URL scopes produce **aggregate** Issue Register rows with `Affected URL Count` (`reporter/summary_builder.py`).
 
 ## Extraction observability
 

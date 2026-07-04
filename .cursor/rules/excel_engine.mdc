@@ -35,7 +35,7 @@ Treat **workbook integrity** and **client-safe XML** as highest priority. Prefer
 
 ## Nuclear view-state guardrails
 
-For sheets that are not **Main** or **Dashboard**, when the used grid is very small (`max_row` / `max_column` thresholds as in code), **disable** freeze panes and autofilter to avoid fragile client view state.
+For sheets that are not **Main** or **Executive Briefing**, when the used grid is very small (`max_row` / `max_column` thresholds as in code), **disable** freeze panes and autofilter to avoid fragile client view state.
 
 ## Numeric conditional formatting
 
@@ -51,7 +51,7 @@ Do not inject **non-numeric strings** into columns governed by numeric condition
 - The **Action Required** column is **formula-driven** in `engine_rows.py`: `=IF(<On-Page Optimization Score> >= 85, "Complete", "Needs Copy")`. So the live ready literal is **`Complete`** (score ≥ 85) and the blocked literal is **`Needs Copy`** (score < 85).
 - **Allowed literal set** (`engine_guardrails._ACTION_REQUIRED_ALLOWED`): **`Complete`**, **`Needs Copy`**, **`Needs Optimisation`**. `engine_guardrails.apply_action_required_guardrails` normalises legacy/free-text values (e.g. `Ready to Publish`, `completed` → `Complete`; `Needs Optimization` → `Needs Optimisation`; unknown text → `Needs Copy`) and **skips the `Content Optimisation Hub` sheet**, which relies on the conditional rules below instead.
 - **Conditional formatting** (`reporter/sheets/conditional.py` `apply_content_hub_conditional_rules`) highlights **`Needs Copy`** in **red** (white bold), **`Needs Optimisation`** in amber, and **`Complete`** / `Ready to Publish` in green via `CellIsRule`. Do not rename literals without updating both the formula and the format rules.
-- **Status** is a separate workflow column (data-validation list `To Do, In Progress, Review, Completed`); Dashboard completion metrics count `Status == Completed`, not Action Required.
+- **Status** is a separate workflow column (data-validation list `To Do, In Progress, Review, Completed`), distinct from Action Required — do not conflate the two when adding metrics or conditional rules.
 - Do not pass **`None`** to action columns where populated text is required for formatting.
 
 ## Reporter module ownership
@@ -62,8 +62,8 @@ Do not inject **non-numeric strings** into columns governed by numeric condition
 - `engine_rows.py` — report-row assembly and domain-specific shaping.
 - `excel_engine.py` — compatibility facade / re-export, not the behaviour monolith.
 - `narrative_engine.py` — generates natural-language insight copy for sheet cells. Read-only consumer of row dicts; no workbook writes.
-- `summary_builder.py` — aggregates cross-sheet summary statistics consumed by the Dashboard and Executive Dashboard. No workbook writes.
-- `dashboard_logic.py` — computes Dashboard KPI values and chart data from assembled rows. No workbook writes; callers in `sheets/dashboard.py` own actual worksheet writes.
+- `summary_builder.py` — aggregates cross-sheet summary statistics consumed by Executive Briefing. No workbook writes. (The legacy `Dashboard` sheet was retired; `Executive Briefing` is the sole executive landing tab.)
+- `dashboard_logic.py` — computes KPI values and chart data from assembled rows. No workbook writes; `sheets/executive_dashboard.py` owns the actual worksheet writes.
 - `chart_compat.py` — openpyxl chart compatibility shims. Isolated here so chart-specific workarounds do not leak into other writers.
 - `workbook_audit.py` — post-write audit pass that validates workbook state (TOC alignment, sheet name collisions, formula integrity). **Read-only** against the workbook — must not modify cells; raise or log issues only.
 - `pdf_exporter.py` — generates a PDF executive report when `HF_EXPORT_PDF=1`. Generation is **non-fatal**: failures log at `WARNING` and do not block xlsx or HTML delivery. See PDF env vars below.

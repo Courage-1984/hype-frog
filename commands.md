@@ -272,29 +272,7 @@ cd dist
 ```
 
 
-
-
-Set-Location c:\Users\Dr0sera\Github\hype-frog
-.\.venv\Scripts\Activate.ps1
-
-# Optional: confirm a snapshot exists
-python scripts\_check_snapshot_state.py
-
-
-hype-frog --regen-report
-
-
-
 https://africanmarketingconfederation.org/page-sitemap.xml
 https://ticonafrica.org/page-sitemap.xml
-
-
-
-
-
-https://africanmarketingconfederation.org/page-sitemap.xml
-https://ticonafrica.org/page-sitemap.xml
-
-
 
 

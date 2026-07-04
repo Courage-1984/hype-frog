@@ -36,6 +36,10 @@ build/
 *.pkg
 *.pyz
 
+# Scratch report artifacts accidentally generated at repo root during manual
+# verification runs (should always land under reports/ instead).
+/SEO_AEO_Audit_*
+
 # Note: archive_legacy/ is NOT ignored here. 
 # It is best practice to commit it once as a historical backup, 
 # and then delete the folder in a future commit once you are 100% stable.

@@ -188,12 +188,18 @@ def test_multiple_crawled_urls_all_emitted() -> None:
 
 
 def test_root_url_with_trailing_slash_matches_normalized_key() -> None:
+    # root_url has no trailing slash; the crawled homepage URL does. The row
+    # builder keys rows off crawled URLs only (root_url is not consulted), so
+    # this must produce exactly one "Home" row and must not fabricate a second
+    # row from the nav/footer link alone.
     extra = _make_extra(
         "https://example.com/",
         [_nav_link("https://example.com/blog/", "Blog")],
     )
     rows = build_content_planner_rows([extra], root_url="https://example.com")
-    assert len(rows) >= 0
+    assert len(rows) == 1
+    assert rows[0]["Page link"] == "https://example.com/"
+    assert rows[0]["Primary"] == "Home"
 
 
 def test_multiple_extra_rows_all_urls_emitted() -> None:

@@ -110,8 +110,8 @@ Runtime rows are dictionary pairs wrapped by Pydantic models (details: [data_con
 
 `rules/registry.py` defines **`IssueRule`** (`severity`, `name`, `fn`, `scope` defaulting to `"url"`). `get_summary_rules()` returns **99** rules: **90** URL-scoped, **8** site-scoped, **1** server-scoped.
 
-- **URL scope** — one IssueInventory / FixPlan row per affected URL.
-- **Site / server scope** — aggregated rows in **Issue Register** (canonical backlog) with labels `(site-wide)` / `(server config)` and **`Affected URL Count`**. Legacy **IssueInventory** remains exported for delta/history tooling but is hidden and excluded from the TOC.
+- **URL scope** — one Issue Register / FixPlan row per affected URL.
+- **Site / server scope** — aggregated rows in **Issue Register** (canonical backlog) with labels `(site-wide)` / `(server config)` and **`Affected URL Count`**. The legacy **IssueInventory** sheet is no longer exported — Issue Register is the sole issue-backlog tab.
 
 ## PSI, Lighthouse, and CrUX
 
@@ -181,9 +181,9 @@ Tab order and visibility are defined in `reporter/sheets/workbook_layout.py`.
 
 **Primary (visible):** Table of Contents, Executive Briefing, Summary, Priority URLs, FixPlan, Quick Wins, Content Optimisation Hub, Content Planner, Content Hub Metrics, Main, AIOSEO Recommendations, Link Inventory, Broken Link Impact, SitemapQA, Template & Duplication Risks, Playbook.
 
-**Legacy (hidden one release):** Dashboard (formula KPI alias).
+**Advanced (hidden by default, linked from Executive Briefing/TOC):** Issue Register (canonical backlog), Technical Diagnostics, Content & AI Readiness, Link Intelligence, CMS Action URLs, Redirects, Redirect Map, Robots.txt Analysis, Crawl Log, Link Equity Map, Anchor Text Audit, Snippet Opportunities, Competitor Benchmarks (when `--competitors` / `HF_COMPETITORS` set), Script Inventory, Image Inventory, ResolvedIssues, DeltaFromPreviousRun, Audit Run Details.
 
-**Advanced (hidden by default, linked from Executive Briefing/TOC):** Issue Register (canonical backlog), Technical Diagnostics, Content & AI Readiness, Link Intelligence, CMS Action URLs, Redirects, Redirect Map, Robots.txt Analysis, Crawl Log, Link Equity Map, Anchor Text Audit, Snippet Opportunities, Competitor Benchmarks (when `--competitors` / `HF_COMPETITORS` set), Script Inventory, Image Inventory, ResolvedIssues, DeltaFromPreviousRun, Audit Run Details. Legacy **IssueInventory** is still exported for delta tooling but hidden and omitted from the TOC.
+The legacy **Dashboard** sheet and the legacy **IssueInventory** sheet have both been retired — neither is exported anymore. Executive Briefing is the sole executive landing tab; Issue Register is the sole issue-backlog tab.
 
 Legacy standalone Technical/Content/AEO tabs are **not** emitted in full-suite mode; merged **Technical Diagnostics** and **Content & AI Readiness** supersede them.
 

@@ -103,7 +103,6 @@ src/hype_frog/pipeline/broken_links.py
 src/hype_frog/pipeline/content_cluster.py
 src/hype_frog/pipeline/content_duplicates.py
 src/hype_frog/pipeline/content_hub_metrics.py
-src/hype_frog/pipeline/context.py
 src/hype_frog/pipeline/enrich.py
 src/hype_frog/pipeline/export.py
 src/hype_frog/pipeline/graph_engine.py
@@ -139,7 +138,6 @@ src/hype_frog/reporter/sheets/config.py
 src/hype_frog/reporter/sheets/dashboard.py
 src/hype_frog/reporter/sheets/dashboard_config.py
 src/hype_frog/reporter/sheets/executive_dashboard.py
-src/hype_frog/reporter/sheets/fixplan.py
 src/hype_frog/reporter/sheets/large_sheet_presentation.py
 src/hype_frog/reporter/sheets/layout.py
 src/hype_frog/reporter/sheets/links.py

@@ -11,7 +11,7 @@ New test files go in the matching package. Do not create top-level test files ou
 ## No live network in unit tests
 
 Mock `aiohttp` sessions and Playwright interactions with `unittest.mock`. Async tests use `pytest-asyncio`.
-Real network calls are only permitted in `tests/integration/` and must be marked `@pytest.mark.integration` — they are excluded from the default `uv run pytest` run.
+`tests/integration/` is for offline, multi-module smoke tests that exercise real code paths (no internals mocked out) against local fixtures — it does not by itself mean "live network." Today every file in `tests/integration/` is offline and runs as part of the default `uv run pytest`. If a test genuinely needs live network/credentials, mark it `@pytest.mark.integration` (registered in `pytest.ini`) so it can be deselected with `-m "not integration"`; no such test exists yet.
 
 ## Extraction state must be asserted explicitly
 
@@ -22,7 +22,7 @@ Tests covering crawl or fetch outcomes must assert `Extraction State` against on
 - **Env var tests:** use `monkeypatch.setenv` / `monkeypatch.delenv` — see `tests/orchestration/test_run_setup.py` for the established pattern
 - **Fixtures:** shared HTML/JSON test data lives in `tests/fixtures/` — reuse before creating new files
 - **Async tests:** annotate with `@pytest.mark.asyncio`; import async helpers from `pytest_asyncio` where needed
-- **Integration tests:** marked `@pytest.mark.integration` and excluded from the default run
+- **Integration tests:** live-network/credential tests are marked `@pytest.mark.integration` and excluded via `-m "not integration"`; offline multi-module tests in `tests/integration/` are unmarked and run by default
 
 ## Run the suite
 

@@ -33,6 +33,8 @@ diagnostics/ provides CLI gates (--quick-test, --full-smoke-test, --validate)
 | `rules/` | `IssueRule` registry (99 rules), scoring, playbook entries — pure functions only |
 | `reporter/` | Excel/HTML/PDF output — do not mutate pipeline dicts here |
 | `checkpoint/` | Durable crawl progress |
+| `snapshots/` | Crawl-replay snapshot store (`models.py`, `replay.py`, `store.py`) backing `--regen-report` / `HF_SNAPSHOT_ID` |
+| `validators/` | Schema validation (`schema_validator.py`) |
 | `diagnostics/` | CLI validation gates: `quick_test.py`, `full_smoke_test.py`, `full_smoke_fixtures.py`, `integration_validator.py` |
 
 ## Critical guardrails (non-obvious)
@@ -56,15 +58,18 @@ diagnostics/ provides CLI gates (--quick-test, --full-smoke-test, --validate)
 | `docs/system_architecture.md` | Pipeline stages, BFS spider split, PSI/CrUX split, AEO, discovery ordering, orchestration layers |
 | `docs/data_contracts.md` | Row shapes, Pydantic, IssueRule scope, GSC null semantics, delta models and sheet columns |
 | `docs/excel_reporting_standards.md` | Workbook integrity, TOC, view state, conditional formatting, orchestration export builders, Mocha theme |
+| `docs/logging_architecture.md` | Structured logging stack, `run_id`, JSONL schema, console/file split |
+| `docs/performance_benchmarks.md` | Concurrency model, memory profile, event-loop/throughput bottlenecks, benchmark methodology |
 | `commands.md` | CLI command cheat sheet (PowerShell + bash), delta/previous-run flags |
 | `.env.example` | All env vars with purpose and defaults |
+| `DISTRIBUTION.md` | Standalone `.exe` distribution/setup guide for end users |
 
 ## Cursor governance rules
 | File | Scope |
 |---|---|
 | `.cursor/rules/architecture.mdc` | alwaysApply — module boundaries, async, logging, typing, AI governance |
 | `.cursor/rules/auto_documentation.mdc` | alwaysApply — doc sync, testing invariants |
-| `.cursor/rules/excel_engine.mdc` | alwaysApply — workbook integrity, reporter module ownership |
+| `.cursor/rules/excel_engine.mdc` | glob: `reporter/**/*.py` — workbook integrity, reporter module ownership |
 | `.cursor/rules/crawler_engine.mdc` | glob: crawler / extractors / pipeline / core / orchestration |
 | `.cursor/rules/analysis.mdc` | glob: analysis/ |
 | `.cursor/rules/orchestration.mdc` | glob: orchestration/ |

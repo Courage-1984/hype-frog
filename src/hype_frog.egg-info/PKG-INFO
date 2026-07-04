@@ -289,11 +289,14 @@ Canonical technical manuals (keep in sync with code changes):
 - [`docs/system_architecture.md`](docs/system_architecture.md) — layers, staged pipeline, **BFS spider**, fetch modes, **AEO**, **search intent**, **ROI**, executive dashboard, workbook integrity pointers.
 - [`docs/data_contracts.md`](docs/data_contracts.md) — `main` / `extra` envelopes, Pydantic contracts, additive keys, checkpoints, **crawl replay snapshots**.
 - [`docs/excel_reporting_standards.md`](docs/excel_reporting_standards.md) — reporter module split, sanitization, ghost/nuclear view state, TOC, Content Hub literals.
+- [`docs/logging_architecture.md`](docs/logging_architecture.md) — structured logging stack, `run_id`, JSONL schema.
+- [`docs/performance_benchmarks.md`](docs/performance_benchmarks.md) — concurrency model, memory profile, throughput bottlenecks.
+- [`DISTRIBUTION.md`](DISTRIBUTION.md) — standalone `.exe` distribution and first-run setup guide.
 
 ## Governance
 
 - **Root contract:** [`.cursorrules`](.cursorrules) — ownership, chain-of-trust, logic vs layout, `uv` toolchain, **continuous documentation sync**.
-- **Cursor rules (consolidated):** [`.cursor/rules/`](.cursor/rules/) — exactly four `.mdc` files: `architecture.mdc`, `auto_documentation.mdc`, `crawler_engine.mdc`, `excel_engine.mdc`.
+- **Cursor rules (consolidated):** [`.cursor/rules/`](.cursor/rules/) — 8 `.mdc` files. `architecture.mdc` and `auto_documentation.mdc` are `alwaysApply` (repo-wide); `crawler_engine.mdc`, `excel_engine.mdc`, `analysis.mdc`, `orchestration.mdc`, `rules_engine.mdc`, and `config.mdc` are path-scoped via `globs`.
 
 ## Policy notes
 

@@ -17,6 +17,7 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+import random
 import sys
 from pathlib import Path
 from typing import Any
@@ -74,10 +75,19 @@ def test_poisson_jitter_non_numeric_returns_zero() -> None:
 
 
 def test_poisson_jitter_positive_is_finite_positive() -> None:
+    random.seed(20260702)  # fixed seed: deterministic sample set, no flake risk
     samples = [_poisson_jitter_seconds(0.5) for _ in range(50)]
     assert all(sample > 0.0 for sample in samples)
     assert all(sample == sample for sample in samples)  # not NaN
     assert all(sample != float("inf") for sample in samples)
+
+
+def test_poisson_jitter_is_reproducible_with_fixed_seed() -> None:
+    random.seed(42)
+    first_run = [_poisson_jitter_seconds(0.5) for _ in range(10)]
+    random.seed(42)
+    second_run = [_poisson_jitter_seconds(0.5) for _ in range(10)]
+    assert first_run == second_run
 
 
 def test_apply_jitter_zero_does_not_sleep() -> None:

@@ -132,7 +132,7 @@ So the live literals are **`Complete`** (ready, score ≥ 85) and **`Needs Copy`
 
 Conditional formatting (`apply_content_hub_conditional_rules` in `src/hype_frog/reporter/sheets/conditional.py`) highlights **`Needs Copy`** in the canonical RAG **red** (`RAG_RED` fill, `RAG_RED_FONT` text), **`Needs Optimisation`** in RAG **amber**, and **`Complete`** / legacy `Ready to Publish` in RAG **green** — all drawn from the shared palette (see *Conditional formatting & colour palette* below). Guardrails normalise legacy US spellings to **`Needs Optimisation`** before export audit. The matching `engine_guardrails` direct fills (applied to non-Hub sheets) use the same RAG constants. Do not rename these literals without updating both the formula and the format rules.
 
-A separate **Status** column (data-validation list `To Do, In Progress, Review, Completed`) tracks editorial workflow; Dashboard completion metrics count `Status == Completed`, not Action Required.
+A separate **Status** column (data-validation list `To Do, In Progress, Review, Completed`) tracks editorial workflow, distinct from Action Required.
 
 ## Conditional formatting & colour palette
 
@@ -308,6 +308,19 @@ every tab; ``SHEET_ZOOM_OVERRIDES`` applies per-sheet zoom (Executive Briefing 8
 Main 85%, Priority URLs 90%). All standard data sheets receive CF-based zebra
 banding via ``apply_cf_zebra_banding`` (sort/filter-safe); large inventory sheets
 (>500 rows) also get a light header grid via ``large_sheet_presentation.py``.
+
+``ensure_print_setup`` (``engine_formatting.py``, called from ``tables_impl.py``
+during per-sheet formatting) applies a fit-to-width landscape print layout and an
+explicit print area to every sheet, so printing the 217-column Main sheet doesn't
+spool dozens of near-blank pages under Excel's default pagination.
+
+``apply_main_column_group_header_tints`` (``layout.py``, called for the Main
+sheet only, after the mock-table header styling pass so it isn't overwritten)
+tints the header cells of each hidden column-outline group (CWV/Lighthouse,
+H-tag content, GSC, schema, E-E-A-T/trust, OpenGraph/Twitter, redirect/canonical,
+GSC-index, robots-per-bot) with a distinct pastel + dark-navy text, so a user who
+expands the outline sees visible group boundaries instead of a uniform wall of
+navy header cells.
 
 ## Return strip run metadata
 
