@@ -60,7 +60,18 @@ After crawl completion, `core/discovery_order.py` ranks each URL by its BFS disc
 
 - `build_url_rank_index()` — maps normalised URLs to integer discovery rank.
 - `order_main_and_extra_rows()` — reorders assembled rows so the final workbook reflects sitemap/BFS discovery order rather than insertion order.
-- Populates the **`Discovery Rank`** field on Main rows.
+- Populates the **`Discovery Rank`** field on Main and Extra rows.
+
+**Downstream tabs:** Main, Technical, and Technical Diagnostics sort **primarily**
+by `Discovery Rank`. Priority-ranked tabs (FixPlan, Quick Wins, Priority URLs,
+Broken Link Impact) intentionally keep their existing value-based ranking
+(Priority Score / Business Risk Score) as the primary sort, with `Discovery Rank`
+threaded through as a tie-break for rows that would otherwise share a score.
+Content Optimisation Hub has no priority ranking of its own and sorts its URL
+list primarily by `Discovery Rank` (previously sorted alphabetically by URL
+string, which ignored sitemap/BFS discovery order entirely). SitemapQA and Link
+Inventory already preserve discovery order without an explicit sort, since they
+iterate already-ordered row sequences.
 
 ## Async model
 

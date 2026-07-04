@@ -127,6 +127,50 @@ def test_build_priority_rows_scores_and_sorts() -> None:
     assert rows[1]["Revenue Intent"] == "Standard"
 
 
+def test_build_priority_rows_ties_break_by_discovery_rank() -> None:
+    """Equal Business Risk Score rows fall back to Discovery Rank ascending."""
+    extra_rows = [
+        {
+            "URL": "https://s/later",
+            "Critical Issues Count": 1,
+            "Warning Issues Count": 0,
+            "SEO Health Score": 100.0,
+            "Broken Internal Links Count": 0,
+            "Discovery Rank": 5,
+        },
+        {
+            "URL": "https://s/earlier",
+            "Critical Issues Count": 1,
+            "Warning Issues Count": 0,
+            "SEO Health Score": 100.0,
+            "Broken Internal Links Count": 0,
+            "Discovery Rank": 2,
+        },
+        {
+            "URL": "https://s/no-rank",
+            "Critical Issues Count": 1,
+            "Warning Issues Count": 0,
+            "SEO Health Score": 100.0,
+            "Broken Internal Links Count": 0,
+            "Discovery Rank": "",
+        },
+    ]
+    rows = build_priority_rows(
+        extra_rows,
+        high_value_slugs=[],
+        value_or_default_fn=_value_or_default,
+        owner_for_issue_fn=lambda _issue, _sev: "SEO Lead",
+    )
+    # All three share the same Business Risk Score, so order must follow
+    # Discovery Rank ascending, with a missing/empty rank sorting last.
+    assert [row["URL"] for row in rows] == [
+        "https://s/earlier",
+        "https://s/later",
+        "https://s/no-rank",
+    ]
+    assert "Discovery Rank" not in rows[0]
+
+
 def test_build_priority_rows_unmeasured_skips_health_penalty() -> None:
     extra_rows = [
         {

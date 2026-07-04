@@ -78,6 +78,9 @@ PERFORMANCE_CWV_GROUP_COLUMNS: tuple[str, ...] = (
 
 # Canonical post-``reorder_columns`` layouts (single source for column helpers).
 # Preferred column orders for active export sheets only.
+# NOTE: "Issue Type" must stay at index 0 for "FixPlan" — Quick Wins' and
+# FixPlan's own "Jump to Playbook"/"Jump to FixPlan" HYPERLINK formulas assume
+# "Issue Type" lands in worksheet column A after reordering.
 _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
     "Main": [
         "Health Icon",
@@ -107,6 +110,7 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "Resolution Type",
         "URL",
         "Recommended Fix",
+        "What It Is",
         "Likely Root Cause",
         "Owner",
         "Agency Owner",
@@ -120,6 +124,7 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "Revenue Risk",
         "Action Needed",
         "Jump to Details",
+        "Jump to Playbook",
         "View Details",
         "Sprint",
     ],
@@ -538,12 +543,14 @@ def apply_intelligent_sorting(worksheet: Worksheet, sheet_name: str) -> None:
         pcol = headers.get("Priority Score")
         scol = headers.get("Severity")
         ucol = headers.get("URL")
+        rcol = headers.get("Discovery Rank")
         if pcol:
             sort_worksheet_rows(
                 worksheet,
                 key_fn=lambda r: (
                     -to_int(r[pcol - 1], 0),
                     severity_rank.get(str(r[scol - 1]) if scol else "", 99),
+                    to_int(r[rcol - 1], 10**9) if rcol else 10**9,
                     str(r[ucol - 1] or "") if ucol else "",
                 ),
             )
@@ -801,8 +808,11 @@ def apply_main_column_group_header_tints(
 
 
 # Column-width contract (character units approximating Excel widths).
+# _MAX_COL_WIDTH is capped below openpyxl's un-clamped auto-fit so ordinary
+# (non-URL, non-prose) columns don't force horizontal scrolling on a laptop
+# display at the zoom levels in sheets/config.py::SHEET_ZOOM_OVERRIDES.
 _MIN_COL_WIDTH = 10.0
-_MAX_COL_WIDTH = 48.0
+_MAX_COL_WIDTH = 42.0
 _URL_COL_WIDTH = 45.0
 _PROSE_COL_WIDTH = 55.0
 
@@ -829,6 +839,7 @@ PROSE_HEADERS: frozenset[str] = frozenset(
         "How to Fix in AIOSEO",
         "Why It Matters",
         "Why Prioritized",
+        "What It Is",
         "Recommended Fix",
         "Recommended Target",
         "Recommended Action",

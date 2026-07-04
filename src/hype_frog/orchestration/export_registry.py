@@ -399,10 +399,16 @@ def build_priority_rows(
             seo_health_out: float | None = None
         else:
             seo_health_out = round(value_or_default_fn(seo_display, 0.0), 2)
+        try:
+            _discovery_rank = int(float(row.get("Discovery Rank")))
+        except (TypeError, ValueError):
+            _discovery_rank = 10**9
         priority_rows.append(
             {
                 "URL": row.get("URL"),
                 "Business Risk Score": int(risk_score),
+                # Sort-only field, popped before return — not a visible column.
+                "Discovery Rank": _discovery_rank,
                 "SEO Health Score": seo_health_out,
                 "Severity Badge": row.get("Severity Badge"),
                 "Critical Issues Count": row.get("Critical Issues Count"),
@@ -424,9 +430,12 @@ def build_priority_rows(
                 "Status": "Open",
             }
         )
-    return sorted(
-        priority_rows, key=lambda item: item["Business Risk Score"], reverse=True
+    priority_rows.sort(
+        key=lambda item: (-item["Business Risk Score"], item["Discovery Rank"])
     )
+    for item in priority_rows:
+        item.pop("Discovery Rank", None)
+    return priority_rows
 
 
 def build_delta_and_trend_rows(

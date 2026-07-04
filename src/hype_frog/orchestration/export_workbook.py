@@ -122,7 +122,10 @@ from hype_frog.reporter.summary_builder import (
     build_summary_rows,
 )
 from hype_frog.rules import owner_for_issue, root_cause_and_fix
-from hype_frog.rules.playbook_entries import build_issue_playbook_rows
+from hype_frog.rules.playbook_entries import (
+    build_issue_playbook_rows,
+    build_playbook_entry_index,
+)
 from hype_frog.core.url_normalization import normalize_url_key
 
 logger = get_logger(__name__)
@@ -399,9 +402,11 @@ def write_full_suite_workbook(
         merged_columns["Template & Duplication Risks"],
         template_duplication_rows,
     )
+    playbook_index = build_playbook_entry_index(summary_rules)
     fixplan_rows = build_fixplan_rows(
         summary_rules, typed_extra_rows, aeo_issue_names, root_cause_and_fix,
         DEFAULT_EFFORT_BY_SEVERITY, DEFAULT_OWNER_BY_SEVERITY,
+        playbook_index,
     )
     _FIXPLAN_TOP_BLOCKER_COLS = ("Issue Type", "Severity", "Affected Count")
     if fixplan_rows:
@@ -415,7 +420,7 @@ def write_full_suite_workbook(
         fixplan_df = pd.DataFrame(columns=list(_FIXPLAN_TOP_BLOCKER_COLS))
     write_dataframe_sheet(writer, fixplan_df, "FixPlan", startrow=1)
     quick_wins_rows = build_quick_wins_rows(
-        extra_rows, fixplan_rows, summary_rules
+        extra_rows, fixplan_rows, summary_rules, playbook_index
     )
     write_dict_rows_sheet(
         writer,

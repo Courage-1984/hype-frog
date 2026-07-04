@@ -272,7 +272,9 @@ when present before inserting the strip.
   Direct Edit Link, …) get a fixed single-line width (`45`); `PROSE_HEADERS`
   (Affected URLs, How to Fix in AIOSEO, Why It Matters, Recommended Fix, …) get a
   generous wrapped width (`55`); everything else auto-fits from non-formula content
-  clamped to `[10, 48]`. Formula strings never drive auto-fit.
+  clamped to `[10, 42]` (capped below the un-clamped auto-fit so ordinary columns
+  don't force horizontal scrolling at the `SHEET_ZOOM_OVERRIDES` levels below on a
+  laptop-sized display). Formula strings never drive auto-fit.
 - **Wrap policy:** URL / hyperlink / short-scalar cells stay **single-line**
   (`wrap_text=False`); only prose columns wrap. `conditional.apply_wrapped_row_heights`
   inflates row heights **only** for prose columns and skips URL-type columns so URLs
@@ -287,6 +289,29 @@ when present before inserting the strip.
 - **Content Hub Metrics headers stay intact:** the former write-time `A2:…2` merge
   clobbered the metrics header/first-data row (B–K); it has been removed so all
   metric headers and data survive the formatting pass.
+
+## Quick Wins / FixPlan — linked issue descriptions and Playbook jump links
+
+Both **Quick Wins** and **FixPlan** carry a **"What It Is"** column (the rule's
+short root-cause/description text) and a **"Jump to Playbook"** HYPERLINK/MATCH
+formula column, both sourced from a single `build_playbook_entry_index(summary_rules)`
+call (`rules/playbook_entries.py`) built once in `export_workbook.py` and passed
+into both `engine_rows.build_fixplan_rows()` and `merged_builders.build_quick_wins_rows()`
+— avoids recomputing the per-rule entry twice. The **"Playbook"** worksheet itself is
+flattened to 4 columns (`Section, Item, Guideline, Why It Matters`) where `Item`
+(column B) holds the rule name — `"Playbook"` is intentionally absent from
+`_PREFERRED_COLUMN_ORDERS`, so column B stays stable and is safe to `MATCH()` against.
+
+**Column-position contract:** `_PREFERRED_COLUMN_ORDERS["FixPlan"]` (`layout.py`) must
+keep `"Issue Type"` at index 0, since both Quick Wins' `"Jump to FixPlan"` and
+FixPlan's own `"Jump to Playbook"` HYPERLINK formulas assume `Issue Type` lands in
+worksheet column A after `reorder_columns()` runs. (This was previously violated —
+see fix below.)
+
+**Bug fixed:** Quick Wins' `"Jump to FixPlan"` formula previously matched against
+`'FixPlan'!B:B`, which held `Severity` post-reorder, not `Issue Type` — every link
+silently fell through to the `IFERROR` fallback (`FixPlan!A1`) instead of the
+correct row. It now matches against `'FixPlan'!A:A`.
 
 ## Autofilter coverage
 
@@ -304,8 +329,11 @@ export.
 ## Workbook presentation defaults
 
 Late in ``apply_workbook_toc_and_links`` (``toc.py``): gridlines are disabled on
-every tab; ``SHEET_ZOOM_OVERRIDES`` applies per-sheet zoom (Executive Briefing 85%,
-Main 85%, Priority URLs 90%). All standard data sheets receive CF-based zebra
+every tab; ``SHEET_ZOOM_OVERRIDES`` applies a tiered per-sheet zoom so the workbook
+is readable on a laptop-sized display without manual resizing — 85% for the two
+densest card/triage layouts (Executive Briefing, Main), 90% for essentially every
+other operational/data tab, and Excel's default 100% only for the simple/small
+pages (Table of Contents, Audit Run Details). All standard data sheets receive CF-based zebra
 banding via ``apply_cf_zebra_banding`` (sort/filter-safe); large inventory sheets
 (>500 rows) also get a light header grid via ``large_sheet_presentation.py``.
 

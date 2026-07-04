@@ -27,6 +27,7 @@ from hype_frog.reporter.engine_io import (
     _sanitize_excel_url,
 )
 from hype_frog.rules import IssueRule, owner_for_issue, workflow_metrics_for_issue, effort_for_issue
+from hype_frog.rules.playbook_entries import PlaybookEntry
 from hype_frog.reporter.sheets.layout import (
     content_optimisation_hub_ordered_headers,
     main_sheet_url_column_letter,
@@ -228,6 +229,7 @@ def build_fixplan_rows(
     root_cause_resolver: Any,
     default_effort_by_severity: dict[str, str],
     default_owner_by_severity: dict[str, str],
+    playbook_index: dict[str, PlaybookEntry] | None = None,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     status_by_severity = {
@@ -307,6 +309,9 @@ def build_fixplan_rows(
                 "Server/Host": "Agency Dev",
             }.get(owner_for_issue(issue_name, severity), "Agency Dev"),
             "URL": affected[0].values.get("URL") if affected else "",
+            "Discovery Rank": (
+                affected[0].values.get("Discovery Rank") if affected else 10**9
+            ),
             "Affected URLs": (
                 f"SEE DETAILS IN {reference_tab}"
                 if len(affected_urls) > 10
@@ -330,6 +335,17 @@ def build_fixplan_rows(
             "Est. Hours": workflow["Est. Hours"],
             "Priority Score": workflow["Priority Score"],
             "Aging/Priority": workflow["Aging/Priority"],
+            "What It Is": (
+                playbook_index[issue_name].what_it_is
+                if playbook_index and issue_name in playbook_index
+                else root_cause
+            ),
+            "Jump to Playbook": (
+                "=IFERROR(HYPERLINK(\"#'Playbook'!A\"&MATCH(\""
+                + str(issue_name).replace('"', '""')
+                + "\",'Playbook'!B:B,0),\"Open in Playbook\"),"
+                "HYPERLINK(\"#'Playbook'!A1\",\"Open in Playbook\"))"
+            ),
         }
         if issue_name == "Broken Internal Links":
             fixplan_row["Affected Link Instances"] = sum(
@@ -572,9 +588,21 @@ def build_content_optimisation_hub_rows(
         [r.values for r in main_rows],
         [r.values for r in extra_rows],
     )
+
+    def _discovery_rank_for_url(url: str) -> int:
+        payload = extra_by_url.get(url) or main_by_url.get(url)
+        rank = payload.values.get("Discovery Rank") if payload else None
+        try:
+            return int(float(rank))
+        except (TypeError, ValueError):
+            return 10**9
+
+    ordered_manual_content_urls = sorted(
+        manual_content_urls, key=lambda u: (_discovery_rank_for_url(u), u)
+    )
     rows: list[dict[str, Any]] = []
     metrics_rows: list[dict[str, Any]] = []
-    for excel_row, url in enumerate(sorted(manual_content_urls), start=3):
+    for excel_row, url in enumerate(ordered_manual_content_urls, start=3):
         main_payload = main_by_url.get(url)
         extra_payload = extra_by_url.get(url)
         m = main_payload.values if main_payload else {}

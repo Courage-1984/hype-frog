@@ -27,6 +27,43 @@ def test_hub_h1_ok_when_main_has_pipe_in_heading_text() -> None:
     assert hub_rows[0]["H1 Health"] == "OK"
 
 
+def test_hub_orders_urls_by_discovery_rank_not_alphabetically() -> None:
+    """URLs must follow crawl/sitemap discovery order, not the URL string."""
+    main_b = MainRowPayload.model_validate(
+        {"URL": "https://example.com/b-page", "SEO Health Score": 50.0}
+    )
+    main_a = MainRowPayload.model_validate(
+        {"URL": "https://example.com/a-page", "SEO Health Score": 50.0}
+    )
+    extra_b = ExtraRowPayload.model_validate(
+        {
+            "URL": "https://example.com/b-page",
+            "SEO Health Score": 50.0,
+            "Discovery Rank": 1,
+        }
+    )
+    extra_a = ExtraRowPayload.model_validate(
+        {
+            "URL": "https://example.com/a-page",
+            "SEO Health Score": 50.0,
+            "Discovery Rank": 2,
+        }
+    )
+    fixplan_rows = [
+        {"URL": "https://example.com/b-page", "Resolution Type": "Manual Content"},
+        {"URL": "https://example.com/a-page", "Resolution Type": "Manual Content"},
+    ]
+    _hub_rows, metrics_rows = build_content_optimisation_hub_rows(
+        [main_b, main_a], [extra_b, extra_a], fixplan_rows
+    )
+    # b-page was discovered first (Discovery Rank 1) even though it sorts after
+    # a-page alphabetically — order must follow discovery order, not URL string.
+    assert [row["URL"] for row in metrics_rows] == [
+        "https://example.com/b-page",
+        "https://example.com/a-page",
+    ]
+
+
 def test_hub_h1_missing_when_extractor_found_none() -> None:
     main = MainRowPayload.model_validate(
         {"URL": "https://example.com/about", "SEO Health Score": 40.0}

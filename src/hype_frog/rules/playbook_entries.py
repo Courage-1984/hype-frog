@@ -11,6 +11,14 @@ from hype_frog.rules.registry import (
     root_cause_and_fix,
 )
 
+__all__ = [
+    "PlaybookEntry",
+    "PLAYBOOK_COLUMNS",
+    "entry_for_rule",
+    "build_playbook_entry_index",
+    "build_issue_playbook_rows",
+]
+
 
 @dataclass(frozen=True)
 class PlaybookEntry:
@@ -63,6 +71,16 @@ def _entry_for_rule(rule: IssueRule) -> PlaybookEntry:
         owner=owner,
         how_to_verify=verify,
     )
+
+
+def entry_for_rule(rule: IssueRule) -> PlaybookEntry:
+    """Public accessor for the per-rule playbook entry (What It Is / How To Fix / …)."""
+    return _entry_for_rule(rule)
+
+
+def build_playbook_entry_index(rules: list[IssueRule]) -> dict[str, PlaybookEntry]:
+    """Build a rule-name-keyed index of playbook entries, for reuse across sheet builders."""
+    return {rule.name: entry_for_rule(rule) for rule in rules}
 
 
 def _default_why(rule: IssueRule) -> str:

@@ -119,10 +119,42 @@ CONTENT_HUB_FREEZE_PANES: str = "I3"
 
 # Sheets that benefit from a reduced zoom level so dense card/triage layouts fit on
 # screen without horizontal scrolling (applied once, late, in workbook finalisation).
+# Tiered for laptop-sized displays (~1366-1920px wide): 85% for the two densest
+# card/triage layouts, 90% for all other operational/data tabs. "Table of Contents"
+# and Audit Run Details are simple/small pages and are left at Excel's default 100%.
 SHEET_ZOOM_OVERRIDES: dict[str, int] = {
     EXECUTIVE_BRIEFING_SHEET: 85,
     "Main": 85,
+    "Summary": 90,
     "Priority URLs": 90,
+    "FixPlan": 90,
+    "Quick Wins": 90,
+    CONTENT_OPTIMISATION_HUB_SHEET: 90,
+    CONTENT_PLANNER_SHEET: 90,
+    CONTENT_HUB_METRICS_SHEET: 90,
+    AIOSEO_RECOMMENDATIONS_SHEET: 90,
+    "Link Inventory": 90,
+    "Broken Link Impact": 90,
+    "SitemapQA": 90,
+    "Template & Duplication Risks": 90,
+    "Playbook": 90,
+    "Issue Register": 90,
+    "Technical Diagnostics": 90,
+    "Content & AI Readiness": 90,
+    "Link Intelligence": 90,
+    "CMS Action URLs": 90,
+    "Redirects": 90,
+    REDIRECT_MAP_SHEET: 90,
+    ROBOTS_ANALYSIS_SHEET: 90,
+    CRAWL_LOG_SHEET: 90,
+    LINK_EQUITY_MAP_SHEET: 90,
+    ANCHOR_TEXT_AUDIT_SHEET: 90,
+    SNIPPET_OPPORTUNITIES_SHEET: 90,
+    COMPETITOR_BENCHMARKS_SHEET: 90,
+    SCRIPT_INVENTORY_SHEET: 90,
+    IMAGE_INVENTORY_SHEET: 90,
+    "ResolvedIssues": 90,
+    "DeltaFromPreviousRun": 90,
 }
 
 # Actionable workflow / triage sheets always receive autofilter headers (Phase 3).

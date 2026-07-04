@@ -8,6 +8,7 @@ from hype_frog.crawler.redirect_chain import RedirectHopRecord, build_redirect_m
 from hype_frog.config import get_quick_wins_max_effort_hours, get_quick_wins_max_results
 from hype_frog.analysis.delta_engine import IssueRecord, days_between
 from hype_frog.core import get_logger
+from hype_frog.rules.playbook_entries import PlaybookEntry
 
 logger = get_logger(__name__)
 
@@ -890,10 +891,12 @@ QUICK_WINS_COLUMNS: tuple[str, ...] = (
     "Owner",
     "GSC Clicks (30d)",
     "Business Risk Score",
+    "What It Is",
     "Recommended Fix",
     "Sprint",
     "Revenue Risk",
     "Jump to FixPlan",
+    "Jump to Playbook",
 )
 
 BROKEN_LINK_IMPACT_COLUMNS: tuple[str, ...] = (
@@ -912,6 +915,7 @@ def build_quick_wins_rows(
     extra_rows: list[dict[str, Any]],
     fixplan_rows: list[dict[str, Any]],
     summary_rules: list[Any],
+    playbook_index: dict[str, PlaybookEntry] | None = None,
 ) -> list[dict[str, Any]]:
     """Build Quick Wins tab: top 15 high-impact low-effort URL+issue combinations."""
     fp_index: dict[str, dict[str, Any]] = {}
@@ -976,19 +980,35 @@ def build_quick_wins_rows(
                     "Owner": fp.get("Owner", ""),
                     "GSC Clicks (30d)": int(clicks),
                     "Business Risk Score": risk,
+                    "What It Is": (
+                        playbook_index[rule_name].what_it_is
+                        if playbook_index and rule_name in playbook_index
+                        else ""
+                    ),
                     "Recommended Fix": fp.get("Recommended Fix", ""),
                     "Sprint": fp.get("Aging/Priority", ""),
                     "Revenue Risk": fp.get("Revenue Risk", ""),
                     "Jump to FixPlan": (
                         "=IFERROR(HYPERLINK(\"#'FixPlan'!A\"&MATCH(\""
                         + str(rule_name).replace('"', '""')
-                        + "\",'FixPlan'!B:B,0),\"Open in FixPlan\"),"
+                        + "\",'FixPlan'!A:A,0),\"Open in FixPlan\"),"
                         "HYPERLINK(\"#'FixPlan'!A1\",\"Open in FixPlan\"))"
                     ),
+                    "Jump to Playbook": (
+                        "=IFERROR(HYPERLINK(\"#'Playbook'!A\"&MATCH(\""
+                        + str(rule_name).replace('"', '""')
+                        + "\",'Playbook'!B:B,0),\"Open in Playbook\"),"
+                        "HYPERLINK(\"#'Playbook'!A1\",\"Open in Playbook\"))"
+                    ),
+                    # Sort-only field, stripped by the QUICK_WINS_COLUMNS filter below —
+                    # not shown as a visible column.
+                    "Discovery Rank": _to_int(row.get("Discovery Rank"), 10**9),
                 }
             )
 
-    rows.sort(key=lambda item: item["Priority Score"], reverse=True)
+    rows.sort(
+        key=lambda item: (-item["Priority Score"], item.get("Discovery Rank", 10**9))
+    )
     capped = rows[: get_quick_wins_max_results()]
     return [{col: row.get(col) for col in QUICK_WINS_COLUMNS} for row in capped]
 
@@ -1054,6 +1074,7 @@ def build_broken_link_impact_rows(
         else:
             action = f"Investigate {status_code} response"
 
+        target_rank_raw = url_index.get(target_url, {}).get("Discovery Rank")
         output_rows.append(
             {
                 "Priority Score": round(priority, 0),
@@ -1064,10 +1085,15 @@ def build_broken_link_impact_rows(
                 "Source Pages (first 5)": " | ".join(data["source_urls"][:5]),
                 "Anchor Texts Used": " | ".join(data["anchor_texts"][:5]),
                 "Recommended Action": action,
+                # Sort-only field, stripped by the BROKEN_LINK_IMPACT_COLUMNS filter
+                # below — not shown as a visible column.
+                "Discovery Rank": _to_int(target_rank_raw, 10**9),
             }
         )
 
-    output_rows.sort(key=lambda item: item["Priority Score"], reverse=True)
+    output_rows.sort(
+        key=lambda item: (-item["Priority Score"], item["Discovery Rank"])
+    )
     return [{col: row.get(col) for col in BROKEN_LINK_IMPACT_COLUMNS} for row in output_rows]
 
 
