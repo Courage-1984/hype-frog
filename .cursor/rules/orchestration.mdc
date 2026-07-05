@@ -21,7 +21,7 @@ Canonical narrative: [`docs/system_architecture.md`](../../docs/system_architect
 - `enrichment_flow.py` — Batched PSI and GSC enrichment after the crawl phase; dispatches to `crawler/psi_engine.py` (and its batch/cache/merge split) and `crawler/gsc_engine.py`.
 - `export_flow.py` — Sequencing of xlsx, HTML, and PDF export; calls into `reporter/` and `export_executive_reports.py`; non-fatal on individual export failures.
 - `export_executive_reports.py` — Non-fatal HTML and PDF report generation; builds shared `ReportContext` once; passes to both HTML and PDF renderers with consistent branding.
-- `export_workbook.py` — `build_standard_sheets()` drives all 20+ tab builders and integrates delta engine (`snapshot_from_current_run()`, `build_delta_workbook_output()`).
+- `export_workbook.py` — `write_full_suite_workbook()` drives all 20+ tab builders and integrates the delta engine (`snapshot_from_current_run()`, `build_delta_workbook_output()`); `apply_deferred_readwrite_export_steps()` runs formula injection and briefing layout after a write-only streaming pass.
 - `export_row_builders.py` — Sheet-specific row builders: `build_aeo_rows()`, `build_aioseo_rows()`, pattern rows, template risk rows.
 - `export_workbook_constants.py` — `PLAYBOOK_LEGEND_ROWS` and `PLAYBOOK_QUICK_REFERENCE_ROWS` constant tables.
 - `export_registry.py` — Registry of named export artefacts produced during a run; used for delta comparison and run history.

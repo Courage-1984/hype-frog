@@ -122,13 +122,15 @@ The canonical freeze target is ``CONTENT_HUB_FREEZE_PANES`` in
 
 ## Content hub — Action Required
 
-The **Action Required** column is **formula-driven** in `engine_rows.py`:
+The **Action Required** column is a **static Python classification**, computed at export time in `engine_rows.py` via `pipeline/action_required.py::determine_action_required()` — it is not a live Excel formula:
 
 ```
-=IF(<On-Page Optimization Score> >= 85, "Complete", "Needs Copy")
+Needs Copy          if Copy Score is None or Copy Score < 80
+Needs Optimisation   else if SEO Score is None or SEO Score < 50
+Complete             otherwise
 ```
 
-So the live literals are **`Complete`** (ready, score ≥ 85) and **`Needs Copy`** (blocked, score < 85). The full allowed set enforced by `engine_guardrails._ACTION_REQUIRED_ALLOWED` is **`Complete`**, **`Needs Copy`**, **`Needs Optimisation`**. `apply_action_required_guardrails` normalises legacy/free-text values to these (e.g. `Ready to Publish`, `completed` → `Complete`; `Needs Optimization` → `Needs Optimisation`; unknown text → `Needs Copy`) but **skips the `Content Optimisation Hub` sheet**, which relies on the conditional rules below.
+This replaced an earlier 2-branch Excel formula (`=IF(<On-Page Optimization Score> >= 85, "Complete", "Needs Copy")`) that could never produce `Needs Optimisation`; see the historical note at `engine_rows.py:726-731`. The full allowed set enforced by `engine_guardrails._ACTION_REQUIRED_ALLOWED` is **`Complete`**, **`Needs Copy`**, **`Needs Optimisation`**. `apply_action_required_guardrails` normalises legacy/free-text values to these (e.g. `Ready to Publish`, `completed` → `Complete`; `Needs Optimization` → `Needs Optimisation`; unknown text → `Needs Copy`) but **skips the `Content Optimisation Hub` sheet**, which relies on the conditional rules below.
 
 Conditional formatting (`apply_content_hub_conditional_rules` in `src/hype_frog/reporter/sheets/conditional.py`) highlights **`Needs Copy`** in the canonical RAG **red** (`RAG_RED` fill, `RAG_RED_FONT` text), **`Needs Optimisation`** in RAG **amber**, and **`Complete`** / legacy `Ready to Publish` in RAG **green** — all drawn from the shared palette (see *Conditional formatting & colour palette* below). Guardrails normalise legacy US spellings to **`Needs Optimisation`** before export audit. The matching `engine_guardrails` direct fills (applied to non-Hub sheets) use the same RAG constants. Do not rename these literals without updating both the formula and the format rules.
 
@@ -305,13 +307,10 @@ flattened to 4 columns (`Section, Item, Guideline, Why It Matters`) where `Item`
 **Column-position contract:** `_PREFERRED_COLUMN_ORDERS["FixPlan"]` (`layout.py`) must
 keep `"Issue Type"` at index 0, since both Quick Wins' `"Jump to FixPlan"` and
 FixPlan's own `"Jump to Playbook"` HYPERLINK formulas assume `Issue Type` lands in
-worksheet column A after `reorder_columns()` runs. (This was previously violated —
-see fix below.)
-
-**Bug fixed:** Quick Wins' `"Jump to FixPlan"` formula previously matched against
-`'FixPlan'!B:B`, which held `Severity` post-reorder, not `Issue Type` — every link
-silently fell through to the `IFERROR` fallback (`FixPlan!A1`) instead of the
-correct row. It now matches against `'FixPlan'!A:A`.
+worksheet column A after `reorder_columns()` runs. Quick Wins' `"Jump to FixPlan"`
+formula matches against `'FixPlan'!A:A` for this reason — matching against column B
+(which holds `Severity` post-reorder, not `Issue Type`) would silently fall through
+to the `IFERROR` fallback (`FixPlan!A1`) on every row instead of the correct one.
 
 ## SitemapQA — image/changefreq/priority columns
 

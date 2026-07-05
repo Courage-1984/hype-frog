@@ -31,4 +31,21 @@ uv run pytest                          # full suite
 uv run pytest tests/reporter/          # reporter layer only
 uv run pytest tests/crawler/           # crawler layer only
 uv run pytest -k "test_extraction"     # filter by name
+uv run pytest --cov --cov-report=term-missing   # with coverage (no fail_under threshold yet)
 ```
+
+## Duplicate test filenames across packages
+
+`tests/core/test_quick_test.py` / `tests/diagnostics/test_quick_test.py` and
+`tests/core/test_full_smoke_test.py` / `tests/diagnostics/test_full_smoke_test.py` are
+**not duplicates** despite matching names: the `tests/core/` versions test
+`core/run_config.py`'s preset constants (`quick_test_run_config()` etc.), while the
+`tests/diagnostics/` versions test the `diagnostics/quick_test.py` /
+`diagnostics/full_smoke_test.py` gate modules themselves. Search by full path, not
+bare filename, when looking for "the quick-test tests."
+
+## Registered-but-unused markers
+
+`slow` and `network` are registered in `pytest.ini` alongside `integration`, but no test
+currently uses either — same as `integration` (see above), these are reserved for future
+use, not dead configuration.

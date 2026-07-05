@@ -236,32 +236,20 @@ CONTENT_HUB_HEADER_COMMENT_OG_IMAGE_PREVIEW: str = (
 )
 
 # Row-2 header cell comments for Content Optimisation Hub (openpyxl Comment; not Data Validation).
+#
+# Tooltip ownership: any header also present in engine_guardrails._HEADER_TOOLTIP_MESSAGES is
+# NOT listed here, because apply_header_tooltips() runs after this dict is applied (see
+# tables_impl.py, apply_content_hub_conditional_rules then apply_header_tooltips) and would
+# silently overwrite it. Keep the two dicts disjoint rather than relying on call order — see
+# reporter/CLAUDE.md "Tooltip ownership" for the full rule.
 CONTENT_HUB_ROW2_HEADER_COMMENTS: dict[str, str] = {
-    "SEO Score": "The baseline SEO health score captured during the initial crawl.",
-    "Technical Health": "Baseline technical performance score (Status codes, Speed, Indexability).",
-    "Copy Score": (
-        "Baseline assessment of content quality and readability."
-    ),
-    "Action Required": (
-        "Scope: Only indexable, crawlable pages with content improvement opportunities are "
-        "included. Non-indexable pages (4xx, noindex, blocked by robots) and pages with no "
-        "content-type issues are excluded. See Technical Diagnostics for the full URL inventory. "
-        'Dynamic summary: "Needs Copy" if score < 85, "Complete" if score >= 85.'
-    ),
     "On-Page Optimization Score": (
         "Live calculation (0-100) of on-page health. Factors: Title/Meta length and H-tag hierarchy. Aim for 90+."
     ),
-    "Status": (
-        'Workflow tracking. Change to "Done" once changes are live in the CMS.'
-    ),
-    "Assigned Owner": "The team member responsible for this URL.",
-    "URL": "Live audited URL. Click the cell to open the page (HYPERLINK). TRIM is used when jumping to Main.",
-    "Current Title": "Title text from the crawl. Edit in CMS; health column updates from this cell.",
     "Title Health": (
         "Live formula: length vs 50–60 character target. Green when OK band; red when missing; "
         "orange for short/long."
     ),
-    "Current Meta Desc": "Meta description from crawl. Target 120–160 characters in the health column.",
     "Meta Health": "Live formula for meta length vs target band (same semantics as Title Health).",
     "H1": "Primary heading text from crawl (H1 line in Current H-Tag Structure when main H1 is absent).",
     "H1 Health": "Live formula: missing H1, long block warning, or OK when present.",
@@ -275,18 +263,14 @@ CONTENT_HUB_ROW2_HEADER_COMMENTS: dict[str, str] = {
     "H5 Health": "Optional H5 guidance.",
     "H6": "Parsed when present in heading outline.",
     "H6 Health": "Optional H6 guidance.",
-    "Elementor Builder Link": "Opens the WordPress Elementor editor when a Post ID was detected.",
     "URL Slug Normalization": (
         "Editorial slug guidance field. Capture normalized slug wording you want reflected in URL, "
         "title, and heading language before publishing."
     ),
-    "Current OG-Image URL": "Sanitized Open Graph image URL from the crawl.",
-    "OG Image Health": (
-        "Compares this page's OG image filename to the most common asset across the crawl. "
-        "Flags legacy/outlier social images (for example old event art vs a new og-image.png default)."
+    "Proposed URL Slug": (
+        "Editorial URL-slug suggestion — not applied automatically; use alongside Title/H1 "
+        "guidance before publishing."
     ),
-    "OG Image Preview": CONTENT_HUB_HEADER_COMMENT_OG_IMAGE_PREVIEW,
-    "Open in Main": "Jumps to Main (URL column) or Technical Diagnostics column A for this URL.",
 }
 
 
@@ -604,14 +588,25 @@ def hide_noisy_columns(worksheet: Worksheet, sheet_name: str) -> None:
         "Content": ["paragraph", "full text", "raw", "json", "headers"],
     }
     tokens = noisy_tokens_by_sheet.get(sheet_name)
-    if not tokens:
-        return
-    for idx, cell in enumerate(worksheet[1], start=1):
-        header = str(cell.value or "").lower()
-        if any(tok in header for tok in tokens):
-            if isinstance(cell, MergedCell):
-                continue
-            worksheet.column_dimensions[get_column_letter(idx)].hidden = True
+    if tokens:
+        for idx, cell in enumerate(worksheet[1], start=1):
+            header = str(cell.value or "").lower()
+            if any(tok in header for tok in tokens):
+                if isinstance(cell, MergedCell):
+                    continue
+                worksheet.column_dimensions[get_column_letter(idx)].hidden = True
+
+    # "Source Legacy Tab" is internal migration provenance (pre-merge tab names like
+    # "LinksDetail"/"Duplicates"/"IssueInventory" that no longer exist as sheets) —
+    # useful for debugging the merged-sheet builders, not for the end reader. Hide
+    # rather than remove so column position/order stays stable for existing tests
+    # and cross-sheet references.
+    from hype_frog.reporter.sheets.sheet_rows import sheet_data_header_row
+
+    header_row = sheet_data_header_row(sheet_name)
+    legacy_col = header_row_index(worksheet, header_row).get("Source Legacy Tab")
+    if legacy_col:
+        worksheet.column_dimensions[get_column_letter(legacy_col)].hidden = True
 
 
 def content_optimisation_hub_ordered_headers(
@@ -841,6 +836,7 @@ PROSE_HEADERS: frozenset[str] = frozenset(
         "Why It Matters",
         "Why Prioritized",
         "What It Is",
+        "Likely Root Cause",
         "Recommended Fix",
         "Recommended Target",
         "Recommended Action",
@@ -848,6 +844,8 @@ PROSE_HEADERS: frozenset[str] = frozenset(
         "Current Value",
         "Internal Link Statuses",
         "GSC Coverage Note",
+        "How To Verify",
+        "Guideline",
     }
 )
 
@@ -873,6 +871,18 @@ def _autofit_column_width(
             if len(line) > max_length:
                 max_length = len(line)
     return float(max_length)
+
+
+CONTENT_HUB_DENSITY_OVERRIDES: dict[str, float] = {
+    "Action Required": 17.43,
+    "On-Page Optimization Score": 12.0,
+    "Assigned Owner": 15.0,
+    "Elementor Builder Link": 18.14,
+    "Current OG-Image URL": 15.0,
+    "OG Image Health": 42.0,
+    "Open in Main": 22.57,
+    "URL Slug Normalization": 22.0,
+}
 
 
 def apply_column_widths(worksheet: Worksheet) -> None:
@@ -910,15 +920,7 @@ def apply_column_widths(worksheet: Worksheet) -> None:
         worksheet.column_dimensions[letter].width = min(width, _MAX_COL_WIDTH)
 
     # Content Hub density overrides: preserve the compact, operational view.
-    for header_name, width in {
-        "Action Required": 17.43,
-        "On-Page Optimization Score": 12.0,
-        "Assigned Owner": 15.0,
-        "Elementor Builder Link": 18.14,
-        "Current OG-Image URL": 15.0,
-        "OG Image Health": 42.0,
-        "Open in Main": 22.57,
-    }.items():
+    for header_name, width in CONTENT_HUB_DENSITY_OVERRIDES.items():
         col_idx = headers.get(header_name)
         if col_idx:
             worksheet.column_dimensions[get_column_letter(col_idx)].width = width

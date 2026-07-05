@@ -1,0 +1,22 @@
+---
+description: Diagnostics layer ownership — the --quick-test/--full-smoke-test/--validate CLI gates and their fixtures.
+globs: "src/hype_frog/diagnostics/**/*.py"
+alwaysApply: false
+---
+
+# Diagnostics layer rules
+
+## Module ownership
+
+- `quick_test.py` — Implements `--quick-test`: preflight checks + focused pytest subset + live 10-URL BFS crawl + workbook audit.
+- `full_smoke_test.py` — Implements `--full-smoke-test`: pre-export gate at representative sitemap scale (mocked crawl).
+- `full_smoke_fixtures.py` — Deterministic, index-seeded synthetic fixtures for `full_smoke_test.py` (homepage stays pristine; deeper pages get seeded issues).
+- `integration_validator.py` — Implements `--validate`: credential/environment validation only, no crawl.
+
+## Shipped CLI features, not test helpers
+
+These modules are **shipped package features** importable from `main.py`, not developer-only test utilities — treat API changes here with the same care as any other public CLI surface.
+
+## Claude-side entry points
+
+The same three gates are exposed to Claude Code via `.claude/commands/quick-test.md`, `.claude/commands/smoke-test.md`, and `.claude/commands/validate.md`. Keep this rule and those three files describing the same behaviour — update both sides together when flags or gate semantics change.

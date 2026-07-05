@@ -4,7 +4,7 @@
 
 1. **Architecture ownership is strict.**
 
-* **Foundations:** `src/hype_frog/core/` (including `env_vars.py` for centralised env-var access and `discovery_order.py` for URL ranking) and shared `config`.
+* **Foundations:** `src/hype_frog/core/` (including `env_vars.py` for centralised env-var access and `discovery_order.py` for URL ranking) and shared `config` (top-level `config.py`/`config_defaults.py`/`config_loader.py`; the `src/hype_frog/config/` directory itself is empty/reserved — see `CLAUDE.md` module map).
 * **Engines:** `src/hype_frog/crawler/` (including `psi_batch.py`, `psi_cache.py`, `psi_merge.py` for PSI split, and `data_assembler_phases.py`), `src/hype_frog/pipeline/`, `src/hype_frog/reporter/`.
 * **Domain analysis:** `src/hype_frog/analysis/` (post-crawl enrichments: hreflang, equity, snippets, delta comparison via `delta_loader.py`, `delta_models.py`, `delta_sheet_builder.py`, etc.).
 * **Validation:** `src/hype_frog/validators/` (schema validation; no workbook I/O).
@@ -35,7 +35,7 @@
 
 * Keep async paths non-blocking. Use bounded retries/backoff for network operations.
 * Use shared logging helpers; no ad hoc `print()` telemetry in runtime modules.
-* **MCP usage:** Use `chrome-devtools` or `playwright` (MCP) to verify DOM state/hydration before attempting blind fixes on `network_engine.py`.
+* **MCP usage (if configured):** If `chrome-devtools` or `playwright` MCP tooling is available in your environment, use it to verify DOM state/hydration before attempting blind fixes on `network_engine.py`.
 
 6. **Excel integrity rules are non-negotiable.**
 
@@ -56,16 +56,18 @@
 9. **Consolidated layout.**
 
 * **`./docs/`** (Exactly 5): `system_architecture.md`, `data_contracts.md`, `excel_reporting_standards.md`, `logging_architecture.md`, `performance_benchmarks.md`.
-* **`.cursor/rules/`** (Exactly 8): `architecture.mdc`, `auto_documentation.mdc`, `crawler_engine.mdc`, `excel_engine.mdc`, `analysis.mdc`, `orchestration.mdc`, `rules_engine.mdc`, `config.mdc`.
+* **`.cursor/rules/`** (Exactly 12): `architecture.mdc`, `auto_documentation.mdc`, `crawler_engine.mdc`, `excel_engine.mdc`, `analysis.mdc`, `orchestration.mdc`, `rules_engine.mdc`, `config.mdc`, `checkpoint.mdc`, `validators.mdc`, `diagnostics.mdc`, `snapshots.mdc`.
 * **Roots:** `README.md`, `.cursorrules`.
 * **Excluded from cap:** operational logs, backlog prompts, `reports/` output — not governance canon.
 
-10. **Advanced Tooling (MCP Integration).**
+10. **Advanced Tooling (MCP Integration) — recommended if configured.**
 
-* **Planning:** Use `sequential-thinking` before modifying BFS spider logic, ROI math, or complex Excel aggregations.
-* **Benchmarking:** Compare `SemanticAnalyzer` output against `firecrawl-mcp` to ensure AEO information superiority.
-* **Integrity:** Use `filesystem` tools to audit doc-sync accuracy during refactors.
-* **Verification:** Use `brave-search` to validate LLM "Search Intent" results against live SERP features.
+No MCP config for these servers is committed to this repo; the guidance below applies only if you have configured the named server yourself (e.g. via Cursor's Settings UI). Do not assume any of these are available by default.
+
+* **Planning:** If `sequential-thinking` is configured, use it before modifying BFS spider logic, ROI math, or complex Excel aggregations.
+* **Benchmarking:** If `firecrawl-mcp` is configured, compare `SemanticAnalyzer` output against it to help assess AEO information superiority.
+* **Integrity:** If `filesystem` MCP tools are configured, use them to audit doc-sync accuracy during refactors.
+* **Verification:** If `brave-search` is configured, use it to validate LLM "Search Intent" results against live SERP features.
 
 11. **Git Sovereignty.**
 

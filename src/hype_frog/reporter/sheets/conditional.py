@@ -925,7 +925,7 @@ def apply_psi_conditional_rules(worksheet: Worksheet) -> None:
         cidx = headers.get(header_name)
         if cidx:
             worksheet.cell(row=1, column=cidx).comment = Comment(
-                tooltip, "SEO Audit Bot"
+                tooltip, "hype-frog"
             )
     score_cols = [
         cidx
@@ -995,6 +995,9 @@ _MERGED_TAB_NAMES: frozenset[str] = frozenset(
         "Quick Wins",
         "Issue Register",
         "Template & Duplication Risks",
+        "Priority URLs",
+        "Link Equity Map",
+        "Anchor Text Audit",
     }
 )
 
@@ -1015,12 +1018,16 @@ _HIGHER_BETTER_HEADERS: tuple[str, ...] = (
     "SEO Health Score",
     "Desktop PSI Score",
     "Readability (Rough Flesch)",
+    "PageRank Score",
+    "PageRank Percentile",
 )
 
 _LOWER_BETTER_HEADERS: tuple[str, ...] = (
     "Mobile LCP (s)",
     "Mobile TTFB (s)",
     "Mobile CLS",
+    "Click Depth",
+    "Generic Anchor %",
 )
 
 _DATA_BAR_HEADERS: tuple[str, ...] = (
@@ -1032,6 +1039,7 @@ _DATA_BAR_HEADERS: tuple[str, ...] = (
     "Redirect Chain Length",
     "Priority Score",
     "Inbound Link Count",
+    "Business Risk Score",
 )
 
 
@@ -1243,11 +1251,56 @@ def apply_merged_tabs_conditional_formatting(
             start_row,
             end_row,
         )
+    elif sheet_name == "Link Equity Map":
+        tier_col = headers.get("Equity Tier")
+        if tier_col:
+            tier_letter = get_column_letter(tier_col)
+            tier_range = f"{tier_letter}{start_row}:{tier_letter}{end_row}"
+            worksheet.conditional_formatting.add(
+                tier_range,
+                CellIsRule(
+                    operator="equal",
+                    formula=['"Orphan"'],
+                    fill=PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"),
+                    font=Font(bold=True, color=RAG_RED_FONT),
+                ),
+            )
+            worksheet.conditional_formatting.add(
+                tier_range,
+                CellIsRule(
+                    operator="equal",
+                    formula=['"Low"'],
+                    fill=PatternFill(start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid"),
+                ),
+            )
+            worksheet.conditional_formatting.add(
+                tier_range,
+                CellIsRule(
+                    operator="equal",
+                    formula=['"High"'],
+                    fill=PatternFill(start_color=RAG_GREEN, end_color=RAG_GREEN, fill_type="solid"),
+                ),
+            )
+    elif sheet_name == "Anchor Text Audit":
+        dominance_col = headers.get("Generic Anchor Dominance")
+        if dominance_col:
+            dominance_letter = get_column_letter(dominance_col)
+            dominance_range = f"{dominance_letter}{start_row}:{dominance_letter}{end_row}"
+            worksheet.conditional_formatting.add(
+                dominance_range,
+                CellIsRule(
+                    operator="equal",
+                    formula=["TRUE"],
+                    fill=PatternFill(start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid"),
+                ),
+            )
     elif sheet_name == "Quick Wins":
-        for hdr in ("Business Risk Score", "GSC Clicks (30d)"):
-            rng = _column_range(headers, hdr, start_row, end_row)
-            if rng:
-                _add_data_bar_blue(worksheet, rng)
+        # "Business Risk Score" now gets its data bar from the generic
+        # _DATA_BAR_HEADERS pass above (shared with Priority URLs) — only
+        # "GSC Clicks (30d)" needs a sheet-specific rule here.
+        rng = _column_range(headers, "GSC Clicks (30d)", start_row, end_row)
+        if rng:
+            _add_data_bar_blue(worksheet, rng)
         effort_col = headers.get("Effort (hrs)")
         if effort_col:
             effort_letter = get_column_letter(effort_col)
@@ -1790,4 +1843,9 @@ __all__ = [
     "apply_main_sheet_heatmaps",
     "apply_dashboard_metric_conditional_rules",
     "apply_content_planner_signoff_rules",
+    "MERGED_TAB_NAMES",
 ]
+
+# Public alias — tables_impl.py's dispatcher must call apply_merged_tabs_conditional_
+# formatting for exactly this sheet set, so both share one source of truth.
+MERGED_TAB_NAMES = _MERGED_TAB_NAMES

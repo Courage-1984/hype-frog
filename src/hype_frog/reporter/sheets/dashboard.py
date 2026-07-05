@@ -197,8 +197,8 @@ def _safe_excel_string_literal(value: str) -> str:
 def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
     """Render the executive dashboard sheet with KPI and ownership blocks.
 
-    Ported from legacy ``_style_dashboard`` in ``tables_impl.legacy.old.py``
-    (aggregation order, D/E status tables, owner summary, tooltips, row heights).
+    Builds aggregation order, D/E status tables, owner summary, tooltips, and row heights
+    for the legacy hidden Dashboard tab (see module TODO above).
 
     Args:
         worksheet: Dashboard worksheet instance.
@@ -393,9 +393,9 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
         worksheet["A22"] = '=HYPERLINK("#\'Link Inventory\'!A1","External Link Health %")'
         worksheet["B22"] = _EXCEL_EXTERNAL_LINK_HEALTH_PCT
         worksheet["B22"].number_format = "0%"
-        # Sprint 6 — Executive ROI roll-ups sourced from Content Hub Metrics
-        # (same URL rows as the Hub; row-1 headers). INDEX/MATCH keeps
-        # formulas stable if column order changes.
+        # Executive ROI roll-ups sourced from Content Hub Metrics (same URL rows
+        # as the Hub; row-1 headers). INDEX/MATCH keeps formulas stable if
+        # column order changes.
         worksheet["A23"] = (
             f'=HYPERLINK("#\'{CONTENT_HUB_METRICS_SHEET}\'!A1",'
             f'"Total Potential Traffic Lift (sum)")'
@@ -495,10 +495,9 @@ def style_dashboard(worksheet: Worksheet, writer: Any) -> None:
             kpi_comment = Comment(body, "hype-frog")
             apply_comment_dimensions(kpi_comment)
             worksheet[addr].comment = kpi_comment
-        # Sprint 6 — inline tooltips for the new executive ROI KPIs.
-        # Inlined here (not in ``DASHBOARD_KPI_ROW_COMMENTS``) so this
-        # sprint stays inside its 5-file budget without touching
-        # ``dashboard_config.py``.
+        # Inline tooltips for the executive ROI KPIs, kept here rather than in
+        # ``DASHBOARD_KPI_ROW_COMMENTS`` (``dashboard_config.py``) so they stay
+        # next to the ROI calculations they describe.
         _exec_roi_tooltips: dict[str, str] = {
             "A23": (
                 "Total Potential Traffic Lift (sum)\n\n"

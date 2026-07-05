@@ -55,3 +55,23 @@ where = ["src"]
 dev = [
     "pypdf>=6.14.2",
 ]
+
+[tool.coverage.run]
+source = ["src/hype_frog"]
+branch = true
+omit = [
+    "*/archive_legacy/*",
+    "*/__pycache__/*",
+    "*/dist/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "def __repr__",
+    "raise NotImplementedError",
+]
+# No fail_under yet — no coverage baseline has been recorded. Run
+# `uv run pytest --cov --cov-report=term-missing` to see the current
+# percentage before setting one (see docs/performance_benchmarks.md).

@@ -21,6 +21,7 @@ from hype_frog.reporter.engine_formatting import (
 from hype_frog.reporter.engine_guardrails import apply_header_tooltips
 from hype_frog.reporter.sheets.toc import apply_workbook_toc_and_links
 from hype_frog.reporter.sheets.conditional import (
+    MERGED_TAB_NAMES,
     apply_content_hub_conditional_rules,
     apply_content_planner_signoff_rules,
     apply_generic_sheet_coloring,
@@ -51,6 +52,7 @@ from hype_frog.reporter.sheets.config import (
     STD_WHITE,
 )
 from hype_frog.reporter.sheets.layout import (
+    CONTENT_HUB_DENSITY_OVERRIDES,
     apply_column_widths,
     apply_display_header_aliases,
     apply_intelligent_sorting,
@@ -82,6 +84,7 @@ from hype_frog.reporter.sheets.validation import (
     add_all_header_tooltips,
     add_header_tooltips,
     apply_status_dropdown,
+    apply_triage_status_dropdown,
 )
 from hype_frog.reporter.sheets.view_state import (
     apply_optimal_view_state,
@@ -94,14 +97,13 @@ from hype_frog.reporter.sheets.style_helpers import header_index
 
 logger = get_logger(__name__)
 
-# Sprint 4 + Sprint 5 — structural / security / i18n diagnostic
-# tooltips and the new "ghost data" surfaced from Sprint 2's rendered
-# diagnostics pipeline. A single dict feeds both the Content Hub
-# (header_row=2) and the Technical Diagnostics tab (header_row=1) —
-# ``_apply_diagnostic_header_tooltips`` does header-name lookup so each
-# call only attaches comments to columns that actually exist on the
-# given sheet. Inlined here (not in ``reporter.help_layer``) because
-# ``help_layer.py`` is outside the 4-file authorisation for both sprints.
+# Structural / security / i18n diagnostic tooltips, covering the "ghost
+# data" surfaced by the diagnostics-rendering pipeline. A single dict feeds
+# both the Content Hub (header_row=2) and the Technical Diagnostics tab
+# (header_row=1) — ``_apply_diagnostic_header_tooltips`` does header-name
+# lookup so each call only attaches comments to columns that actually exist
+# on the given sheet. Inlined here rather than in ``reporter.help_layer`` to
+# keep this dict next to its two call sites.
 _DIAGNOSTIC_HEADER_TOOLTIPS: dict[str, str] = {
     "Crawl Depth": (
         "Description: BFS hop distance from the seed URL during this audit "
@@ -158,10 +160,9 @@ _DIAGNOSTIC_HEADER_TOOLTIPS: dict[str, str] = {
         "Blank when the observer was blocked or the page produced no "
         "shift events in the observation window."
     ),
-    # Sprint 6 — executive ROI tooltips. Numbers reference the
-    # constants in ``hype_frog.core.scoring`` so any future re-tuning
-    # only needs to edit one place; the tooltip text is duplicated here
-    # for the workbook reader.
+    # Executive ROI tooltips. Numbers reference the constants in
+    # ``hype_frog.core.scoring`` so any future re-tuning only needs to edit
+    # one place; the tooltip text is duplicated here for the workbook reader.
     "Potential Traffic Lift": (
         "Description: Estimated monthly clicks recoverable by closing "
         "the AEO gap on this URL.\n"
@@ -188,7 +189,7 @@ def _apply_diagnostic_header_tooltips(
     *,
     header_row: int = 1,
 ) -> None:
-    """Attach Sprint 4 + Sprint 5 diagnostic header tooltips by name lookup."""
+    """Attach structural/security/i18n diagnostic header tooltips by name lookup."""
     for col_idx in range(1, worksheet.max_column + 1):
         cell = worksheet.cell(row=header_row, column=col_idx)
         header = str(cell.value or "").strip()
@@ -261,19 +262,10 @@ def _apply_content_hub_assigned_owner_validation(worksheet) -> None:
 
 def _apply_content_hub_copywriter_column_layout(worksheet) -> None:
     headers = _hub_headers_row2(worksheet)
-    fixed_width_by_header: dict[str, float] = {
-        "Elementor Builder Link": 18.14,
-        "Open in Main": 22.57,
-        "Current OG-Image URL": 15.0,
-        "OG Image Health": 42.0,
-        "Assigned Owner": 15.0,
-        "URL Slug Normalization": 22.0,
-        "On-Page Optimization Score": 12.0,
-    }
     for name, col_idx in headers.items():
-        if name in fixed_width_by_header:
+        if name in CONTENT_HUB_DENSITY_OVERRIDES:
             letter = get_column_letter(col_idx)
-            worksheet.column_dimensions[letter].width = fixed_width_by_header[name]
+            worksheet.column_dimensions[letter].width = CONTENT_HUB_DENSITY_OVERRIDES[name]
             continue
         low = name.lower()
         if name in _COPY_HUB_WIDE_HEADERS or "proposed" in low:
@@ -422,13 +414,18 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
         status_col = header_index(worksheet, header_row).get("Status")
         if status_col:
             apply_status_dropdown(worksheet, status_col, header_row=header_row)
+    if sheet_name == "Priority URLs":
+        # Priority URLs seeds "Open" (a lightweight triage flag), not the FixPlan/
+        # Hub "To Do" workflow, so it gets its own dropdown list.
+        status_col = header_index(worksheet, header_row).get("Status")
+        if status_col:
+            apply_triage_status_dropdown(worksheet, status_col, header_row=header_row)
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
         apply_content_hub_conditional_rules(worksheet, writer)
         _link_hub_scores_from_main(worksheet)
-        # Sprint 6 — Semantic AEO heatmap on the Hub (Instant Priority
-        # moved to Content Hub Metrics). Runs AFTER the Hub conditional
-        # pipeline so the banner row insert in
-        # ``apply_content_hub_conditional_rules`` has already pushed
+        # Semantic AEO heatmap on the Hub (Instant Priority moved to Content
+        # Hub Metrics). Runs AFTER the Hub conditional pipeline so the banner
+        # row insert in ``apply_content_hub_conditional_rules`` has already pushed
         # headers to row 2 / data to row 3.
         apply_executive_priority_formatting(worksheet, header_row=2)
     elif sheet_name == CONTENT_HUB_METRICS_SHEET:
@@ -483,24 +480,14 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
             )
     if sheet_name == "Main":
         apply_main_column_group_header_tints(worksheet, header_row=header_row)
-    if sheet_name in (
-        "Technical Diagnostics",
-        "Content & AI Readiness",
-        "Link Intelligence",
-        "Link Inventory",
-        "Broken Link Impact",
-        "Quick Wins",
-        "Issue Register",
-        "Template & Duplication Risks",
-    ):
+    if sheet_name in MERGED_TAB_NAMES:
         apply_merged_tabs_conditional_formatting(
             worksheet, sheet_name, header_row=header_row
         )
     if sheet_name == "Technical Diagnostics":
-        # Sprint 5 — attach tooltips for the migrated diagnostic
-        # columns (Crawl Depth / Security: HSTS / Security: CSP /
-        # Hreflang Signals). The helper is name-keyed so it skips
-        # any header it doesn't recognise.
+        # Attach tooltips for the migrated diagnostic columns (Crawl Depth /
+        # Security: HSTS / Security: CSP / Hreflang Signals). The helper is
+        # name-keyed so it skips any header it doesn't recognise.
         _apply_diagnostic_header_tooltips(worksheet, header_row=header_row)
     if sheet_name == "Link Inventory":
         _apply_link_inventory_client_polish(worksheet)
@@ -511,11 +498,19 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
         apply_display_header_aliases(worksheet, header_row=2)
         _apply_content_hub_assigned_owner_validation(worksheet)
         _apply_content_hub_copywriter_column_layout(worksheet)
+        # Runs after apply_content_hub_conditional_rules (see finalize_content_hub_after_normalized_headers
+        # above / CONTENT_HUB_ROW2_HEADER_COMMENTS in layout.py); any header present in both
+        # engine_guardrails._HEADER_TOOLTIP_MESSAGES and CONTENT_HUB_ROW2_HEADER_COMMENTS gets this
+        # dict's text. Keep the two dicts disjoint rather than relying on call order.
         apply_header_tooltips(worksheet, header_row=2)
         apply_semantic_aeo_tooltips(worksheet, header_row=2)
         _apply_diagnostic_header_tooltips(worksheet, header_row=2)
     if sheet_name in _EMPTY_STATE_SHEETS:
         _write_empty_state_message(worksheet, header_row)
+    # Re-run: add_url_navigation_links/apply_cross_sheet_links (above) can append new
+    # columns (e.g. Main's "Technical View", Priority URLs' "Open in Technical") after
+    # the first apply_column_widths pass, leaving them at Excel's default width.
+    apply_column_widths(worksheet)
     ensure_auto_filter(worksheet)
     ensure_freeze_header(worksheet)
     ensure_print_setup(worksheet)

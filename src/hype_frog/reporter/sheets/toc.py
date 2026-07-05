@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from openpyxl.styles import Font, PatternFill
+from openpyxl.cell.cell import MergedCell
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.views import Selection
 
 from hype_frog.core import get_logger
@@ -157,9 +158,18 @@ def apply_workbook_toc_and_links(
         toc_ws[ref].font = Font(color=std_white, bold=True)
     toc_ws.column_dimensions["A"].width = 40
     toc_ws.column_dimensions["B"].width = 12
-    toc_ws.column_dimensions["C"].width = 70
+    toc_ws.column_dimensions["C"].width = 100
     toc_ws.freeze_panes = "A3"
     _rebuild_toc_body(toc_ws, wb)
+    for row_idx in range(3, toc_ws.max_row + 1):
+        cell = toc_ws.cell(row=row_idx, column=3)
+        if isinstance(cell, MergedCell):
+            continue
+        cell.alignment = Alignment(wrap_text=True, vertical="top", horizontal="left")
+        text = str(cell.value or "")
+        wrap_lines = max(1, (len(text) // 100) + 1)
+        if wrap_lines > 1:
+            toc_ws.row_dimensions[row_idx].height = min(60, 15 * wrap_lines)
 
     link_map = {
         "Issue Register": "Reference Area",

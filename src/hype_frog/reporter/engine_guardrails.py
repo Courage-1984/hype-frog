@@ -202,7 +202,8 @@ _HEADER_TOOLTIP_MESSAGES: dict[str, str] = {
         "Groups pages by topical relevance (e.g. /about-us/) for bulk template editing."
     ),
     "Action Required": (
-        "Formula-driven: shows Complete when On-Page Optimization Score reaches 85+."
+        "Static per-row classification (not a live formula): Needs Copy when Copy Score < 80, "
+        "else Needs Optimisation when SEO Score < 50, else Complete."
     ),
     "Assigned Owner": (
         "Select from dropdown: Copy Writer (Content), Developer (Technical), or "

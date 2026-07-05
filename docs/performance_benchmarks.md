@@ -205,6 +205,19 @@ Baseline numbers to be recorded after first benchmark run.
 
 ---
 
+## Test coverage baseline
+
+`pytest-cov` is configured (`[tool.coverage.run]` / `[tool.coverage.report]` in
+`pyproject.toml`) but not enabled by default in `pytest.ini` — run explicitly with
+`uv run pytest --cov --cov-report=term-missing` (see `commands.md`).
+
+First recorded baseline (full suite, all packages under `src/hype_frog`): **79%**
+line coverage (16,623 statements, 3,005 missed; 5,644 branches, 915 partial).
+No `fail_under` threshold is set yet — set one only once the team agrees on a
+target based on this baseline, not before.
+
+---
+
 ## Open performance work items
 
 Carried forward from the performance/concurrency sprint tracker (`PERF_TODO.md`, now archived — its completed items are reflected in the sections above):

@@ -50,6 +50,22 @@ def to_bool(value: object) -> bool:
     return bool(value)
 
 
+def cap_pipe_list(text: str | None, *, max_items: int, pointer: str) -> str:
+    """Cap a ``' | '``-joined list to ``max_items`` entries, appending a pointer to the rest.
+
+    Used for report cells built from per-URL lists (link statuses, matched issues) that
+    can otherwise grow into unreadable multi-thousand-character strings.
+    """
+    if not text:
+        return text or ""
+    items = text.split(" | ")
+    if len(items) <= max_items:
+        return text
+    remaining = len(items) - max_items
+    kept = " | ".join(items[:max_items])
+    return f"{kept} | … (+{remaining} more — {pointer})"
+
+
 def sanitize_filename_part(value: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "_", str(value or "").strip().lower())
     cleaned = re.sub(r"_+", "_", cleaned).strip("._-")

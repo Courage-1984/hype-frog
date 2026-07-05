@@ -41,6 +41,14 @@ Allowed set: `Complete`, `Needs Copy`, `Needs Optimisation` (British spelling).
 Computed in `engine_rows.py` via `pipeline/action_required.py::determine_action_required(e)` (a static Python value baked into the cell at export time, not a live Excel formula) — `Needs Copy` when Copy Score < 80, else `Needs Optimisation` when SEO Score < 50, else `Complete`.
 `apply_action_required_guardrails` normalises legacy values but **skips the Hub sheet** (conditional rules handle it there). Do not rename these literals without updating both `determine_action_required` and `sheets/conditional.py`.
 
+## Tooltip ownership
+
+For the Content Optimisation Hub, header tooltips come from two dicts applied in sequence in `tables_impl.py` (`apply_content_hub_conditional_rules` then `apply_header_tooltips`). `engine_guardrails._HEADER_TOOLTIP_MESSAGES` always wins over `sheets/layout.CONTENT_HUB_ROW2_HEADER_COMMENTS` for any header present in both, because it is applied second. Keep the two dicts **disjoint** (no shared keys) rather than relying on call order — a header listed in both means one copy is silently dead.
+
+## Known TODOs
+
+- `sheets/dashboard.py:194` — `style_dashboard` and the legacy hidden Dashboard tab (`LEGACY_HIDDEN_SHEETS` / `LEGACY_DASHBOARD_SHEET` in `sheets/config.py`) are slated for removal at the next major release, once bookmark migration ends.
+
 ## Ghost pane safety
 
 When clearing `freeze_panes`, also clear orphaned `sheetView` selections. Use `sanitize_sheet_view_selection` and `apply_optimal_view_state` — do not bypass them with direct `worksheet.freeze_panes =` assignments on data sheets.

@@ -24,7 +24,7 @@ diagnostics/ provides CLI gates (--quick-test, --full-smoke-test, --validate)
 | Package | Ownership |
 |---|---|
 | `core/` | Logging, URL normalisation, Pydantic models (`models.py`), run config (`run_config.py`), CLI helpers, centralised env var accessors (`env_vars.py`), URL discovery ranking (`discovery_order.py`) |
-| `config.py` / `config_defaults.py` / `config_loader.py` | Config loading; only `config_loader.py` and `core/env_vars.py` read `os.environ` |
+| `config.py` / `config_defaults.py` / `config_loader.py` | Config loading; only `config_loader.py` and `core/env_vars.py` read `os.environ`. Note: `src/hype_frog/config/` (the directory) exists as an empty, reserved-but-unreferenced package with no `__init__.py` — do not add files there without confirming intent; this row's three top-level files are the real config layer |
 | `crawler/` | HTTP sessions, PSI (`psi_engine.py` + `psi_batch.py` batch fetching + `psi_cache.py` SQLite TTL cache + `psi_merge.py` payload parsing), GSC (`gsc_engine.py`), row assembly (`data_assembler.py`, `data_assembler_phases.py`) |
 | `extractors/` | HTML/metadata parsing — no workbook writes |
 | `analysis/` | Post-crawl domain passes — read-only consumers of row dicts; delta comparison (`delta_engine.py`, `delta_loader.py`, `delta_models.py`, `delta_sheet_builder.py`) |
@@ -75,3 +75,7 @@ diagnostics/ provides CLI gates (--quick-test, --full-smoke-test, --validate)
 | `.cursor/rules/orchestration.mdc` | glob: orchestration/ |
 | `.cursor/rules/rules_engine.mdc` | glob: rules/ |
 | `.cursor/rules/config.mdc` | glob: config*.py |
+| `.cursor/rules/checkpoint.mdc` | glob: checkpoint/ |
+| `.cursor/rules/validators.mdc` | glob: validators/ |
+| `.cursor/rules/diagnostics.mdc` | glob: diagnostics/ |
+| `.cursor/rules/snapshots.mdc` | glob: snapshots/ |

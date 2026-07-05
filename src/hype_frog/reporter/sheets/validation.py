@@ -11,6 +11,7 @@ from hype_frog.reporter.sheets.config import (
     DISABLE_TOOLTIPS,
     STATUS_OPTIONS,
     status_validation_list_formula,
+    triage_status_validation_list_formula,
 )
 from hype_frog.reporter.sheets.style_helpers import header_index
 
@@ -690,6 +691,41 @@ def apply_status_dropdown(worksheet: Worksheet, status_col: int, *, header_row: 
     apply_workflow_status_dropdown(worksheet, status_col, header_row=header_row)
 
 
+def apply_triage_status_dropdown(
+    worksheet: Worksheet,
+    status_col: int,
+    *,
+    header_row: int = 1,
+) -> None:
+    """Apply the lightweight triage status list to a ``Status`` column.
+
+    Permitted values: ``TRIAGE_STATUS_OPTIONS`` (Open, In Progress, Resolved, Won't Fix).
+    Distinct from :func:`apply_workflow_status_dropdown` — Priority URLs seeds every
+    row "Open" (a triage flag), not the FixPlan/Hub "To Do" workflow.
+    """
+    if DISABLE_DATA_VALIDATION:
+        return
+    if status_col <= 0 or worksheet.max_row <= header_row:
+        return
+    data_start = header_row + 1
+    status_dv = DataValidation(
+        type="list",
+        formula1=triage_status_validation_list_formula(),
+        allow_blank=True,
+    )
+    status_dv.showInputMessage = True
+    status_dv.promptTitle = "Triage status"
+    status_dv.prompt = "Track triage state: Open → In Progress → Resolved (or Won't Fix)"
+    status_dv.showErrorMessage = True
+    status_dv.errorTitle = "Invalid Status"
+    status_dv.error = "Select a value from the dropdown list."
+    worksheet.add_data_validation(status_dv)
+    status_dv.add(
+        f"{get_column_letter(status_col)}{data_start}:"
+        f"{get_column_letter(status_col)}{worksheet.max_row}"
+    )
+
+
 def apply_status_dropdown_to_inventory(
     worksheet: Worksheet, *, header_row: int = 1
 ) -> None:
@@ -714,6 +750,7 @@ __all__ = [
     "apply_comment_dimensions",
     "apply_workflow_status_dropdown",
     "apply_status_dropdown",
+    "apply_triage_status_dropdown",
     "apply_status_dropdown_to_inventory",
     "STATUS_OPTIONS",
     "add_all_header_tooltips",

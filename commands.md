@@ -53,6 +53,16 @@ uv run hype-frog --gsc-auth    # OAuth only → secrets/token.json
 
 ---
 
+## Run tests
+
+```powershell
+uv run pytest                                        # full suite
+uv run pytest --cov --cov-report=term-missing         # with coverage (no fail_under set yet)
+uv run pytest --cov --cov-report=html                 # coverage as browsable htmlcov/index.html
+```
+
+---
+
 ## Run audits
 
 ### Structured CLI (recommended)

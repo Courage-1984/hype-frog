@@ -8,6 +8,7 @@ from typing import Any
 
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.core import get_logger
+from hype_frog.core.text_utils import cap_pipe_list
 from hype_frog.rules import IssueRule, owner_for_issue, score_url_health, stable_issue_id
 
 logger = get_logger(__name__)
@@ -26,6 +27,39 @@ def reference_tab_for_merged_workbook(legacy_tab: str) -> str:
     """Map pre-merge tab labels to current worksheet names for hyperlinks / INDIRECT."""
     key = str(legacy_tab or "").strip()
     return _LEGACY_TO_MERGED_REFERENCE_TAB.get(key, key)
+
+
+# Site-wide trust/AI-crawler flags whose driving boolean only exists on Main —
+# Technical Diagnostics has no equivalent column, so pointing there (the generic
+# keyword-match fallback below) sends readers to a tab that doesn't contain the
+# field they're looking for.
+_MAIN_ONLY_REFERENCE_RULES: frozenset[str] = frozenset(
+    {
+        "No Terms Link",
+        "No Privacy Policy Link",
+        "No Consent Manager Detected",
+        "llms.txt Missing",
+        "AI Crawlers Not Explicitly Allowed",
+        "AI Crawlers: GPTBot Blocked",
+        "AI Crawlers: ClaudeBot Blocked",
+    }
+)
+
+
+def _keyword_reference_tab(issue_name: str) -> str:
+    """Category-keyword fallback shared by Summary and Issue Register reference columns."""
+    if issue_name in _MAIN_ONLY_REFERENCE_RULES:
+        return "Main"
+    legacy_ref = (
+        "Indexability"
+        if ("Canonical" in issue_name or "Noindex" in issue_name)
+        else "Links"
+        if ("Links" in issue_name or "Anchor" in issue_name)
+        else "AEO"
+        if ("AEO" in issue_name or "Question" in issue_name or "FAQ" in issue_name)
+        else "Technical"
+    )
+    return reference_tab_for_merged_workbook(legacy_ref)
 
 
 def safe_rule(rule_fn: Callable[..., Any], row: Mapping[str, Any]) -> bool:
@@ -86,17 +120,7 @@ def build_summary_rows(
                 "Severity": rule.severity,
                 "Issue": rule.name,
                 "Affected URL Count": len(affected_urls),
-                "Reference Tab": reference_tab_for_merged_workbook(
-                    "Indexability"
-                    if "Canonical" in rule.name or "Noindex" in rule.name
-                    else "Links"
-                    if "Links" in rule.name
-                    else "AEO"
-                    if "AEO" in rule.name
-                    or "Question" in rule.name
-                    or "FAQ" in rule.name
-                    else "Technical"
-                ),
+                "Reference Tab": _keyword_reference_tab(rule.name),
                 "Affected URLs (sample)": " | ".join([u for u in affected_urls[:25] if u])
                 + " || Full list: see Technical Diagnostics / Link Intelligence tabs",
             }
@@ -164,7 +188,11 @@ def build_summary_rows(
                 "Issue": f"#{idx} {row_values.get('URL')}",
                 "Affected URL Count": row_values.get("Critical Issues Count"),
                 "Reference Tab": "Priority URLs",
-                "Affected URLs (sample)": row_values.get("Matched Issues"),
+                "Affected URLs (sample)": cap_pipe_list(
+                    row_values.get("Matched Issues"),
+                    max_items=15,
+                    pointer="see Issue Register tab for the full list",
+                ),
             }
         )
     summary_rows.append(
@@ -199,19 +227,6 @@ def build_summary_rows(
             }
         )
     return summary_rows
-
-
-def _inventory_reference_tab(issue_name: str) -> str:
-    legacy_ref = (
-        "Indexability"
-        if ("Canonical" in issue_name or "Noindex" in issue_name)
-        else "Links"
-        if ("Links" in issue_name or "Anchor" in issue_name)
-        else "AEO"
-        if ("AEO" in issue_name or "Question" in issue_name or "FAQ" in issue_name)
-        else "Technical"
-    )
-    return reference_tab_for_merged_workbook(legacy_ref)
 
 
 def _aggregate_inventory_url_label(scope: str) -> str:
@@ -258,7 +273,7 @@ def build_issue_inventory_rows(
                 ),
                 "Severity": rule.severity,
                 "Affected URL Count": len(affected),
-                "Reference Tab": _inventory_reference_tab(rule.name),
+                "Reference Tab": _keyword_reference_tab(rule.name),
                 "Owner": owner_for_issue(rule.name, rule.severity),
                 "Sprint": "",
                 "Status": "To Do",
@@ -288,7 +303,7 @@ def build_issue_inventory_rows(
                     "Stable Issue ID": stable_issue_id(url, issue),
                     "Severity": issue_severity,
                     "Affected URL Count": None,
-                    "Reference Tab": _inventory_reference_tab(issue),
+                    "Reference Tab": _keyword_reference_tab(issue),
                     "Owner": owner_for_issue(issue, issue_severity),
                     "Sprint": "",
                     "Status": "To Do",

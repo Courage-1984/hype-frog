@@ -239,7 +239,6 @@ def count_citation_candidates(
     if paragraphs:
         blocks = [p.strip() for p in paragraphs if p and p.strip()]
     elif body_text:
-        # Build sliding word-windows from sentence boundaries.
         sentences = _split_sentences(body_text)
         cluster: list[str] = []
         for sentence in sentences:
@@ -248,7 +247,7 @@ def count_citation_candidates(
                 blocks.append(" ".join(cluster))
                 cluster = []
             elif len(cluster) > max_words:
-                # Drop oldest words; keep tail to allow overlap detection.
+                # Keep tail to allow overlap detection across windows.
                 cluster = cluster[-(max_words - 1):]
 
     if not blocks:

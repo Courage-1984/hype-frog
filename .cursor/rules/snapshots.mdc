@@ -1,0 +1,19 @@
+---
+description: Snapshots layer ownership — crawl-replay snapshot store backing --regen-report and HF_SNAPSHOT_ID.
+globs: "src/hype_frog/snapshots/**/*.py"
+alwaysApply: false
+---
+
+# Snapshots layer rules
+
+## Module ownership
+
+- `models.py` — Snapshot schema (`CRAWL_SNAPSHOT_SCHEMA_VERSION`) for a replayable crawl run.
+- `store.py` — Persists and loads crawl snapshots to/from disk.
+- `replay.py` — Reconstructs a prior run's row shape from a stored snapshot without re-crawling, backing `--regen-report` and `HF_SNAPSHOT_ID`.
+
+## Invariant
+
+Replay must reconstruct the **exact** prior-run row shape. Any schema change to payloads in `core/models.py` must be reflected in `snapshots/models.py` (bump `CRAWL_SNAPSHOT_SCHEMA_VERSION` if the change is breaking) — otherwise replay will silently deserialize stale/incompatible data instead of failing loudly.
+
+This is a distinct concept from the delta engine's `RunSnapshot` (see `analysis.mdc` / `delta_loader.py`, `delta_models.py`) — that snapshot is an in-memory comparison baseline for delta reporting, not the durable crawl-replay store this file governs.

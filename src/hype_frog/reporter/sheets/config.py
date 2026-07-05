@@ -67,6 +67,16 @@ def status_validation_list_formula() -> str:
     return '"' + ",".join(STATUS_OPTIONS) + '"'
 
 
+# Priority URLs seeds every row "Open" (export_registry.py::build_priority_rows) — a
+# lightweight triage flag, not the FixPlan/Hub workflow above, so it gets its own list.
+TRIAGE_STATUS_OPTIONS: tuple[str, ...] = ("Open", "In Progress", "Resolved", "Won't Fix")
+
+
+def triage_status_validation_list_formula() -> str:
+    """Excel ``DataValidation`` list literal for lightweight triage ``Status`` columns."""
+    return '"' + ",".join(TRIAGE_STATUS_OPTIONS) + '"'
+
+
 # Content Hub banner / workflow accents (non-RAG but canonicalised).
 HUB_BANNER_FILL: str = "BFE9E4"
 HUB_SCOPE_NOTE_FONT: str = "666666"
@@ -252,6 +262,8 @@ __all__ = [
     "WORKBOOK_NAV_TARGET_SHEET",
     "DATA_SHEET_FREEZE_PANES",
     "status_validation_list_formula",
+    "TRIAGE_STATUS_OPTIONS",
+    "triage_status_validation_list_formula",
     "STATUS_OPTIONS",
     "STATUS_TODO_FILL",
     "STATUS_TODO_FONT",

@@ -1,0 +1,16 @@
+---
+description: Validators layer ownership — JSON-LD schema validation scope and read-only-enrichment invariant.
+globs: "src/hype_frog/validators/**/*.py"
+alwaysApply: false
+---
+
+# Validators layer rules
+
+## Module ownership
+
+- `schema_validator.py` — JSON-LD structured-data schema validation only. **No workbook I/O** — this package must not import from `reporter/` or write cells.
+
+## Invariants
+
+- Validators enrich/inspect row dicts **read-only**; never mutate the row dict passed in.
+- Must not raise on malformed input — flag or annotate the row instead (e.g. via a `skip_reason`-style field) so a single bad JSON-LD block never aborts a crawl.

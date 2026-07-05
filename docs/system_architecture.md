@@ -130,7 +130,7 @@ Runtime rows are dictionary pairs wrapped by Pydantic models (details: [data_con
 
 - `psi_batch.py` — Async batch HTTP fetching with `PsiRequestPacer` (minimum request spacing), jitter-aware delays (`jittered_seconds`), and exponential backoff (up to 6 retries). Detects API key errors and rate-limit signals via regex.
 - `psi_cache.py` — SQLite TTL cache (`CACHE_TTL_SECONDS = 86400`) for raw PSI responses. `open_cache_db()` uses WAL mode; `cache_get()` / `cache_put()` auto-evict expired rows.
-- `psi_merge.py` — Payload parsing: `PSI_LIGHTHOUSE_EXPORT_KEYS` (48 keys), `lab_strategy_metrics()`, `category_score()`, `merge_url_results()`, `psi_index_key()`.
+- `psi_merge.py` — Payload parsing: `PSI_LIGHTHOUSE_EXPORT_KEYS` (32 keys), `lab_strategy_metrics()`, `category_score()`, `merge_url_results()`, `psi_index_key()`.
 
 Resulting data:
 - Lab metrics project to `PSI_LIGHTHOUSE_EXPORT_KEYS` on extra rows; network items support third-party script inventory.

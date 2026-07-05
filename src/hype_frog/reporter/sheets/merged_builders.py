@@ -8,6 +8,7 @@ from hype_frog.crawler.redirect_chain import RedirectHopRecord, build_redirect_m
 from hype_frog.config import get_quick_wins_max_effort_hours, get_quick_wins_max_results
 from hype_frog.analysis.delta_engine import IssueRecord, days_between
 from hype_frog.core import get_logger
+from hype_frog.core.text_utils import cap_pipe_list
 from hype_frog.rules.playbook_entries import PlaybookEntry
 
 logger = get_logger(__name__)
@@ -68,7 +69,7 @@ TECHNICAL_DIAGNOSTICS_COLUMNS: tuple[str, ...] = (
     "Discovery Rank",
     "Reachable from Homepage",
     "Source Legacy Tab",
-    # Sprint 5 — structural / security / i18n diagnostics migrated from
+    # Structural / security / i18n diagnostics migrated from
     # the Content Optimisation Hub. Appended at the END so existing
     # column-position contracts (notably the
     # ``_link_main_technical_health_to_diagnostics`` VLOOKUP into
@@ -237,6 +238,18 @@ def _to_str(value: object) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+_LINK_STATUSES_MAX_ITEMS = 50
+
+
+def _cap_link_statuses(text: str) -> str:
+    """Cap a ' | '-joined link-status list so the cell stays readable (and under Excel's limit)."""
+    return cap_pipe_list(
+        text,
+        max_items=_LINK_STATUSES_MAX_ITEMS,
+        pointer="see Link Inventory tab for the full list",
+    )
 
 
 def _export_number(value: object) -> float | int | str:
@@ -685,6 +698,7 @@ def build_link_intelligence_rows(
         link_statuses = _to_str(row.get("Internal Link Statuses"))
         if inlinks_urls and not link_statuses:
             link_statuses = inlinks_urls
+        link_statuses = _cap_link_statuses(link_statuses)
         broken_ct = _to_int(row.get("Broken Internal Links Count"), 0)
         inlinks_count = _to_int(
             row.get("Internal Inlinks") or graph.get("Inlinks Count"),

@@ -7,6 +7,7 @@ import time
 import openpyxl
 from openpyxl import Workbook
 
+from hype_frog.reporter.engine_guardrails import apply_header_tooltips
 from hype_frog.reporter.engine_rows import CONTENT_HUB_EXPORT_COLUMNS
 from hype_frog.reporter.sheets.conditional import apply_content_hub_conditional_rules
 from hype_frog.reporter.sheets.config import (
@@ -38,6 +39,10 @@ def test_content_hub_two_row_header_without_scope_row() -> None:
         sheets = {CONTENT_OPTIMISATION_HUB_SHEET: ws}
 
     apply_content_hub_conditional_rules(ws, _Writer())
+    # Mirrors tables_impl.py's real Content Hub pipeline order: header tooltips are
+    # applied after the conditional-rules pass and win for any header present in both
+    # dicts (see reporter/CLAUDE.md "Tooltip ownership").
+    apply_header_tooltips(ws, header_row=2)
 
     header_values = [
         ws.cell(row=2, column=col_idx).value for col_idx in range(1, len(columns) + 1)
@@ -51,7 +56,7 @@ def test_content_hub_two_row_header_without_scope_row() -> None:
     action_col = columns.index("Action Required") + 1
     action_header = ws.cell(row=2, column=action_col)
     assert action_header.comment is not None
-    assert "Technical Diagnostics" in (action_header.comment.text or "")
+    assert "Needs Optimisation" in (action_header.comment.text or "")
     assert str(ws["A1"].value).startswith(RETURN_TO_BRIEFING_LABEL)
 
 

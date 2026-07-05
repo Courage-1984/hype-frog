@@ -1,0 +1,21 @@
+---
+description: Checkpoint layer ownership — durable crawl-progress persistence, caches, and resume-safety invariants.
+globs: "src/hype_frog/checkpoint/**/*.py"
+alwaysApply: false
+---
+
+# Checkpoint layer rules
+
+## Module ownership
+
+- `store.py` — Durable crawl-progress persistence consumed by `orchestration/crawl_runner_bfs.py` to resume interrupted crawls.
+- `cache.py` — General-purpose crawl-scoped cache primitives.
+- `link_inventory_cache.py` — Cache for link-inventory rows built during the BFS crawl; consumed indirectly by `pipeline/` link-inventory streaming and `reporter/engine_io.py`.
+
+## Resume-safety invariant
+
+Checkpoint writes must be **idempotent and resumable**: a crash mid-write must never corrupt the state `crawl_runner_bfs.py` reads on resume. Prefer atomic write patterns (write-to-temp-then-replace) over in-place mutation of the checkpoint file.
+
+## Known test gap
+
+`link_inventory_cache.py` has no dedicated test file — it is currently only exercised indirectly via `tests/pipeline/test_link_inventory_stream.py` and `tests/reporter/test_engine_io.py`. A direct `tests/checkpoint/test_link_inventory_cache.py` is planned; when adding it, test the module's public functions in isolation rather than only through the stream pipeline.
