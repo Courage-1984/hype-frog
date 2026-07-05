@@ -1,4 +1,12 @@
-"""PSI batch merge, status messaging, and map indexing."""
+"""PSI batch merge, status messaging, and map indexing.
+
+Intentionally facade-level: imports go through ``crawler.psi_engine``'s
+re-exports rather than ``psi_batch.py``/``psi_merge.py`` directly, since the
+facade is the documented public surface for this subsystem and tests here
+exercise it end-to-end. If a bug is narrowed to one of those split-out
+modules, prefer adding a targeted test in a new ``test_psi_batch.py``/
+``test_psi_merge.py`` rather than importing the internal module here.
+"""
 
 from __future__ import annotations
 

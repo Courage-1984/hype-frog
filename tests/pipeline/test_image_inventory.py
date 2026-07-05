@@ -64,10 +64,13 @@ def test_pipe_delimited_images_fallback() -> None:
 
     urls = {row["Image URL"] for row in rows}
     assert urls == {"https://s.test/c.gif", "https://s.test/d.webp"}
-    # No probe data → status blank, broken falls back to False.
+    # No probe data → status blank; "Is Broken"/"Is Oversized" must read
+    # "Not Checked" rather than False (M9 fix) — False would misleadingly
+    # imply the image was verified and confirmed fine.
     for row in rows:
         assert row["Status Code"] == ""
-        assert row["Is Broken"] is False
+        assert row["Is Broken"] == "Not Checked"
+        assert row["Is Oversized"] == "Not Checked"
 
 
 def test_no_images_returns_empty_list() -> None:

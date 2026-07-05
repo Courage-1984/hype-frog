@@ -11,6 +11,7 @@ from hype_frog.core import get_logger
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.core.numeric_utils import round2, round4
 from hype_frog.core.scoring import calculate_executive_roi
+from hype_frog.pipeline.action_required import determine_action_required
 from hype_frog.pipeline.content_hub_metrics import resolve_content_hub_metrics
 from hype_frog.analysis.content_hub_recommendations import (
     build_hub_priority_reason,
@@ -26,7 +27,13 @@ from hype_frog.reporter.engine_io import (
     _safe_sheet_name,
     _sanitize_excel_url,
 )
-from hype_frog.rules import IssueRule, owner_for_issue, workflow_metrics_for_issue, effort_for_issue
+from hype_frog.rules import (
+    IssueRule,
+    owner_for_issue,
+    score_url_health,
+    workflow_metrics_for_issue,
+    effort_for_issue,
+)
 from hype_frog.rules.playbook_entries import PlaybookEntry
 from hype_frog.reporter.sheets.layout import (
     content_optimisation_hub_ordered_headers,
@@ -237,14 +244,26 @@ def build_fixplan_rows(
         "Warning": "To Do",
         "Observation": "In Review",
     }
+    # Reuse score_url_health()'s own per-row gate for url-scope (per-page,
+    # content-derived) rules — not a separate approximation of it — so
+    # FixPlan's affected-URL counts for those rules are always identical to
+    # the per-URL Issue Inventory ground truth: hard-error/404 rows only ever
+    # match "Non-200 Status", and extraction-skipped-but-not-error rows match
+    # nothing. Site/server-scope rules (e.g. "No ETag Header") aren't
+    # content-derived, so they keep evaluating against every row regardless
+    # of extraction state, same as before.
+    row_matched_issues = [score_url_health(r.values, summary_rules)[3] for r in extra_rows]
     for rule in summary_rules:
         issue_name = rule.name
         severity = rule.severity
-        affected = [
-            r
-            for r in extra_rows
-            if safe_rule(rule.fn, r.values)
-        ]
+        if rule.scope == "url":
+            affected = [
+                r
+                for r, matched in zip(extra_rows, row_matched_issues, strict=True)
+                if issue_name in matched.get(severity, [])
+            ]
+        else:
+            affected = [r for r in extra_rows if safe_rule(rule.fn, r.values)]
         affected_count = len(affected)
         if affected_count <= 0:
             continue
@@ -581,7 +600,6 @@ def build_content_optimisation_hub_rows(
     q_l = content_hub_column_letter("H4")
     s_l = content_hub_column_letter("H5")
     u_l = content_hub_column_letter("H6")
-    w_l = content_hub_column_letter("On-Page Optimization Score")
     f_l = content_hub_column_letter("URL")
 
     og_profile = build_og_image_site_profile(
@@ -705,7 +723,13 @@ def build_content_optimisation_hub_rows(
         h5_health = f'=IF(ISBLANK({s_l}{excel_row}),"MISSING","OK")'
         h6_health = f'=IF(ISBLANK({u_l}{excel_row}),"MISSING","OK")'
         on_page_score = _content_hub_on_page_score_from_health_formula(excel_row)
-        action_formula = f'=IF({w_l}{excel_row}>=85,"Complete","Needs Copy")'
+        # Real 3-branch classifier (Complete / Needs Optimisation / Needs Copy)
+        # from pipeline/action_required.py, computed against this row's actual
+        # Copy Score / SEO Score — replaces the previous 2-branch Excel formula
+        # (=IF(On-Page Optimization Score>=85,"Complete","Needs Copy")), which
+        # could never produce "Needs Optimisation" despite it being documented
+        # as part of the 3-value contract.
+        action_required = determine_action_required(e)
         open_main_formula = _content_hub_open_in_main_formula(f_l, excel_row)
 
         metrics_rows.append(
@@ -745,7 +769,7 @@ def build_content_optimisation_hub_rows(
                     int(float(e.get("Citation Candidate Count") or 0))
                 ),
                 "Semantic AEO Score": _round2(e.get("Semantic AEO Score")),
-                "Action Required": action_formula,
+                "Action Required": action_required,
                 "Status": "To Do",
                 "Assigned Owner": "Copy Writer",
                 "URL": _hyperlink_url_formula(raw_url),

@@ -21,11 +21,11 @@ class CrawlRuntimeOptions:
     full_suite: bool
     previous_audit_path: str
     checkpoint_every: int
+    hide_advanced_tabs: bool = True
 
 
 def prompt_crawl_options_sync(setup: RunSetup) -> CrawlRuntimeOptions:
     """Synchronous interactive configuration — run via ``asyncio.to_thread``."""
-    del setup
     console.print("\n[bold]Crawl Safety Profile[/bold]")
     console.print("  [cyan]1[/cyan]  Gentle   — fewer workers, longer delay")
     console.print("  [cyan]2[/cyan]  Balanced — default")
@@ -60,6 +60,23 @@ def prompt_crawl_options_sync(setup: RunSetup) -> CrawlRuntimeOptions:
         logger.warning("Invalid input; defaulting to Full AEO/SEO Suite.")
         full_suite = True
 
+    if setup.hide_advanced_tabs_preset is not None:
+        # --show-all-tabs (or another explicit override) was passed even though
+        # the rest of this run is interactive — honor it without prompting.
+        hide_advanced_tabs = setup.hide_advanced_tabs_preset
+    else:
+        tabs_choice = input(
+            "Workbook Tab Visibility: [1] Hide advanced/historical tabs (default) "
+            "| [2] Show all tabs: "
+        ).strip()
+        if tabs_choice == "2":
+            hide_advanced_tabs = False
+        elif tabs_choice == "1" or tabs_choice == "":
+            hide_advanced_tabs = True
+        else:
+            logger.warning("Invalid input; defaulting to hiding advanced/historical tabs.")
+            hide_advanced_tabs = True
+
     previous_audit_path = input(
         "Previous Audit Path (.xlsx or _delta_summary.json) [leave blank to skip]: "
     ).strip()
@@ -79,6 +96,7 @@ def prompt_crawl_options_sync(setup: RunSetup) -> CrawlRuntimeOptions:
         full_suite=full_suite,
         previous_audit_path=previous_audit_path,
         checkpoint_every=checkpoint_every,
+        hide_advanced_tabs=hide_advanced_tabs,
     )
 
 
@@ -105,6 +123,11 @@ async def resolve_crawl_runtime_options(setup: RunSetup) -> CrawlRuntimeOptions:
             full_suite=bool(setup.full_suite_preset),
             previous_audit_path=previous_audit_path,
             checkpoint_every=int(setup.checkpoint_every_preset or 0),
+            hide_advanced_tabs=(
+                setup.hide_advanced_tabs_preset
+                if setup.hide_advanced_tabs_preset is not None
+                else True
+            ),
         )
 
     return await asyncio.to_thread(prompt_crawl_options_sync, setup)

@@ -20,6 +20,7 @@ class UserConfig:
     selector_wait_ms: int
     check_external_link_status: bool
     check_og_images: bool
+    check_content_images: bool
 
 
 def _resolve_crawl_engine(raw: str) -> str:
@@ -58,6 +59,10 @@ def get_user_config() -> UserConfig:
         "Verify OG image URLs (status + dimensions)? [y/N, blank skip]: "
     ).strip().lower()
     check_og_images = og_image_checks_raw in {"y", "yes"}
+    content_image_checks_raw = input(
+        "Verify content images (status + dimensions)? [y/N, blank skip]: "
+    ).strip().lower()
+    check_content_images = content_image_checks_raw in {"y", "yes"}
 
     max_urls: int | None = None
     max_psi_urls: int | None = None
@@ -115,4 +120,5 @@ def get_user_config() -> UserConfig:
         selector_wait_ms=selector_wait_ms,
         check_external_link_status=check_external_link_status,
         check_og_images=check_og_images,
+        check_content_images=check_content_images,
     )

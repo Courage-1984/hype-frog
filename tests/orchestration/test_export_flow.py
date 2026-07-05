@@ -12,12 +12,14 @@ import pytest
 from openpyxl import load_workbook
 
 from hype_frog.app_orchestrator import (
-    _build_aeo_rows,
-    _build_aioseo_rows,
     _extract_subfolder,
     _value_or_default,
 )
 from hype_frog.core.url_normalization import normalize_url
+from hype_frog.orchestration.export_row_builders import (
+    build_aeo_rows as _build_aeo_rows,
+    build_aioseo_rows as _build_aioseo_rows,
+)
 from hype_frog.crawler.gsc_engine import GSCEnrichmentContext
 from hype_frog.diagnostics.full_smoke_fixtures import (
     FullSmokeFixture,
@@ -91,6 +93,7 @@ def _build_run_setup(*, full_suite: bool, target_input: str) -> RunSetup:
         workers_preset=2,
         request_delay_preset=0.0,
         full_suite_preset=full_suite,
+        hide_advanced_tabs_preset=None,
         previous_audit_path_preset="",
         checkpoint_every_preset=0,
         resume_checkpoint_mode="no",

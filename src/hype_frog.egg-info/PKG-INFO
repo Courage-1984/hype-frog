@@ -28,6 +28,7 @@ Requires-Dist: en-core-web-sm @ https://github.com/explosion/spacy-models/releas
 Provides-Extra: dev
 Requires-Dist: pytest==9.0.3; extra == "dev"
 Requires-Dist: pytest-asyncio>=0.23.0; extra == "dev"
+Requires-Dist: pytest-cov>=5.0.0; extra == "dev"
 Requires-Dist: ruff>=0.3.0; extra == "dev"
 Requires-Dist: mypy>=1.9.0; extra == "dev"
 Requires-Dist: pyinstaller>=6.0; extra == "dev"

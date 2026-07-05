@@ -54,6 +54,8 @@ def test_fixplan_broken_internal_links_counts_source_urls() -> None:
         ExtraRowPayload.model_validate(
             {
                 "URL": "https://example.com/a",
+                "Extraction State": "partial",
+                "Status Code": 200,
                 "Matched Issues": "Broken Internal Links",
                 "Broken Internal Links Count": 3,
             }
@@ -61,6 +63,8 @@ def test_fixplan_broken_internal_links_counts_source_urls() -> None:
         ExtraRowPayload.model_validate(
             {
                 "URL": "https://example.com/b",
+                "Extraction State": "partial",
+                "Status Code": 200,
                 "Matched Issues": "Broken Internal Links",
                 "Broken Internal Links Count": 2,
             }
@@ -123,4 +127,46 @@ def test_fixplan_and_summary_counts_align_for_sample_rules() -> None:
 
     missing_title_rule = next(r for r in rules if r.name == "Missing Title")
     assert safe_rule(missing_title_rule.fn, extra_rows[0].values) is True
-    assert summary_counts.get("Missing Title") == fixplan_counts.get("Missing Title") == 1
+
+
+def test_fixplan_and_summary_exclude_extraction_skipped_urls_from_content_rules() -> None:
+    """Regression (M2): a URL where extraction was skipped (Title=None only because
+    the page was never parsed, not because a real title is genuinely missing)
+    must not inflate url-scope, content-derived rule counts like Missing Title."""
+    rules = get_summary_rules()
+    extra_rows = [
+        ExtraRowPayload.model_validate(
+            {
+                "URL": "https://example.com/real-missing-title",
+                "Extraction State": "partial",
+                "Status Code": 200,
+                "Title Missing": True,
+            }
+        ),
+        ExtraRowPayload.model_validate(
+            {
+                "URL": "https://example.com/skipped",
+                "Extraction State": "skipped",
+                "Status Code": 200,
+                "Title Missing": True,
+            }
+        ),
+    ]
+    summary_rows = build_summary_rows(
+        rules,
+        extra_rows,
+        defaultdict(lambda: defaultdict(int)),
+        lambda value, default: default if value is None else float(value),
+    )
+    fixplan_rows = build_fixplan_rows(rules, extra_rows, **_fixplan_kwargs())
+    missing_title_summary = next(
+        row
+        for row in summary_rows
+        if row.get("Section") == "Issue Counts" and row.get("Issue") == "Missing Title"
+    )
+    missing_title_fixplan = next(
+        row for row in fixplan_rows if row["Issue Type"] == "Missing Title"
+    )
+    # Only the genuinely-extracted URL counts — the skipped one is excluded.
+    assert missing_title_summary["Affected URL Count"] == 1
+    assert missing_title_fixplan["Affected Count"] == 1

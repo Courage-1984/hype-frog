@@ -272,6 +272,42 @@ _LINK_INVENTORY_HELP: dict[str, str] = {
     ),
 }
 
+_MAIN_HELP: dict[str, str] = {
+    "Inbound Internal Link Count": format_help_layer(
+        description="Raw count of internal anchor instances pointing at this URL.",
+        calculation=(
+            "Every anchor-tag occurrence across the crawl is counted with no deduplication — "
+            "identical desktop/mobile/footer nav markup to the same target all add up here. "
+            "This is a different, larger number by design than Link Inventory's per-"
+            "(source, target, anchor) count, which collapses duplicate link instances into "
+            "one row. Neither is 'wrong'; they answer different questions (raw link-instance "
+            "volume vs. unique link relationships)."
+        ),
+    ),
+}
+
+_LINK_EQUITY_MAP_HELP: dict[str, str] = {
+    "Inbound Link Count": format_help_layer(
+        description="Raw count of internal anchor instances pointing at this URL.",
+        calculation=(
+            "Same raw, non-deduplicated counting method as Main!Inbound Internal Link Count — "
+            "see that column's tooltip for why this differs from Link Inventory's per-"
+            "(source, target, anchor) row count."
+        ),
+    ),
+}
+
+_ANCHOR_TEXT_AUDIT_HELP: dict[str, str] = {
+    "Inbound Link Count": format_help_layer(
+        description="Raw count of internal anchor instances pointing at this URL.",
+        calculation=(
+            "Same raw, non-deduplicated counting method as Main!Inbound Internal Link Count — "
+            "see that column's tooltip for why this differs from Link Inventory's per-"
+            "(source, target, anchor) row count."
+        ),
+    ),
+}
+
 _SITEMAPQA_HELP: dict[str, str] = {
     "Found via Crawl": format_help_layer(
         description="Whether the URL was discovered by crawling internal links.",
@@ -291,7 +327,13 @@ _SITEMAPQA_HELP: dict[str, str] = {
     ),
     "Lastmod vs HTTP Match": format_help_layer(
         description="Whether the sitemap <lastmod> agrees with the HTTP Last-Modified header.",
-        calculation="Date comparison (day precision) between sitemap lastmod and HTTP header.",
+        calculation=(
+            "Date comparison (day precision) between sitemap lastmod and HTTP header. "
+            "A 'Mismatch' here is often expected, not a bug: many servers set a dynamic "
+            "Last-Modified header to the response/crawl timestamp on every request, while "
+            "the sitemap's <lastmod> reflects the actual content-edit date — these are two "
+            "genuinely different signals, not two measurements of the same thing."
+        ),
     ),
 }
 
@@ -326,6 +368,9 @@ _SHEET_CURATED_HEADER_HELP: dict[str, dict[str, str]] = {
     "Broken Link Impact": _BROKEN_LINK_IMPACT_HELP,
     "Link Inventory": _LINK_INVENTORY_HELP,
     "SitemapQA": _SITEMAPQA_HELP,
+    "Main": _MAIN_HELP,
+    "Link Equity Map": _LINK_EQUITY_MAP_HELP,
+    "Anchor Text Audit": _ANCHOR_TEXT_AUDIT_HELP,
 }
 
 SCHEMA_METADATA_HEADER_TOOLTIP_BODIES: dict[str, str] = {
@@ -564,22 +609,26 @@ def apply_curated_header_tooltips(
         _attach_header_comment(cell, f"{title}\n\n{body}", author)
 
 
-def add_all_header_tooltips(worksheet: Worksheet) -> None:
-    """Attach generic header guidance as cell comments on row-one headers.
+def add_all_header_tooltips(worksheet: Worksheet, *, header_row: int = 1) -> None:
+    """Attach generic header guidance as cell comments on the header row.
 
     Cell comments render above the grid and avoid freeze-pane clipping that affects
     Data Validation input messages.
 
     Args:
         worksheet: Worksheet where comments are added.
+        header_row: 1-based row holding column headers — most data sheets carry
+            a row-1 "Return to Executive Briefing" banner, so real headers (and
+            therefore curated tooltips) live on row 2; passing the wrong row
+            silently attaches nothing (see ``sheet_data_header_row``).
     """
     if _DISABLE_TOOLTIP_COMMENTS:
         return
-    headers = header_index(worksheet)
+    headers = header_index(worksheet, header_row)
     author = "hype-frog"
     sheet_title = worksheet.title or ""
     for header, col_idx in headers.items():
-        cell = worksheet.cell(row=1, column=col_idx)
+        cell = worksheet.cell(row=header_row, column=col_idx)
         title = friendly_metric_label(header)[:32] or "Column"
         curated = resolve_curated_help_body(sheet_title, header)
         body = curated if curated is not None else tooltip_for_header(header)

@@ -237,6 +237,7 @@ async def fetch_and_parse(
             source_url=url,
             hop_records=hop_records,
             final_url=final_url or resolved_url,
+            final_status=status_code if isinstance(status_code, int) else None,
         )
         extra_values.update(redirect_fields)
         if final_url:

@@ -492,6 +492,7 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "Draft Page Flag": False,
     "Probable Duplicate Flag": False,
     "Duplicate Of URL": None,
+    "Best Match URL": None,
     "Content Similarity %": None,
     "Heading Structure Cluster Size": 0,
     "FAQ Section Count": 0,

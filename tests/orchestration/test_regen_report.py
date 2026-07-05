@@ -74,6 +74,7 @@ async def test_regen_report_skips_crawl_and_writes_real_workbook_from_snapshot(
             selector_wait_ms=0,
             check_external_link_status=True,
             check_og_images=False,
+            check_content_images=False,
         ),
     )
     monkeypatch.setattr(
@@ -129,6 +130,7 @@ async def test_regen_report_missing_snapshot_exits(monkeypatch: pytest.MonkeyPat
             selector_wait_ms=0,
             check_external_link_status=True,
             check_og_images=False,
+            check_content_images=False,
         ),
     )
     monkeypatch.setattr(

@@ -45,10 +45,10 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> Any:
     return _impl(writer, sheet_name)
 
 
-def apply_tab_hyperlinks(writer: Any) -> Any:
+def apply_tab_hyperlinks(writer: Any, *, hide_advanced_tabs: bool = True) -> Any:
     from hype_frog.reporter.sheets.tables_impl import apply_tab_hyperlinks as _impl
 
-    return _impl(writer)
+    return _impl(writer, hide_advanced_tabs=hide_advanced_tabs)
 
 
 __all__ = [

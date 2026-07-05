@@ -107,9 +107,10 @@ ANCHOR_TEXT_AUDIT_SHEET: str = "Anchor Text Audit"
 SNIPPET_OPPORTUNITIES_SHEET: str = "Snippet Opportunities"
 COMPETITOR_BENCHMARKS_SHEET: str = "Competitor Benchmarks"
 EXECUTIVE_BRIEFING_SHEET: str = "Executive Briefing"
-# Freeze just the title + KPI + key-insights band (rows 1–9) so the KPI summary
-# stays visible while scrolling through the taller, non-overlapping chart grid.
-EXECUTIVE_BRIEFING_FREEZE_PANES: str = "A10"
+# Freeze just the title + KPI (both rows) + key-insights band (rows 1–11) so the
+# KPI summary stays visible while scrolling through the taller, non-overlapping
+# chart grid.
+EXECUTIVE_BRIEFING_FREEZE_PANES: str = "A12"
 LEGACY_DASHBOARD_SHEET: str = "Dashboard"
 # Deprecated alias — Executive Dashboard tab removed in Phase 2.
 EXECUTIVE_DASHBOARD_SHEET: str = "Executive Dashboard"

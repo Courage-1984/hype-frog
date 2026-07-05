@@ -17,6 +17,7 @@ from hype_frog.reporter.excel_engine import (
     apply_tab_hyperlinks,
     apply_workbook_export_guardrails,
 )
+from hype_frog.reporter.dashboard_logic import FixPlanRowPayload, compute_dashboard_metrics
 from hype_frog.reporter.sheets.executive_dashboard import (
     CHART_LABEL_COL,
     CHART_SOURCE_FIRST_ROW,
@@ -29,6 +30,7 @@ from hype_frog.reporter.sheets.executive_dashboard import (
     _owner_metrics,
     _project_component_score,
     _severity_metrics,
+    _top_issues_by_impact,
     write_executive_dashboard,
 )
 
@@ -162,6 +164,47 @@ def test_severity_metrics_separates_unique_urls_from_issue_instances() -> None:
     assert owner_map["Copy Writer"] == (1, 3)
 
 
+def test_top_issues_by_impact_tie_break_matches_key_insights_largest_theme() -> None:
+    """Regression (L1): when several issues tie on Affected Count, the
+    Executive Briefing's "Largest theme" sentence (dashboard_logic's
+    top_issue_rows) and the "Top issues by URL impact" chart table
+    (_top_issues_by_impact) must agree on which one is "the" biggest —
+    previously they used different tie-break rules and could name two
+    different issues for the exact same tied count."""
+    fixplan_rows = [
+        {"Issue Type": "No ETag Header", "Severity": "Warning", "Affected Count": 255},
+        {"Issue Type": "No Terms Link", "Severity": "Warning", "Affected Count": 255},
+        {"Issue Type": "No Consent Manager Detected", "Severity": "Warning", "Affected Count": 255},
+        {"Issue Type": "No 40-60 Word Answer Paragraphs", "Severity": "Observation", "Affected Count": 255},
+        {"Issue Type": "AI Crawlers Not Explicitly Allowed", "Severity": "Warning", "Affected Count": 255},
+    ]
+    summary = SummaryMetricsPayload(
+        urls_crawled=255,
+        seo_pass_rate_pct=0.0,
+        health_score_pct=0.0,
+        critical_url_count=0,
+        warning_url_count=255,
+        projected_health_score_pct=0.0,
+        projected_pass_rate_pct=0.0,
+    )
+    fixplan_payloads = [
+        FixPlanRowPayload.model_validate({**row, "source_row": idx})
+        for idx, row in enumerate(fixplan_rows, start=2)
+    ]
+    dashboard_metrics = compute_dashboard_metrics(
+        summary_metrics=summary,
+        technical_main_rows=[],
+        technical_extra_rows=[],
+        fixplan_rows=fixplan_payloads,
+        aeo_rows=[],
+    )
+    largest_theme = dashboard_metrics.top_issue_rows[0].issue_name
+
+    chart_top_issue = _top_issues_by_impact(fixplan_rows, limit=8)[0][0]
+
+    assert chart_top_issue == largest_theme
+
+
 def test_meaningful_priority_rows_skip_low_value_paths() -> None:
     rows = [
         {"URL": "https://example.com/cart", "Business Risk Score": 99},
@@ -214,7 +257,7 @@ def test_executive_dashboard_writes_charts_with_visible_source_rows(
     assert any("Content & AEO readiness" in title for title in titles)
     assert any("Top issues by URL impact" in title for title in titles)
     assert "High-intent pages by business risk" in titles
-    assert "Key insights:" in str(exec_ws.cell(row=9, column=1).value or "")
+    assert "Key insights:" in str(exec_ws.cell(row=11, column=1).value or "")
     assert exec_ws.cell(row=CHART_SOURCE_FIRST_ROW + 2, column=2).value is not None
     health_data_start = CHART_SOURCE_FIRST_ROW + 3
     health_labels = [
@@ -285,7 +328,7 @@ def test_adjust_sheet_format_tolerates_executive_dashboard_merges(
     adjust_sheet_format(writer, EXECUTIVE_BRIEFING_SHEET)
     writer.close()
     wb = load_workbook(out)
-    assert wb[EXECUTIVE_BRIEFING_SHEET].freeze_panes == "A10"
+    assert wb[EXECUTIVE_BRIEFING_SHEET].freeze_panes == "A12"
     wb.close()
 
 
@@ -310,6 +353,6 @@ def test_executive_dashboard_survives_export_finalization(
     writer.close()
     patch_xlsx_app_xml_for_excel_compatibility(out)
     wb = load_workbook(out)
-    assert wb[EXECUTIVE_BRIEFING_SHEET].freeze_panes == "A10"
+    assert wb[EXECUTIVE_BRIEFING_SHEET].freeze_panes == "A12"
     assert len(wb[EXECUTIVE_BRIEFING_SHEET]._charts) >= 4
     wb.close()

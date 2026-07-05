@@ -56,6 +56,7 @@ class RunConfig:
     competitor_domains: tuple[str, ...] = ()
     output_filename: str | None = None
     export_pdf: bool = False
+    hide_advanced_tabs: bool = True
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,7 @@ class CliRunOverrides:
     snapshot_id: str | None = None
     verbose: bool = False
     quiet: bool = False
+    show_all_tabs: bool = False
 
 
 def _quick_test_max_psi_urls() -> int:

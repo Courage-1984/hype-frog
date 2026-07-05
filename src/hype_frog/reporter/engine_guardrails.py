@@ -109,7 +109,9 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
         "Pages with answer-block potential for featured snippets and AI answer extraction."
     ),
     "Script Inventory": (
-        "Third-party and first-party scripts per URL with blocking and privacy implications."
+        "Known third-party tracker/tag detections per URL (a fixed allowlist of ~19 common "
+        "analytics/ads/tag-manager domains via PSI's network-requests audit) — not a full "
+        "inventory of every script on the site."
     ),
     "Image Inventory": (
         "Every image with alt-text coverage, filename quality, dimensions, and mixed-content flags."

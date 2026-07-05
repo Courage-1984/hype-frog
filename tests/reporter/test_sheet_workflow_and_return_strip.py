@@ -1,4 +1,4 @@
-"""Phase 3 UX polish: autofilter coverage and workflow status prompts."""
+"""Sheet workflow/formatting guardrails: autofilter coverage, workflow status dropdown, zebra banding, return strip."""
 
 from __future__ import annotations
 

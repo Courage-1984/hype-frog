@@ -47,6 +47,31 @@ def test_issue_inventory_collapses_server_and_site_rules() -> None:
     assert title_rows[0].get("Affected URL Count") is None
 
 
+def test_issue_inventory_excludes_synthetic_unmeasured_placeholder() -> None:
+    """Regression (L6): "Unmeasured" is a synthetic placeholder for
+    skipped-extraction URLs (pipeline/assemble.py), not a real rule match —
+    it must not appear as its own Issue Inventory row."""
+    rules = get_summary_rules()
+    extra_rows = [
+        ExtraRowPayload.model_validate(
+            {
+                "URL": "https://example.com/skipped",
+                "Matched Issues": "Unmeasured",
+            }
+        ),
+        ExtraRowPayload.model_validate(
+            {
+                "URL": "https://example.com/measured",
+                "Matched Issues": "Missing Title",
+                "Title Missing": True,
+            }
+        ),
+    ]
+    rows = build_issue_inventory_rows(rules, extra_rows)
+    assert not any(r.get("Issue") == "Unmeasured" for r in rows)
+    assert any(r.get("Issue") == "Missing Title" for r in rows)
+
+
 def test_issue_inventory_custom_scope_rule() -> None:
     rule = IssueRule(
         "Observation",

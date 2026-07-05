@@ -218,6 +218,7 @@ def test_audit_phase_passes_on_a_real_full_suite_workbook(tmp_path: Path) -> Non
         workers_preset=1,
         request_delay_preset=0.0,
         full_suite_preset=True,
+        hide_advanced_tabs_preset=None,
         previous_audit_path_preset="",
         checkpoint_every_preset=0,
         resume_checkpoint_mode="no",

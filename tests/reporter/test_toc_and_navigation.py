@@ -1,4 +1,4 @@
-"""Phase 2 (Info & Travel) regression guards: TOC blurbs, landing tab, nav, tooltips."""
+"""TOC/tab-navigation regression guards: blurbs, landing tab, jump formulas, tooltips, freeze precedence."""
 
 from __future__ import annotations
 
@@ -94,6 +94,25 @@ def test_tooltip_flag_suppresses_header_comments(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(validation, "_DISABLE_TOOLTIP_COMMENTS", False)
     add_all_header_tooltips(ws)
     assert ws["A1"].comment is not None
+
+
+def test_add_all_header_tooltips_respects_header_row_with_banner() -> None:
+    """Regression: most data sheets carry a row-1 "Return to Executive
+    Briefing" banner, so real headers live on row 2 — the previous
+    hardcoded row-1 lookup silently attached zero tooltips on every such
+    sheet, including any curated entries for "Main"/etc."""
+    ws = openpyxl.Workbook().active
+    ws.title = "Main"
+    ws["A1"] = "← Return to Executive Briefing"
+    ws["A2"] = "Inbound Internal Link Count"
+    ws["B2"] = "URL"
+
+    add_all_header_tooltips(ws, header_row=2)
+
+    assert ws["A2"].comment is not None
+    assert "Inbound Internal Link Count" in ws["A2"].comment.text
+    # The banner row itself must not receive a spurious header comment.
+    assert ws["A1"].comment is None
 
 
 def test_friendly_toc_description_unknown_still_names_sheet() -> None:

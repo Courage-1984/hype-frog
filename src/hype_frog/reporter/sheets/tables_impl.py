@@ -342,6 +342,14 @@ _EMPTY_STATE_BY_SHEET: dict[str, str] = {
         "No quick wins met the ranking threshold this run. "
         "See Summary for all flagged issues."
     ),
+    "Issue Register": "No issues to report for this run. See Summary for site-wide issue counts.",
+    "Priority URLs": (
+        "No URLs met the priority-risk threshold this run. "
+        "See Summary for site-wide issue counts."
+    ),
+    "Broken Link Impact": "No broken internal links detected this run — nothing to report.",
+    "Snippet Opportunities": "No featured-snippet candidates identified this run.",
+    "Competitor Benchmarks": "No competitor benchmark data available for this run.",
 }
 _EMPTY_STATE_SHEETS: frozenset[str] = frozenset(_EMPTY_STATE_BY_SHEET.keys())
 _EMPTY_STATE_FILL = PatternFill(
@@ -441,7 +449,7 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
     if sheet_name == "PSI Performance":
         apply_psi_conditional_rules(worksheet)
     if sheet_name != CONTENT_OPTIMISATION_HUB_SHEET:
-        add_all_header_tooltips(worksheet)
+        add_all_header_tooltips(worksheet, header_row=header_row)
     if sheet_name in DATA_HEAVY_TABS and sheet_name != CONTENT_OPTIMISATION_HUB_SHEET:
         add_header_tooltips(worksheet)
     if sheet_name in {"Technical", "Main", "AEO"}:
@@ -517,7 +525,7 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
     audit_freeze_merge_conflicts(worksheet)
 
 
-def apply_tab_hyperlinks(writer: Any) -> None:
+def apply_tab_hyperlinks(writer: Any, *, hide_advanced_tabs: bool = True) -> None:
     apply_workbook_toc_and_links(
         writer,
         debug_excel_isolation_mode=DEBUG_EXCEL_ISOLATION_MODE,
@@ -525,6 +533,7 @@ def apply_tab_hyperlinks(writer: Any) -> None:
         std_navy=STD_NAVY,
         std_white=STD_WHITE,
         std_blue=STD_BLUE,
+        hide_advanced_tabs=hide_advanced_tabs,
     )
 
 

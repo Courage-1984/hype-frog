@@ -419,8 +419,21 @@ def write_full_suite_workbook(
     else:
         fixplan_df = pd.DataFrame(columns=list(_FIXPLAN_TOP_BLOCKER_COLS))
     write_dataframe_sheet(writer, fixplan_df, "FixPlan", startrow=1)
+    # Computed here (rather than at its previous call site below) so Quick Wins
+    # can look up the same Business Risk Score used by Priority URLs, instead
+    # of reading a field that's never set on the raw extra_rows dicts.
+    priority_rows = build_priority_rows(
+        extra_rows,
+        high_value_slugs=high_value_slugs,
+        value_or_default_fn=value_or_default_fn,
+        owner_for_issue_fn=owner_for_issue,
+    )
+    risk_score_by_url = {
+        str(row.get("URL") or ""): row.get("Business Risk Score", 0)
+        for row in priority_rows
+    }
     quick_wins_rows = build_quick_wins_rows(
-        extra_rows, fixplan_rows, summary_rules, playbook_index
+        extra_rows, fixplan_rows, summary_rules, playbook_index, risk_score_by_url
     )
     write_dict_rows_sheet(
         writer,
@@ -452,12 +465,7 @@ def write_full_suite_workbook(
         content_planner_rows,
     )
     # Remaining dashboard/delta/report tabs preserved from prior flow
-    priority_rows = build_priority_rows(
-        extra_rows,
-        high_value_slugs=high_value_slugs,
-        value_or_default_fn=value_or_default_fn,
-        owner_for_issue_fn=owner_for_issue,
-    )
+    # (priority_rows already computed above, before Quick Wins)
     priority_df = pd.DataFrame(priority_rows)
     write_dataframe_sheet(writer, priority_df, "Priority URLs", startrow=1)
     total_urls = len(typed_extra_rows)

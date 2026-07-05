@@ -59,7 +59,7 @@ CONTENT_AGE_RECENT_DAYS: int = 90
 
 # --- Quick Wins tab ---
 QUICK_WINS_MAX_EFFORT_HOURS: float = 4.0
-QUICK_WINS_MAX_RESULTS: int = 15
+QUICK_WINS_MAX_RESULTS: int = 30
 
 # --- E-E-A-T ---
 EEAT_LOW_SCORE_THRESHOLD: int = 3

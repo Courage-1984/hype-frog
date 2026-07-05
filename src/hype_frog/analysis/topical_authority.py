@@ -52,8 +52,8 @@ def _tokenize(text: str) -> list[str]:
     ]
 
 
-def _infer_target_keyword(row: dict[str, Any]) -> str:
-    title = str(row.get("Title") or "").strip()
+def _infer_target_keyword(row: dict[str, Any], title: str = "") -> str:
+    title = title or str(row.get("Title") or "").strip()
     h1 = str(row.get("Primary H1 Content") or row.get("H1 Content") or "").strip()
     for candidate in (title, h1):
         tokens = _tokenize(candidate)
@@ -115,8 +115,16 @@ def _top_tfidf_terms(tokens: list[str], idf: dict[str, float], limit: int = 5) -
     return [term for term, _score in scored[:limit]]
 
 
-def enrich_topical_authority_fields(rows: list[Any]) -> None:
-    """Add TF-IDF and keyword placement columns to extra row payloads in place."""
+def enrich_topical_authority_fields(
+    rows: list[Any], *, titles_by_url: dict[str, Any] | None = None
+) -> None:
+    """Add TF-IDF and keyword placement columns to extra row payloads in place.
+
+    ``titles_by_url`` is required when ``rows`` are Extra-row payloads/dicts,
+    since "Title" is only ever populated on Main rows — without it, "Keyword
+    in Title" and the title-derived half of ``Target Keyword`` silently see
+    an empty title on every row.
+    """
     corpus: list[list[str]] = []
     bodies: list[str] = []
     for row in rows:
@@ -133,11 +141,15 @@ def enrich_topical_authority_fields(rows: list[Any]) -> None:
 
     for row, body, tokens in zip(rows, bodies, corpus, strict=True):
         values = row if isinstance(row, dict) else row.values
-        keyword = _infer_target_keyword(values)
+        url_key = str(values.get("URL") or "").strip()
+        title = str(
+            values.get("Title") or (titles_by_url or {}).get(url_key) or ""
+        ).strip()
+        keyword = _infer_target_keyword(values, title=title)
         top_terms = _top_tfidf_terms(tokens, idf)
         values["Top TF-IDF Terms"] = ", ".join(top_terms)
         values["Target Keyword"] = keyword
-        values["Keyword in Title"] = _keyword_in_text(keyword, str(values.get("Title") or ""))
+        values["Keyword in Title"] = _keyword_in_text(keyword, title)
         values["Keyword in H1"] = _keyword_in_text(
             keyword,
             str(values.get("Primary H1 Content") or values.get("H1 Content") or ""),

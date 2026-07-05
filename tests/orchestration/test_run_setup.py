@@ -89,6 +89,7 @@ def _interactive_user_config() -> UserConfig:
         selector_wait_ms=3000,
         check_external_link_status=True,
         check_og_images=False,
+        check_content_images=False,
     )
 
 
@@ -114,6 +115,51 @@ def test_resolve_run_setup_interactive_reads_env(monkeypatch) -> None:
     assert setup.competitor_domains == ("rival.com",)
     assert setup.resume_checkpoint_mode == "prompt"
     assert setup.workers_preset is None
+
+
+def test_resolve_run_setup_content_images_prompt_beats_env(monkeypatch) -> None:
+    """Regression: the new "Verify content images?" prompt answer must win
+    over the env var, exactly like the existing check_og_images precedence."""
+
+    def _user_config_with_content_images() -> UserConfig:
+        return UserConfig(
+            target_input="https://interactive.test/",
+            max_urls=20,
+            max_psi_urls=3,
+            high_value_slugs=["pricing"],
+            crawl_mode="fast",
+            render_wait_ms=4000,
+            selector_wait_ms=3000,
+            check_external_link_status=True,
+            check_og_images=False,
+            check_content_images=True,
+        )
+
+    monkeypatch.setattr(
+        run_setup,
+        "get_user_config",
+        _user_config_with_content_images,
+    )
+    monkeypatch.delenv("CHECK_CONTENT_IMAGES", raising=False)
+
+    setup = resolve_run_setup(None)
+
+    assert setup.check_content_images is True
+
+
+def test_resolve_run_setup_content_images_falls_back_to_env_when_prompt_declines(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        run_setup,
+        "get_user_config",
+        _interactive_user_config,
+    )
+    monkeypatch.setenv("CHECK_CONTENT_IMAGES", "1")
+
+    setup = resolve_run_setup(None)
+
+    assert setup.check_content_images is True  # from env, since prompt answer was False
 
 
 def test_resolve_run_setup_cli_overrides_take_priority(monkeypatch) -> None:

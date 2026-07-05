@@ -86,12 +86,14 @@ def _load_previous_snapshot(previous_audit_path: str) -> RunSnapshot | None:
     return None
 
 
-def _finalize_workbook(writer: Any, *, full_suite: bool) -> None:
+def _finalize_workbook(
+    writer: Any, *, full_suite: bool, hide_advanced_tabs: bool = True
+) -> None:
     registry_config = ExportRegistryConfig(full_suite=full_suite)
     logger.info("Applying workbook formatting...")
     for final_step in get_finalization_steps():
         if final_step == "apply_tab_hyperlinks":
-            apply_tab_hyperlinks(writer)
+            apply_tab_hyperlinks(writer, hide_advanced_tabs=hide_advanced_tabs)
         elif final_step == "format_sheets":
             for sname in get_sheet_sequence(registry_config):
                 if sname in writer.sheets:
@@ -162,6 +164,7 @@ def execute_export(
 
     output_filename = crawl_result.output_filename
     full_suite = crawl_result.full_suite
+    hide_advanced_tabs = crawl_result.hide_advanced_tabs
     previous_audit_path = crawl_result.previous_audit_path
     high_value_slugs = setup.high_value_slugs
     streaming = setup.streaming or crawl_result.streaming
@@ -253,12 +256,18 @@ def execute_export(
                     fixplan_rows=fixplan_rows,
                     hub_metrics_rows=hub_metrics_rows,
                 )
-            _finalize_workbook(formatting_writer, full_suite=full_suite)
+            _finalize_workbook(
+                formatting_writer,
+                full_suite=full_suite,
+                hide_advanced_tabs=hide_advanced_tabs,
+            )
             formatting_writer.close()
             formatting_writer = None
         else:
             assert writer is not None
-            _finalize_workbook(writer, full_suite=full_suite)
+            _finalize_workbook(
+                writer, full_suite=full_suite, hide_advanced_tabs=hide_advanced_tabs
+            )
 
         logger.info("Audit complete! Report saved to %s", output_filename)
         if streaming:

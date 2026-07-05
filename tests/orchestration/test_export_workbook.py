@@ -65,6 +65,7 @@ def _build_run_setup(*, target_input: str) -> RunSetup:
         workers_preset=2,
         request_delay_preset=0.0,
         full_suite_preset=True,
+        hide_advanced_tabs_preset=None,
         previous_audit_path_preset="",
         checkpoint_every_preset=0,
         resume_checkpoint_mode="no",

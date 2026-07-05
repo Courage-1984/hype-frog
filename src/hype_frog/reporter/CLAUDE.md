@@ -38,8 +38,8 @@ All status colours import from `sheets/config.py` (`RAG_RED`, `RAG_AMBER`, `RAG_
 ## Action Required literals (Content Optimisation Hub)
 
 Allowed set: `Complete`, `Needs Copy`, `Needs Optimisation` (British spelling).
-Formula in `engine_rows.py`: `=IF(<On-Page Optimization Score> >= 85, "Complete", "Needs Copy")`.
-`apply_action_required_guardrails` normalises legacy values but **skips the Hub sheet** (conditional rules handle it there). Do not rename these literals without updating both the formula and `sheets/conditional.py`.
+Computed in `engine_rows.py` via `pipeline/action_required.py::determine_action_required(e)` (a static Python value baked into the cell at export time, not a live Excel formula) — `Needs Copy` when Copy Score < 80, else `Needs Optimisation` when SEO Score < 50, else `Complete`.
+`apply_action_required_guardrails` normalises legacy values but **skips the Hub sheet** (conditional rules handle it there). Do not rename these literals without updating both `determine_action_required` and `sheets/conditional.py`.
 
 ## Ghost pane safety
 

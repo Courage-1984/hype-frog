@@ -234,6 +234,11 @@ def build_image_inventory_rows(
         category = _image_category(url)
         alt_text = data.get("alt") or ""
         alt_source = "HTML attribute" if alt_text else "None"
+        # An empty probe means this image was never probed at all (content-image
+        # probing is opt-in via --check-images, defaulting off) — distinct from
+        # a probe that ran and confirmed the image is fine. "False" must not be
+        # read as "verified not broken" when it's really "never checked".
+        checked = bool(probe)
         rows.append(
             {
                 "Image URL": url,
@@ -242,8 +247,8 @@ def build_image_inventory_rows(
                 "Size (KB)": probe.get("size_kb"),
                 "Width": probe.get("width"),
                 "Height": probe.get("height"),
-                "Is Broken": bool(probe.get("broken")),
-                "Is Oversized": bool(probe.get("oversized")),
+                "Is Broken": bool(probe.get("broken")) if checked else "Not Checked",
+                "Is Oversized": bool(probe.get("oversized")) if checked else "Not Checked",
                 "Alt Text": alt_text,
                 "Alt Source": alt_source,
                 "File Extension": ext,

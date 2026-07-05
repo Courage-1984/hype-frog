@@ -47,6 +47,7 @@ class RunSetup:
     workers_preset: int | None
     request_delay_preset: float | None
     full_suite_preset: bool | None
+    hide_advanced_tabs_preset: bool | None
     previous_audit_path_preset: str | None
     checkpoint_every_preset: int | None
     resume_checkpoint_mode: ResumeCheckpointMode
@@ -87,6 +88,7 @@ def resolve_run_setup(
             workers_preset=run.workers,
             request_delay_preset=run.request_delay,
             full_suite_preset=run.full_suite,
+            hide_advanced_tabs_preset=run.hide_advanced_tabs,
             previous_audit_path_preset=run.previous_audit_path,
             checkpoint_every_preset=run.checkpoint_every,
             resume_checkpoint_mode=run.resume_checkpoint,
@@ -108,7 +110,9 @@ def resolve_run_setup(
     check_og_images = user.check_og_images
     if not check_og_images:
         check_og_images = get_check_og_images()
-    check_content_images = get_check_content_images()
+    check_content_images = user.check_content_images
+    if not check_content_images:
+        check_content_images = get_check_content_images()
     gsc_url_inspection = get_hf_gsc_url_inspection()
     max_memory_mb = _resolve_max_memory_mb()
     streaming = get_hf_streaming()
@@ -117,6 +121,7 @@ def resolve_run_setup(
     export_pdf = False
     regen_report = get_hf_regen_report()
     snapshot_id: str | None = get_hf_snapshot_id()
+    hide_advanced_tabs_preset: bool | None = None
 
     if cli_overrides is not None:
         if cli_overrides.check_og_images:
@@ -141,6 +146,8 @@ def resolve_run_setup(
             regen_report = True
         if cli_overrides.snapshot_id:
             snapshot_id = cli_overrides.snapshot_id
+        if cli_overrides.show_all_tabs:
+            hide_advanced_tabs_preset = False
 
     return RunSetup(
         target_input=user.target_input,
@@ -153,6 +160,7 @@ def resolve_run_setup(
         workers_preset=None,
         request_delay_preset=None,
         full_suite_preset=None,
+        hide_advanced_tabs_preset=hide_advanced_tabs_preset,
         previous_audit_path_preset=previous_audit_path_preset,
         checkpoint_every_preset=None,
         resume_checkpoint_mode="prompt",

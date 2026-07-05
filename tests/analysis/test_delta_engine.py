@@ -1,4 +1,13 @@
-"""Tests for run-to-run delta engine (C1)."""
+"""Tests for run-to-run delta engine (C1).
+
+Intentionally facade-level: imports go through ``analysis.delta_engine``'s
+re-exports rather than ``delta_loader.py``/``delta_models.py``/
+``delta_sheet_builder.py`` directly, since the facade is the documented public
+surface for this subsystem and tests here exercise it end-to-end. If a bug is
+narrowed to one of those split-out modules, prefer adding a targeted test in a
+new ``test_delta_loader.py``/``test_delta_models.py``/``test_delta_sheet_builder.py``
+rather than importing the internal module here.
+"""
 
 from __future__ import annotations
 

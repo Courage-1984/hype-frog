@@ -819,12 +819,34 @@ def build_template_duplication_risks_rows(
             )
         if _to_bool(row.get("Probable Duplicate Flag")):
             duplicate_of = _to_str(row.get("Duplicate Of URL"))
+            # Fall back to the best-match candidate when duplicate_of is blank
+            # (e.g. this page won the rank comparison against its own cluster
+            # match, so it's flagged as probable-duplicate with a populated
+            # similarity score but no confirmed "points to" target).
+            best_match_url = _to_str(row.get("Best Match URL"))
+            example_url = duplicate_of or best_match_url
             similarity = row.get("Content Similarity %")
             similarity_note = (
                 f" ({float(similarity):.0f}% content similarity)"
                 if similarity is not None and str(similarity).strip() != ""
                 else ""
             )
+            if duplicate_of:
+                exact_action = (
+                    "Consolidate to one canonical URL: remove or noindex the draft/copy page, "
+                    "301 redirect to the primary page, and deduplicate repetitive H2/H3 blocks."
+                )
+            elif best_match_url:
+                exact_action = (
+                    f"Review against best-match candidate ({best_match_url}): confirm which "
+                    "page is canonical, then remove/noindex the non-canonical copy and "
+                    "deduplicate repetitive H2/H3 blocks."
+                )
+            else:
+                exact_action = (
+                    "Review for duplicate/near-duplicate content; no specific counterpart "
+                    "URL was identified above the similarity threshold."
+                )
             rows.append(
                 {
                     "URL": _to_str(row.get("URL")),
@@ -833,15 +855,12 @@ def build_template_duplication_risks_rows(
                     "Issue": (
                         "Probable draft or near-duplicate page"
                         + similarity_note
-                        + (f" of {duplicate_of}" if duplicate_of else "")
+                        + (f" of {example_url}" if example_url else "")
                     ),
                     "Affected Ratio": 0.0,
                     "Affected URL Count": _to_int(row.get("Heading Structure Cluster Size"), 1),
-                    "Example URLs": duplicate_of or "",
-                    "Exact Action": (
-                        "Consolidate to one canonical URL: remove or noindex the draft/copy page, "
-                        "301 redirect to the primary page, and deduplicate repetitive H2/H3 blocks."
-                    ),
+                    "Example URLs": example_url or "",
+                    "Exact Action": exact_action,
                     "Severity": "Warning",
                     "Source Legacy Tab": "Duplicates",
                 }
@@ -883,18 +902,25 @@ def build_template_duplication_risks_rows(
 
 
 QUICK_WINS_COLUMNS: tuple[str, ...] = (
-    "Priority Score",
+    # Identity — what and where.
     "URL",
     "Issue",
     "Severity",
-    "Effort (hrs)",
-    "Owner",
-    "GSC Clicks (30d)",
+    # Why it's a quick win — the numbers that justify prioritising this row.
+    "Priority Score",
     "Business Risk Score",
+    "GSC Clicks (30d)",
+    "Effort (hrs)",
+    # What to do — the narrative columns, kept together to reduce row-height variance.
     "What It Is",
+    "Why It Matters",
     "Recommended Fix",
+    "How To Verify",
+    # Ownership / planning.
+    "Owner",
     "Sprint",
     "Revenue Risk",
+    # Navigation.
     "Jump to FixPlan",
     "Jump to Playbook",
 )
@@ -916,8 +942,9 @@ def build_quick_wins_rows(
     fixplan_rows: list[dict[str, Any]],
     summary_rules: list[Any],
     playbook_index: dict[str, PlaybookEntry] | None = None,
+    risk_score_by_url: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Build Quick Wins tab: top 15 high-impact low-effort URL+issue combinations."""
+    """Build Quick Wins tab: top high-impact low-effort URL+issue combinations."""
     fp_index: dict[str, dict[str, Any]] = {}
     for fp_row in fixplan_rows:
         name = str(fp_row.get("Issue Type") or "")
@@ -959,7 +986,14 @@ def build_quick_wins_rows(
             seen.add((url, rule_name))
 
             clicks = float(row.get("GSC Clicks") or 0)
-            risk = float(row.get("Business Risk Score") or 0)
+            # "Business Risk Score" is never set on the raw extra_rows dict
+            # itself (only computed separately for Priority URLs) — look it
+            # up by URL from that same computation instead of silently
+            # reading 0 for every row.
+            risk_raw = (
+                (risk_score_by_url or {}).get(url) if risk_score_by_url else None
+            )
+            risk = float(risk_raw or 0)
             if clicks == 0 and risk <= 0:
                 continue
 
@@ -982,6 +1016,16 @@ def build_quick_wins_rows(
                     "Business Risk Score": risk,
                     "What It Is": (
                         playbook_index[rule_name].what_it_is
+                        if playbook_index and rule_name in playbook_index
+                        else ""
+                    ),
+                    "Why It Matters": (
+                        playbook_index[rule_name].why_it_matters
+                        if playbook_index and rule_name in playbook_index
+                        else ""
+                    ),
+                    "How To Verify": (
+                        playbook_index[rule_name].how_to_verify
                         if playbook_index and rule_name in playbook_index
                         else ""
                     ),

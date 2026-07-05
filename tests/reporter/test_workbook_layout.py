@@ -90,6 +90,23 @@ def test_apply_workbook_tab_layout_orders_colors_and_hides() -> None:
     assert len(PREFERRED_WORKBOOK_TAB_ORDER) == len(set(PREFERRED_WORKBOOK_TAB_ORDER))
 
 
+def test_apply_workbook_tab_layout_shows_all_tabs_when_disabled() -> None:
+    """New user-facing choice: hide_advanced_tabs=False must reveal every
+    normally-hidden advanced/historical tab instead of hiding it."""
+    wb = Workbook()
+    wb.active.title = "Main"
+    for name in (
+        "Executive Briefing",
+        "Technical Diagnostics",
+        AUDIT_RUN_DETAILS_SHEET,
+        "Playbook",
+    ):
+        wb.create_sheet(name)
+    apply_workbook_tab_layout(wb, hide_advanced_tabs=False)
+    assert wb["Technical Diagnostics"].sheet_state == "visible"
+    assert wb[AUDIT_RUN_DETAILS_SHEET].sheet_state == "visible"
+
+
 def test_all_ordered_tabs_have_a_tab_colour() -> None:
     """Every preferred tab except the TOC must carry a group tab colour (P1.6)."""
     for name in PREFERRED_WORKBOOK_TAB_ORDER:

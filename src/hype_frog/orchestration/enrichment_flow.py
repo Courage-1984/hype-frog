@@ -496,7 +496,7 @@ async def run_enrichment(crawl_result: CrawlExecutionResult) -> EnrichmentResult
                     "Word Count (Body)"
                 )
         enrich_content_similarity(extra_work, titles_by_url=titles_by_url)
-        enrich_topical_authority_fields(extra_work)
+        enrich_topical_authority_fields(extra_work, titles_by_url=titles_by_url)
         enrich_hreflang_reciprocity(extra_work)
         enrich_third_party_script_fields(extra_work)
         enrich_link_equity_fields(extra_work, graph_metrics)

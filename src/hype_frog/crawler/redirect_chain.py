@@ -97,7 +97,10 @@ def redirect_seo_risk(
     redirect_loop: bool,
     source_url: str = "",
     final_url: str | None = None,
+    final_status: int | None = None,
 ) -> str:
+    if final_status is not None and final_status >= 400:
+        return "Redirect chain ends in error (4xx/5xx)"
     if redirect_loop:
         return "Redirect loop"
     if has_mixed_redirect_types(hop_records):
@@ -123,6 +126,7 @@ def build_redirect_chain_fields(
     source_url: str,
     hop_records: list[RedirectHopRecord],
     final_url: str | None,
+    final_status: int | None = None,
 ) -> dict[str, Any]:
     """Return extra/main row fragments for redirect chain columns."""
     chain_length = len(hop_records)
@@ -151,6 +155,7 @@ def build_redirect_chain_fields(
             redirect_loop=loop_flag,
             source_url=source_url,
             final_url=final_url,
+            final_status=final_status,
         ),
     }
 

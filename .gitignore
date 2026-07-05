@@ -23,6 +23,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 # =========================
 # App Data & Outputs

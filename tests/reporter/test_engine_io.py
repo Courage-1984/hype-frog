@@ -248,9 +248,37 @@ def test_apply_link_intelligence_summary_broken_formulas_writes_formula() -> Non
 
     formula = li.cell(row=2, column=2).value
     assert formula.startswith("=")
-    assert "$A2" in formula
+    # Self-referencing via ROW()/INDIRECT rather than a baked-in "$A2" literal,
+    # so the reference stays correct even after a later insert_rows() shift
+    # (see the regression test below — this is the H3 audit fix).
+    assert 'INDIRECT("$A"&ROW())' in formula
     action_formula = li.cell(row=2, column=3).value
     assert action_formula.startswith("=IF(B2>0")
+
+
+def test_apply_link_intelligence_summary_broken_formulas_survives_later_row_insert() -> None:
+    """Regression: formulas must still reference their OWN row's URL cell even
+    after a later worksheet.insert_rows(1) (e.g. from add_return_to_briefing_strip),
+    which shifts cells without rewriting formula text."""
+    wb = Workbook()
+    li = wb.active
+    li.title = "Link Intelligence"
+    li.append(["Record Type", "Broken Internal Links Count", "Actionable Fixes"])
+    li.append(["Summary", None, None])
+    wb.create_sheet("Link Inventory")
+
+    apply_link_intelligence_summary_broken_formulas(wb)
+    formula_before = li.cell(row=2, column=2).value
+
+    li.insert_rows(1)  # simulates add_return_to_briefing_strip's banner-row insert
+    formula_after = li.cell(row=3, column=2).value  # same logical row, now shifted
+
+    # The formula text itself is untouched by insert_rows (openpyxl doesn't
+    # rewrite formulas), but because it resolves its own row via ROW() at
+    # calc-time rather than a baked-in row number, it still points at the
+    # correct (now-shifted) row's own URL cell.
+    assert formula_before == formula_after
+    assert 'INDIRECT("$A"&ROW())' in formula_after
 
 
 def test_apply_link_intelligence_summary_broken_formulas_skips_non_summary_rows() -> None:

@@ -8,7 +8,7 @@ from typing import Any
 
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.core import get_logger
-from hype_frog.rules import IssueRule, owner_for_issue, stable_issue_id
+from hype_frog.rules import IssueRule, owner_for_issue, score_url_health, stable_issue_id
 
 logger = get_logger(__name__)
 
@@ -62,12 +62,24 @@ def build_summary_rows(
         }
     )
     del main_rows
+    # Reuse score_url_health()'s own per-row gate for url-scope (per-page,
+    # content-derived) rules so Summary's affected-URL counts always match the
+    # per-URL Issue Inventory ground truth. Site/server-scope rules aren't
+    # content-derived, so they keep evaluating against every row regardless
+    # of extraction state, same as before.
+    row_matched_issues = [score_url_health(row.values, summary_rules)[3] for row in extra_rows]
+
+    def _affected_rows_for_rule(rule: IssueRule) -> list[ExtraRowPayload]:
+        if rule.scope == "url":
+            return [
+                row
+                for row, matched in zip(extra_rows, row_matched_issues, strict=True)
+                if rule.name in matched.get(rule.severity, [])
+            ]
+        return [row for row in extra_rows if safe_rule(rule.fn, row.values)]
+
     for rule in summary_rules:
-        affected_urls = [
-            row.values.get("URL")
-            for row in extra_rows
-            if safe_rule(rule.fn, row.values)
-        ]
+        affected_urls = [row.values.get("URL") for row in _affected_rows_for_rule(rule)]
         summary_rows.append(
             {
                 "Section": "Issue Counts",
@@ -101,11 +113,7 @@ def build_summary_rows(
     for rule in summary_rules:
         if rule.name not in aeo_issue_names:
             continue
-        affected_urls = [
-            row.values.get("URL")
-            for row in extra_rows
-            if safe_rule(rule.fn, row.values)
-        ]
+        affected_urls = [row.values.get("URL") for row in _affected_rows_for_rule(rule)]
         summary_rows.append(
             {
                 "Section": "AEO Opportunities",
@@ -261,7 +269,10 @@ def build_issue_inventory_rows(
         row_values = row.values
         url = row_values.get("URL")
         for issue in str(row_values.get("Matched Issues") or "").split(" | "):
-            if not issue or issue in aggregate_issue_names:
+            # "Unmeasured" is a synthetic placeholder (pipeline/assemble.py) for
+            # skipped-extraction URLs, not a real rule match — it must not be
+            # treated as an issue-inventory row with its own Stable Issue ID/Owner.
+            if not issue or issue in aggregate_issue_names or issue == "Unmeasured":
                 continue
             issue_severity = (
                 "Critical"

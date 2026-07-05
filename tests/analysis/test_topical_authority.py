@@ -60,3 +60,35 @@ def test_enrich_topical_authority_fields_adds_keyword_signals() -> None:
     assert first["Keyword in First Paragraph"] is True
     assert str(first["Top TF-IDF Terms"])
     assert first["Keyword Density (%)"] != ""
+
+
+def test_enrich_topical_authority_fields_resolves_title_via_titles_by_url() -> None:
+    """Regression: Extra rows never carry "Title" directly (only Main rows do) —
+    Keyword in Title/Target Keyword must resolve it via the titles_by_url map."""
+    url = "https://example.com/marketing-conference"
+    rows = [
+        {
+            "URL": url,
+            "Primary H1 Content": "Marketing Conference Africa",
+            "Body Text Excerpt": (
+                "The marketing conference africa brings together leaders. "
+                "Marketing conference africa events focus on strategy."
+            ),
+        }
+    ]
+    enrich_topical_authority_fields(rows, titles_by_url={url: "Marketing Conference Africa"})
+    assert rows[0]["Keyword in Title"] is True
+    assert rows[0]["Target Keyword"]
+
+
+def test_enrich_topical_authority_fields_without_titles_by_url_stays_false() -> None:
+    """Without a title source, Keyword in Title correctly stays False (not a bug)."""
+    rows = [
+        {
+            "URL": "https://example.com/marketing-conference",
+            "Primary H1 Content": "Marketing Conference Africa",
+            "Body Text Excerpt": "The marketing conference africa brings together leaders.",
+        }
+    ]
+    enrich_topical_authority_fields(rows)
+    assert rows[0]["Keyword in Title"] is False

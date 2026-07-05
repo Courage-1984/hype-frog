@@ -33,6 +33,7 @@ def _minimal_setup() -> RunSetup:
         workers_preset=None,
         request_delay_preset=None,
         full_suite_preset=True,
+        hide_advanced_tabs_preset=None,
         previous_audit_path_preset=None,
         checkpoint_every_preset=None,
         resume_checkpoint_mode="prompt",

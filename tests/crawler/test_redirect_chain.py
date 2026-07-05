@@ -11,6 +11,7 @@ from hype_frog.crawler.redirect_chain import (
     has_mixed_redirect_types,
     has_temporary_redirect,
     is_redirect_loop,
+    redirect_seo_risk,
 )
 from hype_frog.reporter.sheets.merged_builders import (
     build_redirect_map_rows,
@@ -104,6 +105,43 @@ def test_merged_builders_redirect_sheets() -> None:
     assert map_rows[0]["Hop 1 Status"] == 301
 
     assert build_redirect_map_rows([{**extra, "Redirect Chain Length": 0}]) == []
+
+
+def test_redirect_seo_risk_flags_chain_ending_in_error_status() -> None:
+    """Regression (M5): a redirect chain that dead-ends in a 4xx/5xx must be
+    flagged as risky, not classified identically to a healthy redirect."""
+    hops = [RedirectHopRecord(url="https://a.example/old", status=301)]
+    risk = redirect_seo_risk(
+        hop_records=hops,
+        redirect_loop=False,
+        source_url="https://a.example/old",
+        final_url="https://a.example/new",
+        final_status=404,
+    )
+    assert risk == "Redirect chain ends in error (4xx/5xx)"
+
+
+def test_redirect_seo_risk_healthy_single_redirect_unaffected_by_final_status() -> None:
+    hops = [RedirectHopRecord(url="https://a.example/old", status=301)]
+    risk = redirect_seo_risk(
+        hop_records=hops,
+        redirect_loop=False,
+        source_url="https://a.example/old",
+        final_url="https://a.example/new",
+        final_status=200,
+    )
+    assert risk == "Single redirect"
+
+
+def test_build_redirect_chain_fields_surfaces_error_ending_risk() -> None:
+    hops = [RedirectHopRecord(url="https://a.example/old", status=301)]
+    fields = build_redirect_chain_fields(
+        source_url="https://a.example/old",
+        hop_records=hops,
+        final_url="https://a.example/new",
+        final_status=404,
+    )
+    assert fields["Redirect SEO Risk"] == "Redirect chain ends in error (4xx/5xx)"
 
 
 def test_has_temporary_and_mixed_helpers() -> None:

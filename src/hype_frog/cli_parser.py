@@ -51,6 +51,11 @@ def _add_shared_crawl_flags(parser: argparse.ArgumentParser) -> None:
         help="Verify content image HTTP status and dimensions",
     )
     parser.add_argument(
+        "--show-all-tabs",
+        action="store_true",
+        help="Export with no tabs hidden (default hides advanced/historical tabs)",
+    )
+    parser.add_argument(
         "--competitors",
         default=None,
         metavar="DOMAINS",
@@ -257,6 +262,7 @@ def legacy_namespace_to_cli_overrides(args: argparse.Namespace) -> CliRunOverrid
         snapshot_id=getattr(args, "snapshot_id", None),
         verbose=getattr(args, "verbose", False),
         quiet=getattr(args, "quiet", False),
+        show_all_tabs=getattr(args, "show_all_tabs", False),
     )
 
 
@@ -292,6 +298,7 @@ def structured_crawl_run_config(args: argparse.Namespace) -> RunConfig | None:
         max_memory_mb=args.max_memory_mb,
         streaming=args.streaming,
         export_pdf=args.export_pdf,
+        hide_advanced_tabs=not getattr(args, "show_all_tabs", False),
     )
 
 

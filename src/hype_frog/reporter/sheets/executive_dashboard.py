@@ -63,32 +63,41 @@ _EXEC_CARD_TOOLTIPS: dict[str, str] = {
     "Performance (PSI)": "Average mobile PageSpeed Insights performance score (0–100).",
 }
 
-_KEY_INSIGHTS_ROW = 9
+_KEY_INSIGHTS_ROW = 11
 
 # Visual grid (revised so charts never overlap): rows 1–8 header + KPI cards,
-# row 9 key insights, then four chart bands spaced ~19 rows apart (each chart is
-# ~8.4 cm ≈ 16–17 rows tall), the triage/navigation matrix, and finally the
-# chart source tables well below everything.
+# rows 9–10 a second KPI card row (technical/GSC metrics), row 11 key insights,
+# then six chart bands spaced ~19 rows apart (each chart is ~8.4 cm ≈ 16–17 rows
+# tall), the triage/navigation matrix, and finally the chart source tables well
+# below everything.
 _CHART_BAND_ROW_HEIGHT_PT = 24.0
 _LEFT_CHART_COL = "A"
 _RIGHT_CHART_COL = "G"
 _CHART_BAND_ROWS = 2
 
-_ROW_SEC_HEALTH = 10
-_ROW_CH_HEALTH = 11
+_ROW_KPI2 = 9
 
-_ROW_SEC_ISSUES = 29
-_ROW_CH_ISSUES = 30
+_ROW_SEC_HEALTH = 12
+_ROW_CH_HEALTH = 13
 
-_ROW_SEC_ACTIONS = 48
-_ROW_CH_ACTIONS = 49
+_ROW_SEC_ISSUES = 31
+_ROW_CH_ISSUES = 32
 
-_ROW_SEC_TOP_ISSUES = 67
-_ROW_CH_TOP_ISSUES = 68
+_ROW_SEC_ACTIONS = 50
+_ROW_CH_ACTIONS = 51
 
-_BRIEFING_TRIAGE_START_ROW = 88
+_ROW_SEC_TOP_ISSUES = 69
+_ROW_CH_TOP_ISSUES = 70
 
-_SOURCE_DATA_HINT_ROW = 112
+_ROW_SEC_STATUS = 89
+_ROW_CH_STATUS = 90
+
+_ROW_SEC_TRADAEO = 108
+_ROW_CH_TRADAEO = 109
+
+_BRIEFING_TRIAGE_START_ROW = 129
+
+_SOURCE_DATA_HINT_ROW = 153
 
 # Chart size presets (cm): full-width and half-sheet (A–F / G–L).
 _SIZE_HEALTH_FULL = (18.0, 8.4)
@@ -120,7 +129,7 @@ _LOW_VALUE_URL_PATH_TOKENS: tuple[str, ...] = (
 
 # Chart tables in visible columns A–C well below the chart area and the triage
 # matrix (Excel ignores hidden cols by default).
-CHART_SOURCE_FIRST_ROW = 114
+CHART_SOURCE_FIRST_ROW = 155
 CHART_LABEL_COL = 1
 CHART_VALUE_COL = 2
 CHART_VALUE2_COL = 3
@@ -154,6 +163,10 @@ class ChartDataLayout:
     projected_rows: int = 2
     top_issues_start: int = CHART_SOURCE_FIRST_ROW + 50
     top_issues_rows: int = 0
+    status_start: int = CHART_SOURCE_FIRST_ROW + 62
+    status_rows: int = 0
+    tradaeo_start: int = CHART_SOURCE_FIRST_ROW + 70
+    tradaeo_rows: int = 2
 
 
 def _label_col() -> int:
@@ -292,6 +305,19 @@ def _content_readiness_percentages(
         ("Image alt ≥80%", pct(alt_ok)),
         ("Question headings", pct(question_headings)),
     ]
+
+
+def _gsc_totals(extra_rows: list[dict[str, Any]]) -> tuple[int, int, float]:
+    """Return (clicks_total, impressions_total, avg_position) across all crawled URLs."""
+    clicks_total = int(sum(_to_float(row.get("GSC Clicks"), 0.0) for row in extra_rows))
+    impressions_total = int(sum(_to_float(row.get("GSC Impressions"), 0.0) for row in extra_rows))
+    positions = [
+        _to_float(row.get("GSC Avg Position"), 0.0)
+        for row in extra_rows
+        if _to_float(row.get("GSC Avg Position"), 0.0) > 0
+    ]
+    avg_position = round(sum(positions) / len(positions), 1) if positions else 0.0
+    return clicks_total, impressions_total, avg_position
 
 
 def _traffic_lift_total(hub_metrics_rows: list[dict[str, Any]] | None) -> int:
@@ -543,13 +569,22 @@ def _top_issues_by_impact(
     *,
     limit: int = 8,
 ) -> list[tuple[str, int]]:
+    # Tie-break must match dashboard_logic.compute_dashboard_metrics()'s
+    # top_issue_rows sort — (-affected, -source_row, issue_name), where
+    # source_row is enumerate(fixplan_rows, start=2) — the same list, same
+    # order, same 1-based row offset — so a tied count never disagrees with
+    # the "Largest theme" sentence in _build_key_insights (L1 audit fix).
+    indexed_rows = list(enumerate(fixplan_rows, start=2))
     ranked = sorted(
-        fixplan_rows,
-        key=lambda row: int(row.get("Affected Count") or 0),
-        reverse=True,
+        indexed_rows,
+        key=lambda item: (
+            -int(item[1].get("Affected Count") or 0),
+            -item[0],
+            str(item[1].get("Issue Type") or ""),
+        ),
     )
     issues: list[tuple[str, int]] = []
-    for row in ranked:
+    for _source_row, row in ranked:
         count = int(row.get("Affected Count") or 0)
         if count <= 0:
             continue
@@ -739,6 +774,30 @@ def populate_chart_data_sheet(
         _write_label_cell(ws, idx, issue_name)
         ws.cell(row=idx, column=value_col, value=affected)
 
+    status_start = CHART_SOURCE_FIRST_ROW + 62
+    _write_label_cell(ws, status_start, "Status code breakdown")
+    str_row = status_start + 1
+    _write_label_cell(ws, str_row, "Status")
+    ws.cell(row=str_row, column=value_col, value="URLs")
+    status_buckets = [
+        (label, count)
+        for label, count in dashboard_metrics.status_buckets.items()
+        if count > 0
+    ]
+    for idx, (label, count) in enumerate(status_buckets, start=str_row + 1):
+        _write_label_cell(ws, idx, label)
+        ws.cell(row=idx, column=value_col, value=count)
+
+    tradaeo_start = CHART_SOURCE_FIRST_ROW + 70
+    _write_label_cell(ws, tradaeo_start, "Traditional SEO vs AEO readiness")
+    tar = tradaeo_start + 1
+    _write_label_cell(ws, tar, "Model")
+    ws.cell(row=tar, column=value_col, value="Score")
+    _write_label_cell(ws, tar + 1, "Traditional SEO")
+    ws.cell(row=tar + 1, column=value_col, value=round(dashboard_metrics.traditional_score, 1))
+    _write_label_cell(ws, tar + 2, "AEO Readiness")
+    ws.cell(row=tar + 2, column=value_col, value=round(dashboard_metrics.aeo_readiness, 1))
+
     return ChartDataLayout(
         health_start=layout.health_start,
         health_rows=layout.health_rows,
@@ -754,6 +813,10 @@ def populate_chart_data_sheet(
         projected_rows=2,
         top_issues_start=top_issues_start,
         top_issues_rows=len(top_issues),
+        status_start=status_start,
+        status_rows=len(status_buckets),
+        tradaeo_start=tradaeo_start,
+        tradaeo_rows=2,
     )
 
 
@@ -956,6 +1019,56 @@ def _add_top_issues_chart(
     _attach_chart(exec_ws, chart, anchor)
 
 
+def _add_status_code_chart(
+    exec_ws: Worksheet,
+    layout: ChartDataLayout,
+    anchor: str,
+) -> None:
+    if layout.status_rows <= 0:
+        return
+    header_row = layout.status_start + 1
+    first_data = header_row + 1
+    last_data = header_row + layout.status_rows
+    chart = BarChart()
+    chart.type = "col"
+    chart.grouping = "clustered"
+    chart.title = "Status code & technical health breakdown"
+    chart.y_axis.title = "URLs"
+    chart.x_axis.title = "Status"
+    chart.legend = None
+    _apply_chart_size(chart, *_SIZE_HALF_CHART)
+    data = Reference(exec_ws, min_col=_value_col(), min_row=header_row, max_row=last_data)
+    cats = Reference(exec_ws, min_col=_label_col(), min_row=first_data, max_row=last_data)
+    chart.add_data(data, titles_from_data=True)
+    chart.set_categories(cats)
+    _attach_chart(exec_ws, chart, anchor)
+
+
+def _add_traditional_vs_aeo_chart(
+    exec_ws: Worksheet,
+    layout: ChartDataLayout,
+    anchor: str,
+) -> None:
+    if layout.tradaeo_rows <= 0:
+        return
+    header_row = layout.tradaeo_start + 1
+    first_data = header_row + 1
+    last_data = header_row + layout.tradaeo_rows
+    chart = BarChart()
+    chart.type = "col"
+    chart.grouping = "clustered"
+    chart.title = "Traditional SEO vs AEO Readiness"
+    chart.y_axis.title = "Score"
+    chart.x_axis.title = "Model"
+    chart.legend = None
+    _apply_chart_size(chart, *_SIZE_HALF_CHART)
+    data = Reference(exec_ws, min_col=_value_col(), min_row=header_row, max_row=last_data)
+    cats = Reference(exec_ws, min_col=_label_col(), min_row=first_data, max_row=last_data)
+    chart.add_data(data, titles_from_data=True)
+    chart.set_categories(cats)
+    _attach_chart(exec_ws, chart, anchor)
+
+
 def _write_briefing_header(
     exec_ws: Worksheet,
     *,
@@ -1002,6 +1115,38 @@ def _write_briefing_header(
         exec_ws[ref].alignment = Alignment(horizontal="center", vertical="center")
 
 
+def _write_kpi_card_row(
+    exec_ws: Worksheet,
+    cards: list[tuple[str, str]],
+    *,
+    row: int,
+) -> None:
+    positions = [(1, row), (3, row), (5, row), (7, row), (9, row), (11, row)]
+    exec_ws.row_dimensions[row].height = 22
+    exec_ws.row_dimensions[row + 1].height = 30
+    for (col, card_row), (label, value) in zip(positions, cards, strict=False):
+        end_col = col + 1
+        label_merge = (
+            f"{get_column_letter(col)}{card_row}:{get_column_letter(end_col)}{card_row}"
+        )
+        value_merge = (
+            f"{get_column_letter(col)}{card_row + 1}:{get_column_letter(end_col)}{card_row + 1}"
+        )
+        exec_ws.merge_cells(label_merge)
+        exec_ws.merge_cells(value_merge)
+        label_cell = exec_ws.cell(row=card_row, column=col, value=label)
+        label_cell.font = Font(bold=True, size=12, color=STD_NAVY)
+        label_cell.fill = _KPI_FILL
+        label_cell.alignment = Alignment(horizontal="center")
+        tip = _EXEC_CARD_TOOLTIPS.get(label)
+        if tip:
+            label_cell.comment = Comment(tip, "hype-frog")
+        value_cell = exec_ws.cell(row=card_row + 1, column=col, value=value)
+        value_cell.font = Font(bold=True, size=18)
+        value_cell.fill = _KPI_FILL
+        value_cell.alignment = Alignment(horizontal="center")
+
+
 def _write_kpi_cards(
     exec_ws: Worksheet,
     *,
@@ -1024,26 +1169,25 @@ def _write_kpi_cards(
             f"{psi:.0f}" if psi is not None else "N/A",
         ),
     ]
-    positions = [(1, 7), (3, 7), (5, 7), (7, 7), (9, 7), (11, 7)]
-    exec_ws.row_dimensions[7].height = 22
-    exec_ws.row_dimensions[8].height = 30
-    for (col, row), (label, value) in zip(positions, cards, strict=False):
-        end_col = col + 1
-        label_merge = f"{get_column_letter(col)}{row}:{get_column_letter(end_col)}{row}"
-        value_merge = f"{get_column_letter(col)}{row + 1}:{get_column_letter(end_col)}{row + 1}"
-        exec_ws.merge_cells(label_merge)
-        exec_ws.merge_cells(value_merge)
-        label_cell = exec_ws.cell(row=row, column=col, value=label)
-        label_cell.font = Font(bold=True, size=12, color=STD_NAVY)
-        label_cell.fill = _KPI_FILL
-        label_cell.alignment = Alignment(horizontal="center")
-        tip = _EXEC_CARD_TOOLTIPS.get(label)
-        if tip:
-            label_cell.comment = Comment(tip, "hype-frog")
-        value_cell = exec_ws.cell(row=row + 1, column=col, value=value)
-        value_cell.font = Font(bold=True, size=18)
-        value_cell.fill = _KPI_FILL
-        value_cell.alignment = Alignment(horizontal="center")
+    _write_kpi_card_row(exec_ws, cards, row=7)
+
+
+def _write_kpi_cards_row2(
+    exec_ws: Worksheet,
+    *,
+    dashboard_metrics: DashboardComputationResult,
+    extra_rows: list[dict[str, Any]],
+) -> None:
+    clicks_total, impressions_total, avg_position = _gsc_totals(extra_rows)
+    cards: list[tuple[str, str]] = [
+        ("Avg TTFB (ms)", f"{dashboard_metrics.avg_ttfb_ms:.0f}"),
+        ("Schema-Present URLs", str(dashboard_metrics.schema_urls)),
+        ("Broken Link Instances", str(dashboard_metrics.broken_link_instances_total)),
+        ("GSC Clicks (total)", str(clicks_total)),
+        ("GSC Impressions (total)", str(impressions_total)),
+        ("GSC Avg Position", f"{avg_position:.1f}" if avg_position > 0 else "N/A"),
+    ]
+    _write_kpi_card_row(exec_ws, cards, row=_ROW_KPI2)
 
 
 def write_executive_briefing(
@@ -1097,6 +1241,11 @@ def write_executive_briefing(
         traffic_lift=traffic_lift,
         psi=psi,
     )
+    _write_kpi_cards_row2(
+        exec_ws,
+        dashboard_metrics=dashboard_metrics,
+        extra_rows=extra_rows,
+    )
     _apply_executive_column_grid(exec_ws)
     _write_key_insights(
         exec_ws,
@@ -1125,7 +1274,12 @@ def write_executive_briefing(
     )
     _add_doughnut_chart(
         exec_ws,
-        title="Owner workload — unique URLs",
+        # L2 audit fix: explicitly scoped to unique-URL share, not total issue
+        # volume — Copy Writer typically owns fewer *unique* URLs but a larger
+        # share of total *issue instances* (see the "Issue instances" column
+        # in the source data a few rows below), so an unqualified "workload"
+        # title would misleadingly hide that behind a small doughnut slice.
+        title="Owner workload — share of unique URLs (not total issue volume)",
         header_row=owner_header,
         data_rows=layout.owner_rows,
         anchor=f"{_RIGHT_CHART_COL}{_ROW_CH_ISSUES}",
@@ -1160,6 +1314,30 @@ def write_executive_briefing(
         exec_ws,
         layout,
         f"{_LEFT_CHART_COL}{_ROW_CH_TOP_ISSUES}",
+    )
+
+    _write_section_header(
+        exec_ws,
+        _ROW_SEC_STATUS,
+        "Status code & technical health",
+    )
+    _reserve_chart_band(exec_ws, _ROW_CH_STATUS, _CHART_BAND_ROWS)
+    _add_status_code_chart(
+        exec_ws,
+        layout,
+        f"{_LEFT_CHART_COL}{_ROW_CH_STATUS}",
+    )
+
+    _write_section_header(
+        exec_ws,
+        _ROW_SEC_TRADAEO,
+        "Traditional SEO vs AEO Readiness",
+    )
+    _reserve_chart_band(exec_ws, _ROW_CH_TRADAEO, _CHART_BAND_ROWS)
+    _add_traditional_vs_aeo_chart(
+        exec_ws,
+        layout,
+        f"{_LEFT_CHART_COL}{_ROW_CH_TRADAEO}",
     )
 
     apply_executive_briefing_triage(

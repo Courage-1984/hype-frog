@@ -61,6 +61,7 @@ class CrawlExecutionResult:
     check_external_link_status: bool
     check_og_images: bool = False
     check_content_images: bool = False
+    hide_advanced_tabs: bool = True
     crawl_duration_seconds: float = 0.0
     excluded_cms_action_urls: tuple[ExcludedCmsActionUrl, ...] = ()
     gsc_url_inspection: str | None = None
@@ -124,6 +125,7 @@ async def run_bfs_crawl_loop(
     workers = runtime.workers
     request_delay = runtime.request_delay
     full_suite = runtime.full_suite
+    hide_advanced_tabs = runtime.hide_advanced_tabs
     previous_audit_path = runtime.previous_audit_path
     checkpoint_every = runtime.checkpoint_every
 
@@ -436,6 +438,7 @@ async def run_bfs_crawl_loop(
         workers=workers,
         request_delay=request_delay,
         full_suite=full_suite,
+        hide_advanced_tabs=hide_advanced_tabs,
         previous_audit_path=previous_audit_path,
         checkpoint_every=checkpoint_every,
         crawl_completed=True,

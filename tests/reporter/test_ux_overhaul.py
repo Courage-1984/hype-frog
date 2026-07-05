@@ -21,6 +21,7 @@ from hype_frog.reporter.sheets.layout import (
     _URL_COL_WIDTH,
     apply_column_widths,
 )
+from hype_frog.reporter.sheets.conditional import apply_sheet_text_wrap_columns
 from hype_frog.reporter.sheets.navigation import add_return_to_briefing_strip
 from hype_frog.reporter.sheets.sheet_rows import sheet_data_header_row
 from hype_frog.reporter.sheets.tables import normalize_table_headers
@@ -95,6 +96,58 @@ def test_empty_state_message_written_under_headers() -> None:
     assert ws.cell(row=3, column=1).value == _EMPTY_STATE_BY_SHEET["FixPlan"]
     assert ws.cell(row=3, column=1).font.italic is True
     assert ws.cell(row=3, column=1).fill.start_color.rgb.endswith("E6F4EA")
+
+
+@pytest.mark.parametrize(
+    "sheet_name",
+    [
+        "Issue Register",
+        "Priority URLs",
+        "Broken Link Impact",
+        "Snippet Opportunities",
+        "Competitor Benchmarks",
+    ],
+)
+def test_empty_state_message_covers_expanded_sheet_list(sheet_name: str) -> None:
+    """Regression: empty-state guidance previously only existed for FixPlan
+    and Quick Wins — other sheets that can legitimately be empty in a given
+    run fell back to a bare header grid with no explanation."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = sheet_name
+    ws.cell(row=1, column=1, value=RETURN_TO_BRIEFING_LABEL)
+    ws.cell(row=2, column=1, value="URL")
+    ws.cell(row=2, column=2, value="Issue")
+
+    _write_empty_state_message(ws, header_row=2)
+
+    assert ws.cell(row=3, column=1).value == _EMPTY_STATE_BY_SHEET[sheet_name]
+    assert ws.cell(row=3, column=1).font.italic is True
+
+
+@pytest.mark.parametrize(
+    ("sheet_name", "narrative_header"),
+    [
+        ("Issue Register", "Affected URLs Sample"),
+        ("Broken Link Impact", "Recommended Action"),
+    ],
+)
+def test_narrative_columns_get_wrap_on_expanded_sheets(
+    sheet_name: str, narrative_header: str
+) -> None:
+    """Regression: Issue Register/Broken Link Impact's narrative columns
+    previously got no wrap/row-height treatment, unlike Technical/AEO/Content
+    Hub Metrics, so long text spilled or got clipped instead of wrapping."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = sheet_name
+    ws.cell(row=1, column=1, value=RETURN_TO_BRIEFING_LABEL)
+    ws.cell(row=2, column=1, value=narrative_header)
+    ws.cell(row=3, column=1, value="A long narrative value that should wrap onto multiple lines.")
+
+    apply_sheet_text_wrap_columns(ws, sheet_name)
+
+    assert ws.cell(row=3, column=1).alignment.wrap_text is True
 
 
 def test_empty_state_message_skipped_when_data_present() -> None:

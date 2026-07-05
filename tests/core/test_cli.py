@@ -30,6 +30,7 @@ def test_get_user_config_parses_prompts(monkeypatch: pytest.MonkeyPatch) -> None
             "2500",
             "yes",
             "y",
+            "y",
         ]
     )
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
@@ -46,6 +47,7 @@ def test_get_user_config_parses_prompts(monkeypatch: pytest.MonkeyPatch) -> None
     assert config.selector_wait_ms == 2500
     assert config.check_external_link_status is True
     assert config.check_og_images is True
+    assert config.check_content_images is True
 
 
 def test_get_user_config_ignores_invalid_limits(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -56,6 +58,7 @@ def test_get_user_config_ignores_invalid_limits(monkeypatch: pytest.MonkeyPatch)
             "bad",
             "",
             "2",
+            "",
             "",
             "",
             "",
@@ -71,6 +74,7 @@ def test_get_user_config_ignores_invalid_limits(monkeypatch: pytest.MonkeyPatch)
     assert config.high_value_slugs == []
     assert config.render_wait_ms == 4000
     assert config.selector_wait_ms == 3000
+    assert config.check_content_images is False
 
 
 def test_parse_args_verbose_and_quiet_flags() -> None:

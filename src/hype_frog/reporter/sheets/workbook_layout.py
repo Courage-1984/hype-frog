@@ -180,8 +180,8 @@ def apply_workbook_tab_colors(wb: Workbook) -> None:
         wb[name].sheet_properties.tabColor = rgb
 
 
-def apply_workbook_tab_visibility(wb: Workbook) -> None:
-    """Hide advanced / historical tabs by default."""
+def apply_workbook_tab_visibility(wb: Workbook, *, hide_advanced_tabs: bool = True) -> None:
+    """Hide advanced / historical tabs by default, or show every tab when disabled."""
     from hype_frog.reporter.sheets.config import EXECUTIVE_DASHBOARD_SHEET
 
     if EXECUTIVE_DASHBOARD_SHEET in wb.sheetnames:
@@ -189,7 +189,7 @@ def apply_workbook_tab_visibility(wb: Workbook) -> None:
     for name in wb.sheetnames:
         ws = wb[name]
         if name in HIDDEN_SHEETS_BY_DEFAULT:
-            ws.sheet_state = "hidden"
+            ws.sheet_state = "hidden" if hide_advanced_tabs else "visible"
         elif ws.sheet_state == "hidden" and name in VISIBLE_WORKBOOK_TAB_ORDER:
             ws.sheet_state = "visible"
 
@@ -219,11 +219,11 @@ def apply_workbook_active_tab(
             continue
 
 
-def apply_workbook_tab_layout(wb: Workbook) -> None:
+def apply_workbook_tab_layout(wb: Workbook, *, hide_advanced_tabs: bool = True) -> None:
     """Reorder tabs, apply colours, and set default visibility."""
     reorder_workbook_tabs(wb)
     apply_workbook_tab_colors(wb)
-    apply_workbook_tab_visibility(wb)
+    apply_workbook_tab_visibility(wb, hide_advanced_tabs=hide_advanced_tabs)
 
 
 __all__ = [

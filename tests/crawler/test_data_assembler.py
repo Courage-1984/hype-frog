@@ -199,6 +199,122 @@ def test_assemble_with_missing_elements_uses_safe_defaults() -> None:
     assert main["Extraction State"] == "skipped"
 
 
+def test_assemble_excludes_sidebar_widget_content_without_main_tag() -> None:
+    """Regression (H2/M4): templates with no <main>/<article>/[role=main] must
+    not bleed sidebar/widget text (or its <ul>) into the extracted body text
+    and list/table detection — only nav/header/footer/aside/script were being
+    stripped before, leaving WordPress "recent posts" widgets in scope."""
+    html = """
+    <html>
+      <head><title>Conference Page</title></head>
+      <body>
+        <div class="sidebar widget_recent_entries">
+          <h3>Recent Posts</h3>
+          <ul>
+            <li>Old announcement one</li>
+            <li>Old announcement two</li>
+          </ul>
+          <p>Shared sidebar boilerplate text about unrelated news.</p>
+        </div>
+        <div class="content-area">
+          <h1>Marketing Conference Africa</h1>
+          <p>
+            This year's marketing conference in Africa brings together
+            keynote speakers and workshops focused on brand strategy.
+          </p>
+        </div>
+      </body>
+    </html>
+    """
+    main_payload, extra_payload = init_rows("https://example.com/conference", None)
+    assemble_from_html(
+        main_data=main_payload,
+        extra=extra_payload,
+        html=html,
+        resolved_url="https://example.com/conference",
+    )
+    extra = extra_payload.values
+
+    body_text = str(extra["Body Text Excerpt"])
+    assert "keynote speakers" in body_text.lower()
+    assert "sidebar boilerplate" not in body_text.lower()
+    assert "old announcement" not in body_text.lower()
+    assert "recent posts" not in body_text.lower()
+
+    # The only <ul> on the page lives inside the sidebar widget — once excluded,
+    # there's no real list/table/question-heading in the main content, so
+    # AEO Extractability Score must read "Low", not "Medium"/"High".
+    assert extra["AEO Extractability Score"] == "Low"
+
+
+def test_assemble_still_detects_a_real_list_in_main_content() -> None:
+    """The sidebar/widget strip must not suppress a genuine list that's part
+    of the actual page content (no false negative from the H2/M4 fix)."""
+    html = """
+    <html>
+      <head><title>Steps Page</title></head>
+      <body>
+        <div class="content-area">
+          <h1>How To Register</h1>
+          <ul>
+            <li>Step one: create an account</li>
+            <li>Step two: choose a package</li>
+            <li>Step three: confirm payment</li>
+          </ul>
+        </div>
+      </body>
+    </html>
+    """
+    main_payload, extra_payload = init_rows("https://example.com/register", None)
+    assemble_from_html(
+        main_data=main_payload,
+        extra=extra_payload,
+        html=html,
+        resolved_url="https://example.com/register",
+    )
+    assert extra_payload.values["AEO Extractability Score"] in {"Medium", "High"}
+
+
+def test_assemble_excludes_sidebar_widget_even_when_main_tag_present() -> None:
+    """A <main> tag that itself contains a nested sidebar/widget region (some
+    WordPress themes do this) should still have that region stripped."""
+    html = """
+    <html>
+      <head><title>Conference Page</title></head>
+      <body>
+        <main>
+          <div class="content-area">
+            <h1>Marketing Conference Africa</h1>
+            <p>
+              This year's marketing conference in Africa brings together
+              keynote speakers and workshops focused on brand strategy.
+            </p>
+          </div>
+          <div class="widget-area sidebar">
+            <ul>
+              <li>Old announcement one</li>
+              <li>Old announcement two</li>
+            </ul>
+            <p>Shared sidebar boilerplate text about unrelated news.</p>
+          </div>
+        </main>
+      </body>
+    </html>
+    """
+    main_payload, extra_payload = init_rows("https://example.com/conference2", None)
+    assemble_from_html(
+        main_data=main_payload,
+        extra=extra_payload,
+        html=html,
+        resolved_url="https://example.com/conference2",
+    )
+    extra = extra_payload.values
+    body_text = str(extra["Body Text Excerpt"])
+    assert "keynote speakers" in body_text.lower()
+    assert "sidebar boilerplate" not in body_text.lower()
+    assert extra["AEO Extractability Score"] == "Low"
+
+
 def test_assemble_with_giant_link_payload_counts_correctly() -> None:
     links = "".join(f'<a href="/internal-{idx}">link {idx}</a>' for idx in range(3000))
     html = f"""

@@ -38,6 +38,22 @@ from hype_frog.validators.schema_validator import flatten_to_row, validate_schem
 
 logger = get_logger(__name__)
 
+# Non-content chrome to strip when scoping to the primary content region.
+# nav/header/footer/aside/script alone leave WordPress "recent posts"/widget
+# sidebars in extracted text on templates without <main>/<article> — those
+# widgets then homogenize entity/AEO scores and list/table detection across
+# otherwise-unrelated pages (see docs/system_architecture.md primary-content
+# scoping note).
+_NON_CONTENT_SELECTOR = ", ".join([
+    "nav", "header", "footer", "aside", "script", "style",
+    ".sidebar", "#sidebar", '[class*="sidebar"]', '[id*="sidebar"]',
+    ".widget", '[class*="widget"]', '[id*="widget"]',
+    '[class*="recent-post"]', '[class*="related-post"]',
+    '[id*="recent-post"]', '[id*="related-post"]',
+    ".comments", "#comments", '[class*="comment-list"]',
+    '[class*="share-buttons"]', '[class*="social-share"]',
+])
+
 _AFRICAN_REGIONAL_TERMS: frozenset[str] = frozenset({
     "africa", "african", "pan-african", "sadc", "ecowas",
     "east africa", "west africa", "southern africa", "north africa",
@@ -78,6 +94,7 @@ class HtmlAssemblyContext:
     heading_outline: HeadingOutline | None = None
     has_list: bool = False
     has_table: bool = False
+    primary_content: Any = None
 
 
 def apply_crawl_depth_and_security(ctx: HtmlAssemblyContext, *, depth: int) -> None:
@@ -207,22 +224,38 @@ def apply_heading_outline(ctx: HtmlAssemblyContext) -> None:
         ctx.main_values[f"H{level} Length"] = len(texts[0])
 
 
-def apply_body_readability_and_semantic(ctx: HtmlAssemblyContext) -> None:
-    assert ctx.soup is not None
-    if not ctx.soup.body:
-        return
+def _primary_content_region(ctx: HtmlAssemblyContext) -> Any:
+    """Best-effort primary-content-region scoping, cached on ``ctx`` so body
+    text/paragraph extraction and list/table detection (a separate phase)
+    agree on what counts as content vs. nav/header/footer/sidebar/widget chrome.
 
+    Always re-parses a standalone copy (rather than mutating ``ctx.soup`` in
+    place) so stripping chrome here never affects other phases that read from
+    the shared ``ctx.soup`` tree (headings, schema, OG tags, etc.).
+    """
+    if ctx.primary_content is not None:
+        return ctx.primary_content
+    assert ctx.soup is not None
     primary = (
         ctx.soup.find("main")
         or ctx.soup.find("article")
         or ctx.soup.find("div", attrs={"role": "main"})
     )
-    if primary is None:
-        content_soup = BeautifulSoup(ctx.html, "lxml")
-        for tag in content_soup.select("nav, header, footer, aside, script"):
-            tag.decompose()
-        primary = content_soup.body
+    source_html = str(primary) if primary is not None else ctx.html
+    content_soup = BeautifulSoup(source_html, "lxml")
+    for tag in content_soup.select(_NON_CONTENT_SELECTOR):
+        tag.decompose()
+    region = content_soup.body or content_soup
+    ctx.primary_content = region
+    return region
 
+
+def apply_body_readability_and_semantic(ctx: HtmlAssemblyContext) -> None:
+    assert ctx.soup is not None
+    if not ctx.soup.body:
+        return
+
+    primary = _primary_content_region(ctx)
     body_text = primary.get_text(separator=" ", strip=True) if primary else ""
     ctx.extra_values["Current Page Copy Snippet"] = (
         (body_text[:250] + "...") if len(body_text) > 250 else body_text
@@ -293,8 +326,13 @@ def apply_aeo_signals(ctx: HtmlAssemblyContext) -> None:
         token in first_60_words
         for token in [" is ", " are ", " means ", " refers to ", " can "]
     ) and len(first_60_words.split()) >= 30
-    ctx.has_list = bool(ctx.soup.find(["ul", "ol"]))
-    ctx.has_table = bool(ctx.soup.find("table"))
+    # Scoped to the primary content region (same one body text/semantic
+    # analysis uses) — the raw ctx.soup includes nav/footer/sidebar lists
+    # that made virtually every WordPress page register has_list=True
+    # regardless of whether the actual content had a real list.
+    primary = _primary_content_region(ctx)
+    ctx.has_list = bool(primary.find(["ul", "ol"])) if primary else False
+    ctx.has_table = bool(primary.find("table")) if primary else False
     has_question_headings = ctx.extra_values["Question Heading Count"] > 0
     if has_question_headings and (ctx.has_list or ctx.has_table):
         ctx.extra_values["AEO Extractability Score"] = "High"

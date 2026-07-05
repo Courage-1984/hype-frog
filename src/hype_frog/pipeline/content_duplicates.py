@@ -258,6 +258,11 @@ def enrich_content_duplicate_signals(
             "Draft Page Flag": draft_flag,
             "Probable Duplicate Flag": probable_duplicate,
             "Duplicate Of URL": duplicate_of,
+            # Populated even when duplicate_of stays None (e.g. in_heading_cluster
+            # is True but _should_point_to_duplicate didn't win the rank
+            # comparison) — lets the sheet builder show a real candidate URL
+            # instead of a blank target with a "point elsewhere" instruction.
+            "Best Match URL": best_match_url,
             "Content Similarity %": similarity_pct,
             "Heading Structure Cluster Size": heading_cluster_size,
         }

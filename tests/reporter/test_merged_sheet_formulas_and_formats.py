@@ -1,4 +1,4 @@
-"""Phase 3 polish regression guards: formulas, formats, visibility, display headers."""
+"""Merged-sheet formula/format regression guards: header-resolved columns, display aliases, number formats."""
 
 from __future__ import annotations
 

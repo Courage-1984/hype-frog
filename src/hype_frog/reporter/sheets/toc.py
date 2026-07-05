@@ -49,6 +49,7 @@ def apply_workbook_toc_and_links(
     std_navy: str,
     std_white: str,
     std_blue: str,
+    hide_advanced_tabs: bool = True,
 ) -> None:
     def _clear_orphaned_selection(ws) -> None:
         try:
@@ -143,7 +144,7 @@ def apply_workbook_toc_and_links(
     if "Table of Contents" not in wb.sheetnames:
         wb.create_sheet("Table of Contents", 0)
 
-    apply_workbook_tab_layout(wb)
+    apply_workbook_tab_layout(wb, hide_advanced_tabs=hide_advanced_tabs)
 
     toc_ws = wb["Table of Contents"]
     toc_ws["A1"] = "Table of Contents"

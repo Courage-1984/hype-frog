@@ -128,3 +128,15 @@ def test_repeated_headings_without_copy_slug_still_flags_cluster() -> None:
     assert len(flagged) >= 1
     hints = " ".join(str(row.values.get("Cannibalization Hint") or "") for row in enriched)
     assert "Probable duplicate of" in hints or "Repeated H2/H3" in hints
+
+    # Regression (M6): the page that wins the rank comparison keeps
+    # Duplicate Of URL = None even though it's flagged probable-duplicate —
+    # "Best Match URL" must still name a real counterpart for the sheet to
+    # show, instead of leaving readers with a blank target.
+    blank_duplicate_of = [
+        row for row in enriched if row.values.get("Duplicate Of URL") is None
+    ]
+    assert blank_duplicate_of
+    for row in blank_duplicate_of:
+        if row.values.get("Probable Duplicate Flag"):
+            assert row.values.get("Best Match URL")

@@ -133,6 +133,11 @@ _SHEET_WRAP_TARGETS: dict[str, tuple[int, tuple[str, ...]]] = {
     "Technical": (1, ("Redirect Hops", "X-Robots-Tag", "Content-Security-Policy")),
     "AEO": (1, ("Why It Matters", "Snippet Preview Mockup")),
     CONTENT_HUB_METRICS_SHEET: (1, ("Anchor Text Diversity", "Search Intent")),
+    "Issue Register": (2, ("Affected URLs Sample",)),
+    "Broken Link Impact": (
+        2,
+        ("Source Pages (first 5)", "Anchor Texts Used", "Recommended Action"),
+    ),
 }
 
 
@@ -1239,6 +1244,10 @@ def apply_merged_tabs_conditional_formatting(
             end_row,
         )
     elif sheet_name == "Quick Wins":
+        for hdr in ("Business Risk Score", "GSC Clicks (30d)"):
+            rng = _column_range(headers, hdr, start_row, end_row)
+            if rng:
+                _add_data_bar_blue(worksheet, rng)
         effort_col = headers.get("Effort (hrs)")
         if effort_col:
             effort_letter = get_column_letter(effort_col)

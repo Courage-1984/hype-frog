@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from openpyxl.comments import Comment
 
+from hype_frog.analysis.link_equity import ANCHOR_TEXT_AUDIT_COLUMNS, LINK_EQUITY_COLUMNS
+from hype_frog.core.models import MAIN_ROW_DEFAULTS
 from hype_frog.reporter.engine_rows import CONTENT_HUB_EXPORT_COLUMNS
 from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 from hype_frog.reporter.sheets.dashboard_config import (
@@ -68,6 +70,9 @@ def test_curated_headers_remain_subset_of_export_column_contracts() -> None:
         "Link Inventory": LINK_INVENTORY_COLUMNS,
         "SitemapQA": sitemapqa_columns,
         CONTENT_OPTIMISATION_HUB_SHEET: CONTENT_HUB_EXPORT_COLUMNS,
+        "Main": tuple(MAIN_ROW_DEFAULTS.keys()),
+        "Link Equity Map": LINK_EQUITY_COLUMNS,
+        "Anchor Text Audit": ANCHOR_TEXT_AUDIT_COLUMNS,
     }
     for sheet, keys in curated_help_keys_by_sheet().items():
         allowed = contracts[sheet]

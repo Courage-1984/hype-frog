@@ -96,7 +96,11 @@ def apply_link_intelligence_summary_broken_formulas(workbook: Any) -> None:
     for row in range(2, ws.max_row + 1):
         if str(ws.cell(row, rt_col).value or "").strip() != "Summary":
             continue
-        formula = link_inventory_broken_per_source_formula(f"$A{row}")
+        # Self-referencing via ROW()/INDIRECT (not a baked-in "$A{row}" literal):
+        # add_return_to_briefing_strip() later calls worksheet.insert_rows(1),
+        # which shifts cells but does not rewrite formula text — a literal row
+        # number here would point one row too high after that insert.
+        formula = link_inventory_broken_per_source_formula('INDIRECT("$A"&ROW())')
         ws.cell(row=row, column=brk_col, value=formula)
         if act_col:
             ws.cell(
