@@ -13,10 +13,7 @@ from hype_frog.crawler.redirect_chain import (
     is_redirect_loop,
     redirect_seo_risk,
 )
-from hype_frog.reporter.sheets.merged_builders import (
-    build_redirect_map_rows,
-    build_redirects_sheet_rows,
-)
+from hype_frog.reporter.sheets.merged_builders import build_redirects_sheet_rows
 
 
 def test_format_redirect_chain_display_mixed_statuses() -> None:
@@ -98,13 +95,13 @@ def test_merged_builders_redirect_sheets() -> None:
     redirects = build_redirects_sheet_rows([extra])
     assert len(redirects) == 1
     assert redirects[0]["Redirect Chain Length"] == 1
+    assert redirects[0]["Hop 1 Status"] == 301
+    assert redirects[0]["Hop 2 URL"] is None
 
-    map_rows = build_redirect_map_rows([extra])
-    assert len(map_rows) == 1
-    assert map_rows[0]["Source URL"] == "https://a.example/"
-    assert map_rows[0]["Hop 1 Status"] == 301
-
-    assert build_redirect_map_rows([{**extra, "Redirect Chain Length": 0}]) == []
+    non_redirect_rows = build_redirects_sheet_rows([{**extra, "Redirect Chain Length": 0}])
+    assert len(non_redirect_rows) == 1
+    assert non_redirect_rows[0]["Hop 1 URL"] is None
+    assert non_redirect_rows[0]["Hop 1 Status"] is None
 
 
 def test_redirect_seo_risk_flags_chain_ending_in_error_status() -> None:

@@ -20,7 +20,6 @@ from hype_frog.reporter.sheets.config import (
     RAG_GREEN,
     RAG_RED,
     RAG_RED_FONT,
-    REDIRECT_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
 )
 from hype_frog.reporter.sheets.large_sheet_presentation import (
@@ -69,9 +68,6 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
         "High-value pages requiring immediate attention based on business risk."
     ),
     "Main": "Primary URL inventory with titles, meta descriptions, and crawl signals.",
-    "Summary": (
-        "Aggregated issue counts, AEO opportunities, and top critical URLs from the run."
-    ),
     "Content": "Content depth, readability, headings, and thin-content flags per URL.",
     "Links": "Internal and external link counts and anchor-text quality per URL.",
     "LinksDetail": "Row-level outbound internal links with crawl resolution status.",
@@ -89,9 +85,9 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "Security": "Transport and hardening headers (HSTS, CSP, XFO, referrer policy, etc.).",
     "PSI Performance": "Lab PageSpeed scores and mobile CWV-related proxies.",
     "Indexability": "Robots directives, canonicals, and indexability classification.",
-    "Redirects": "Redirect chains, hop lists, HTTPS upgrades, and loop detection.",
-    REDIRECT_MAP_SHEET: (
-        "Per-source redirect chains with hop status codes, 302 flags, and SEO risk notes."
+    "Redirects": (
+        "Redirect chains with hop-by-hop URL/status breakdown, HTTPS upgrades, "
+        "302 flags, loop detection, and SEO risk notes."
     ),
     ROBOTS_ANALYSIS_SHEET: (
         "Parsed robots.txt content, user-agent rules, blocked URLs, and sitemap conflicts."
@@ -136,10 +132,6 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "DeltaFromPreviousRun": (
         "New, resolved, and persistent issues compared to a prior audit workbook or delta JSON. "
         "Sections: summary counts, new issues, resolved issues, metric changes, and SEO health trend. "
-        "First runs show a baseline note when no previous export was supplied."
-    ),
-    "ResolvedIssues": (
-        "Issues marked resolved when compared to the previous export. "
         "First runs show a baseline note when no previous export was supplied."
     ),
     "CrawlGraph": "Derived link graph metrics (click depth, inlinks, PageRank proxy).",

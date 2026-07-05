@@ -4,7 +4,11 @@ import json
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from hype_frog.crawler.redirect_chain import RedirectHopRecord, build_redirect_map_row
+from hype_frog.crawler.redirect_chain import (
+    REDIRECT_MAP_MAX_HOP_COLUMNS,
+    RedirectHopRecord,
+    build_redirect_map_row,
+)
 from hype_frog.config import get_quick_wins_max_effort_hours, get_quick_wins_max_results
 from hype_frog.analysis.delta_engine import IssueRecord, days_between
 from hype_frog.core import get_logger
@@ -1155,22 +1159,6 @@ def build_broken_link_impact_rows(
     return [{col: row.get(col) for col in BROKEN_LINK_IMPACT_COLUMNS} for row in output_rows]
 
 
-REDIRECT_MAP_COLUMNS: tuple[str, ...] = (
-    "Source URL",
-    "Hop 1 URL",
-    "Hop 1 Status",
-    "Hop 2 URL",
-    "Hop 2 Status",
-    "Hop 3 URL",
-    "Hop 3 Status",
-    "Final URL",
-    "Chain Length",
-    "Has 302",
-    "SEO Risk",
-    "Redirect Chain",
-)
-
-
 def _hop_records_from_extra_row(row: dict[str, Any]) -> list[RedirectHopRecord]:
     raw = row.get("Redirect Chain Hops")
     if not raw:
@@ -1195,41 +1183,49 @@ def _hop_records_from_extra_row(row: dict[str, Any]) -> list[RedirectHopRecord]:
 
 
 def build_redirects_sheet_rows(extra_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Build rows for the legacy Redirects worksheet."""
-    return [
-        {
-            "URL": row.get("URL"),
-            "Status Code": row.get("Status Code"),
-            "Final URL": row.get("Final URL"),
-            "Redirect Chain": row.get("Redirect Chain"),
-            "Redirect Chain Length": row.get("Redirect Chain Length"),
-            "Redirect Chain Hops": row.get("Redirect Chain Hops"),
-            "Has 302 in Chain": row.get("Has 302 in Chain"),
-            "Has Mixed Redirect Types": row.get("Has Mixed Redirect Types"),
-            "Redirect Target": row.get("Redirect Target"),
-            "Redirect Hops": row.get("Redirect Hops"),
-            "HTTP->HTTPS Redirect": row.get("HTTP->HTTPS Redirect"),
-            "Redirect Loop Flag": row.get("Redirect Loop Flag"),
-            "Redirect SEO Risk": row.get("Redirect SEO Risk"),
-        }
-        for row in extra_rows
-    ]
-
-
-def build_redirect_map_rows(extra_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """One row per source URL that returned a redirect chain."""
+    """Build rows for the Redirects worksheet: per-URL summary plus a hop-by-hop
+    breakdown (Hop 1-3 URL/Status) for any URL that actually redirects."""
     rows: list[dict[str, Any]] = []
     for row in extra_rows:
-        if int(row.get("Redirect Chain Length") or 0) <= 0:
-            continue
-        hop_records = _hop_records_from_extra_row(row)
-        map_row = build_redirect_map_row(
-            source_url=str(row.get("URL") or ""),
-            hop_records=hop_records,
-            final_url=row.get("Final URL"),
-            fields=row,
+        seo_risk = row.get("Redirect SEO Risk")
+        hop_fields: dict[str, Any] = {
+            f"Hop {n} URL": None for n in range(1, REDIRECT_MAP_MAX_HOP_COLUMNS + 1)
+        } | {
+            f"Hop {n} Status": None for n in range(1, REDIRECT_MAP_MAX_HOP_COLUMNS + 1)
+        }
+        if int(row.get("Redirect Chain Length") or 0) > 0:
+            hop_records = _hop_records_from_extra_row(row)
+            map_row = build_redirect_map_row(
+                source_url=str(row.get("URL") or ""),
+                hop_records=hop_records,
+                final_url=row.get("Final URL"),
+                fields=row,
+            )
+            for n in range(1, REDIRECT_MAP_MAX_HOP_COLUMNS + 1):
+                hop_fields[f"Hop {n} URL"] = map_row.get(f"Hop {n} URL")
+                hop_fields[f"Hop {n} Status"] = map_row.get(f"Hop {n} Status")
+            # build_redirect_map_row appends a "(+N more hops)" note to its own SEO
+            # Risk copy when the chain exceeds the hop-column limit — carry that
+            # note over onto the real "Redirect SEO Risk" field.
+            seo_risk = map_row.get("SEO Risk") or seo_risk
+        rows.append(
+            {
+                "URL": row.get("URL"),
+                "Status Code": row.get("Status Code"),
+                "Final URL": row.get("Final URL"),
+                "Redirect Chain": row.get("Redirect Chain"),
+                "Redirect Chain Length": row.get("Redirect Chain Length"),
+                "Redirect Chain Hops": row.get("Redirect Chain Hops"),
+                "Has 302 in Chain": row.get("Has 302 in Chain"),
+                "Has Mixed Redirect Types": row.get("Has Mixed Redirect Types"),
+                "Redirect Target": row.get("Redirect Target"),
+                "Redirect Hops": row.get("Redirect Hops"),
+                "HTTP->HTTPS Redirect": row.get("HTTP->HTTPS Redirect"),
+                "Redirect Loop Flag": row.get("Redirect Loop Flag"),
+                "Redirect SEO Risk": seo_risk,
+                **hop_fields,
+            }
         )
-        rows.append({col: map_row.get(col) for col in REDIRECT_MAP_COLUMNS})
     return rows
 
 
@@ -1243,7 +1239,6 @@ __all__ = [
     "TEMPLATE_DUPLICATION_RISKS_COLUMNS",
     "QUICK_WINS_COLUMNS",
     "BROKEN_LINK_IMPACT_COLUMNS",
-    "REDIRECT_MAP_COLUMNS",
     "build_technical_diagnostics_rows",
     "build_content_ai_readiness_rows",
     "build_issue_register_rows",
@@ -1253,6 +1248,5 @@ __all__ = [
     "build_quick_wins_rows",
     "build_broken_link_impact_rows",
     "build_redirects_sheet_rows",
-    "build_redirect_map_rows",
 ]
 

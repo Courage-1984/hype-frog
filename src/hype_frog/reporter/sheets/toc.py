@@ -16,7 +16,6 @@ from hype_frog.reporter.sheets.config import (
     CRAWL_LOG_SHEET,
     EXECUTIVE_BRIEFING_FREEZE_PANES,
     EXECUTIVE_BRIEFING_SHEET,
-    REDIRECT_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
     SHEET_ZOOM_OVERRIDES,
 )
@@ -234,7 +233,6 @@ def apply_workbook_toc_and_links(
             "Priority URLs",
             "AEO",
             "Redirects",
-            REDIRECT_MAP_SHEET,
             ROBOTS_ANALYSIS_SHEET,
             CRAWL_LOG_SHEET,
             AIOSEO_RECOMMENDATIONS_SHEET,
@@ -254,7 +252,6 @@ def apply_workbook_toc_and_links(
             "Playbook",
             "Audit Run Details",
             "DeltaFromPreviousRun",
-            "ResolvedIssues",
             "CrawlGraph",
             "SitemapQA",
         }

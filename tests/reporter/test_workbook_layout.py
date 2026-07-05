@@ -32,16 +32,16 @@ def test_visible_tab_order_matches_workflow_spec() -> None:
     visible = [n for n in VISIBLE_WORKBOOK_TAB_ORDER if n != "Table of Contents"]
     assert visible[:6] == [
         "Executive Briefing",
-        "Summary",
         "Priority URLs",
         "FixPlan",
         "Quick Wins",
         CONTENT_OPTIMISATION_HUB_SHEET,
+        CONTENT_PLANNER_SHEET,
     ]
-    assert visible[8] == "Main"
-    assert visible[10] == "Link Inventory"
-    assert visible[11] == "Broken Link Impact"
-    assert visible[12] == "SitemapQA"
+    assert visible[7] == "Main"
+    assert visible[9] == "Link Inventory"
+    assert visible[10] == "Broken Link Impact"
+    assert visible[11] == "SitemapQA"
     assert AIOSEO_RECOMMENDATIONS_SHEET in visible
     assert CONTENT_PLANNER_SHEET in visible
     assert visible[-1] == "Playbook"

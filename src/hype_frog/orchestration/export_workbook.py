@@ -98,7 +98,6 @@ from hype_frog.reporter.sheets.config import (
     CRAWL_LOG_SHEET,
     IMAGE_INVENTORY_SHEET,
     LINK_EQUITY_MAP_SHEET,
-    REDIRECT_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
     SCRIPT_INVENTORY_SHEET,
     SNIPPET_OPPORTUNITIES_SHEET,
@@ -111,7 +110,6 @@ from hype_frog.reporter.sheets.merged_builders import (
     build_issue_register_rows,
     build_link_intelligence_rows,
     build_quick_wins_rows,
-    build_redirect_map_rows,
     build_redirects_sheet_rows,
     build_technical_diagnostics_rows,
     build_template_duplication_risks_rows,
@@ -253,7 +251,6 @@ def write_full_suite_workbook(
         aioseo_rows,
     )
     redirects_rows = build_redirects_sheet_rows(extra_rows)
-    redirect_map_rows = build_redirect_map_rows(extra_rows)
     link_rows = []
     for row in extra_rows:
         for item in row.get("Link Details", []):
@@ -324,8 +321,9 @@ def write_full_suite_workbook(
         main_rows=main_rows,
     )
     logger.info("Writing summary and issue sheets...")
-    summary_df = pd.DataFrame(summary_rows)
-    write_dataframe_sheet(writer, summary_df, "Summary", startrow=1)
+    # No standalone "Summary" tab: build_issue_register_rows() (above) already folds
+    # every summary_rows entry (Issue Counts, AEO Opportunities, Top 10 Critical URLs,
+    # Top Issues by Template) into Issue Register, so Summary was a strict subset.
     template_duplication_rows = build_template_duplication_risks_rows(
         duplicate_rows=duplicate_rows,
         pattern_rows=pattern_rows,
@@ -662,7 +660,10 @@ def write_full_suite_workbook(
     write_dataframe_sheet(
         writer, pd.DataFrame(run_meta_rows), AUDIT_RUN_DETAILS_SHEET, startrow=1
     )
-    delta_rows, resolved_issues_df, current_snapshot = build_delta_workbook_output(
+    # No standalone "ResolvedIssues" tab: build_delta_sheet_rows() already folds
+    # every resolved issue (with Stable Issue ID) into DeltaFromPreviousRun's own
+    # "Resolved Issues" section, so the separate tab was a strict subset.
+    delta_rows, _resolved_issues_df, current_snapshot = build_delta_workbook_output(
         issue_inventory_df=issue_inventory_df,
         main_rows=main_rows,
         extra_rows=extra_rows,
@@ -673,7 +674,6 @@ def write_full_suite_workbook(
         run_date=run_timestamp,
     )
     write_dataframe_sheet(writer, pd.DataFrame(delta_rows), "DeltaFromPreviousRun", startrow=1)
-    write_dataframe_sheet(writer, resolved_issues_df, "ResolvedIssues", startrow=1)
     playbook_rows.extend(
         [
             {"Section": "", "Item": "", "Guideline": "", "Why It Matters": ""},
@@ -706,12 +706,6 @@ def write_full_suite_workbook(
         "Redirects",
         sheet_columns["Redirects"],
         redirects_rows,
-    )
-    write_dict_rows_sheet(
-        writer,
-        REDIRECT_MAP_SHEET,
-        merged_columns[REDIRECT_MAP_SHEET],
-        redirect_map_rows,
     )
     robots_analysis_rows = build_robots_analysis_rows(
         robots_by_domain=crawl_result.robots_by_domain or {},

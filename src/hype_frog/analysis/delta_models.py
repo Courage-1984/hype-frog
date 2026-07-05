@@ -22,6 +22,7 @@ METRIC_FIELDS: tuple[str, ...] = (
 
 DELTA_SHEET_COLUMNS: tuple[str, ...] = (
     "Section",
+    "Stable Issue ID",
     "URL",
     "Issue",
     "Severity",

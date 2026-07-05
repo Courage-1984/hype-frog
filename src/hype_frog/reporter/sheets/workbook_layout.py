@@ -16,7 +16,6 @@ from hype_frog.reporter.sheets.config import (
     EXECUTIVE_BRIEFING_SHEET,
     IMAGE_INVENTORY_SHEET,
     LINK_EQUITY_MAP_SHEET,
-    REDIRECT_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
     SCRIPT_INVENTORY_SHEET,
     SNIPPET_OPPORTUNITIES_SHEET,
@@ -44,7 +43,6 @@ TAB_COLOR_PLUGIN = TAB_COLOR_TECHNICAL
 VISIBLE_WORKBOOK_TAB_ORDER: tuple[str, ...] = (
     "Table of Contents",
     EXECUTIVE_BRIEFING_SHEET,
-    "Summary",
     "Priority URLs",
     "FixPlan",
     "Quick Wins",
@@ -68,7 +66,6 @@ ADVANCED_WORKBOOK_TAB_ORDER: tuple[str, ...] = (
     "Link Intelligence",
     "CMS Action URLs",
     "Redirects",
-    REDIRECT_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
     CRAWL_LOG_SHEET,
     LINK_EQUITY_MAP_SHEET,
@@ -77,7 +74,6 @@ ADVANCED_WORKBOOK_TAB_ORDER: tuple[str, ...] = (
     COMPETITOR_BENCHMARKS_SHEET,
     SCRIPT_INVENTORY_SHEET,
     IMAGE_INVENTORY_SHEET,
-    "ResolvedIssues",
     "DeltaFromPreviousRun",
     AUDIT_RUN_DETAILS_SHEET,
 )
@@ -111,17 +107,14 @@ DASHBOARD_ADVANCED_SHEET_LINKS: tuple[tuple[str, str], ...] = (
     ("Link Intelligence", "Link Intelligence"),
     ("CMS Action URLs", "CMS Action URLs"),
     ("Redirects", "Redirects"),
-    (REDIRECT_MAP_SHEET, "Redirect Map"),
     (ROBOTS_ANALYSIS_SHEET, "Robots.txt Analysis"),
     (CRAWL_LOG_SHEET, "Crawl Log"),
     (AUDIT_RUN_DETAILS_SHEET, "Audit Run Details"),
-    ("ResolvedIssues", "Resolved Issues"),
-    ("DeltaFromPreviousRun", "Delta From Previous Run"),
+    ("DeltaFromPreviousRun", "Delta From Previous Run (includes resolved issues)"),
 )
 
 _SHEET_TAB_COLORS: dict[str, str] = {
     EXECUTIVE_BRIEFING_SHEET: TAB_COLOR_MANAGEMENT,
-    "Summary": TAB_COLOR_MANAGEMENT,
     "Playbook": TAB_COLOR_MANAGEMENT,
     "Priority URLs": TAB_COLOR_TECHNICAL,
     "FixPlan": TAB_COLOR_TECHNICAL,
@@ -141,7 +134,6 @@ _SHEET_TAB_COLORS: dict[str, str] = {
     "Link Intelligence": TAB_COLOR_ADVANCED,
     "CMS Action URLs": TAB_COLOR_ADVANCED,
     "Redirects": TAB_COLOR_ADVANCED,
-    REDIRECT_MAP_SHEET: TAB_COLOR_ADVANCED,
     ROBOTS_ANALYSIS_SHEET: TAB_COLOR_ADVANCED,
     LINK_EQUITY_MAP_SHEET: TAB_COLOR_ADVANCED,
     ANCHOR_TEXT_AUDIT_SHEET: TAB_COLOR_ADVANCED,
@@ -150,7 +142,6 @@ _SHEET_TAB_COLORS: dict[str, str] = {
     SCRIPT_INVENTORY_SHEET: TAB_COLOR_ADVANCED,
     IMAGE_INVENTORY_SHEET: TAB_COLOR_ADVANCED,
     CRAWL_LOG_SHEET: TAB_COLOR_HISTORICAL,
-    "ResolvedIssues": TAB_COLOR_HISTORICAL,
     "DeltaFromPreviousRun": TAB_COLOR_HISTORICAL,
     AUDIT_RUN_DETAILS_SHEET: TAB_COLOR_HISTORICAL,
 }

@@ -107,7 +107,6 @@ CONTENT_PLANNER_SHEET: str = "Content Planner"
 CONTENT_HUB_METRICS_SHEET: str = "Content Hub Metrics"
 AIOSEO_RECOMMENDATIONS_SHEET: str = "AIOSEO Recommendations"
 AUDIT_RUN_DETAILS_SHEET: str = "Audit Run Details"
-REDIRECT_MAP_SHEET: str = "Redirect Map"
 ROBOTS_ANALYSIS_SHEET: str = "Robots.txt Analysis"
 CRAWL_LOG_SHEET: str = "Crawl Log"
 SCRIPT_INVENTORY_SHEET: str = "Script Inventory"
@@ -155,7 +154,6 @@ SHEET_ZOOM_OVERRIDES: dict[str, int] = {
     "Link Intelligence": 90,
     "CMS Action URLs": 90,
     "Redirects": 90,
-    REDIRECT_MAP_SHEET: 90,
     ROBOTS_ANALYSIS_SHEET: 90,
     CRAWL_LOG_SHEET: 90,
     LINK_EQUITY_MAP_SHEET: 90,
@@ -286,7 +284,6 @@ __all__ = [
     "CONTENT_HUB_METRICS_SHEET",
     "AIOSEO_RECOMMENDATIONS_SHEET",
     "AUDIT_RUN_DETAILS_SHEET",
-    "REDIRECT_MAP_SHEET",
     "ROBOTS_ANALYSIS_SHEET",
     "CRAWL_LOG_SHEET",
     "SCRIPT_INVENTORY_SHEET",

@@ -117,6 +117,7 @@ def build_delta_sheet_rows(
             rows.append(
                 blank_delta_row("New Issues")
                 | {
+                    "Stable Issue ID": stable_id,
                     "URL": record.url,
                     "Issue": record.issue,
                     "Severity": record.severity,
@@ -139,6 +140,7 @@ def build_delta_sheet_rows(
             rows.append(
                 blank_delta_row("Resolved Issues")
                 | {
+                    "Stable Issue ID": stable_id,
                     "URL": record.url,
                     "Issue": record.issue,
                     "Severity": record.severity,

@@ -32,7 +32,7 @@ def test_get_sheet_sequence_main_only_vs_full_suite() -> None:
     assert "Executive Briefing" in full
     assert "Dashboard" not in full
     assert "IssueInventory" not in full
-    assert len(full) > 30
+    assert len(full) > 25
 
 
 def test_content_planner_in_full_suite_sequence() -> None:

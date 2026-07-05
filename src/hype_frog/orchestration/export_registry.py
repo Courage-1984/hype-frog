@@ -38,7 +38,6 @@ from hype_frog.reporter.sheets.config import (
     CRAWL_LOG_SHEET,
     IMAGE_INVENTORY_SHEET,
     LINK_EQUITY_MAP_SHEET,
-    REDIRECT_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
     SCRIPT_INVENTORY_SHEET,
     SNIPPET_OPPORTUNITIES_SHEET,
@@ -56,7 +55,6 @@ from hype_frog.reporter.sheets.merged_builders import (
     LINK_INTELLIGENCE_COLUMNS,
     LINK_INVENTORY_COLUMNS,
     QUICK_WINS_COLUMNS,
-    REDIRECT_MAP_COLUMNS,
     TECHNICAL_DIAGNOSTICS_COLUMNS,
     TEMPLATE_DUPLICATION_RISKS_COLUMNS,
 )
@@ -94,8 +92,13 @@ STANDARD_SHEET_COLUMNS: dict[str, list[str]] = {
         "HTTP->HTTPS Redirect",
         "Redirect Loop Flag",
         "Redirect SEO Risk",
+        "Hop 1 URL",
+        "Hop 1 Status",
+        "Hop 2 URL",
+        "Hop 2 Status",
+        "Hop 3 URL",
+        "Hop 3 Status",
     ],
-    REDIRECT_MAP_SHEET: list(REDIRECT_MAP_COLUMNS),
     ROBOTS_ANALYSIS_SHEET: list(ROBOTS_ANALYSIS_COLUMNS),
     CRAWL_LOG_SHEET: list(CRAWL_LOG_COLUMNS),
 }
@@ -111,7 +114,6 @@ CMS_ACTION_URLS_COLUMNS: list[str] = [
 
 _FULL_SUITE_FORMAT_SHEETS: list[str] = [
     "Executive Briefing",
-    "Summary",
     "Priority URLs",
     "FixPlan",
     "Quick Wins",
@@ -131,7 +133,6 @@ _FULL_SUITE_FORMAT_SHEETS: list[str] = [
     "Link Intelligence",
     CMS_ACTION_URLS_SHEET,
     "Redirects",
-    REDIRECT_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
     CRAWL_LOG_SHEET,
     LINK_EQUITY_MAP_SHEET,
@@ -140,7 +141,6 @@ _FULL_SUITE_FORMAT_SHEETS: list[str] = [
     SCRIPT_INVENTORY_SHEET,
     IMAGE_INVENTORY_SHEET,
     COMPETITOR_BENCHMARKS_SHEET,
-    "ResolvedIssues",
     "DeltaFromPreviousRun",
     AUDIT_RUN_DETAILS_SHEET,
 ]
@@ -168,7 +168,6 @@ def get_merged_sheet_columns() -> dict[str, list[str]]:
         "Quick Wins": list(QUICK_WINS_COLUMNS),
         "Broken Link Impact": list(BROKEN_LINK_IMPACT_COLUMNS),
         "Template & Duplication Risks": list(TEMPLATE_DUPLICATION_RISKS_COLUMNS),
-        REDIRECT_MAP_SHEET: list(REDIRECT_MAP_COLUMNS),
         ROBOTS_ANALYSIS_SHEET: list(ROBOTS_ANALYSIS_COLUMNS),
         CRAWL_LOG_SHEET: list(CRAWL_LOG_COLUMNS),
         LINK_EQUITY_MAP_SHEET: list(LINK_EQUITY_COLUMNS),
