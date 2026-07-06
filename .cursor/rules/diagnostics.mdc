@@ -19,4 +19,4 @@ These modules are **shipped package features** importable from `main.py`, not de
 
 ## Claude-side entry points
 
-The same three gates are exposed to Claude Code via `.claude/commands/quick-test.md`, `.claude/commands/smoke-test.md`, and `.claude/commands/validate.md`. Keep this rule and those three files describing the same behaviour — update both sides together when flags or gate semantics change.
+The same gates are exposed to Claude Code via `.claude/commands/quick-test.md`, `.claude/commands/smoke-test.md`, `.claude/commands/validate.md`, and `.claude/commands/preflight.md`. Keep this rule and those files describing the same behaviour — update both sides together when flags or gate semantics change.

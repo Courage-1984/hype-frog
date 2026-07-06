@@ -5,7 +5,14 @@
   "defaultShell": "powershell",
   "permissions": {
     "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Grep",
+      "Glob",
       "PowerShell(uv run *)",
+      "PowerShell(uv sync *)",
+      "PowerShell(uv add *)",
       "Bash(uv run *)",
       "Bash(uv sync *)",
       "Bash(uv add *)",
@@ -13,7 +20,12 @@
       "Bash(python *)",
       "Bash(ls *)",
       "Bash(find * -type f*)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "PowerShell(git log *)",
+      "PowerShell(git rev-parse *)",
+      "PowerShell(git status *)",
+      "PowerShell(git diff *)",
+      "PowerShell(git branch *)"
     ],
     "deny": [
       "Bash(git commit*)",
@@ -22,10 +34,27 @@
       "Bash(git rebase*)",
       "Bash(git reset*)",
       "Bash(git checkout -- *)",
-      "Bash(git restore *)"
+      "Bash(git restore *)",
+      "PowerShell(git commit*)",
+      "PowerShell(git push*)",
+      "PowerShell(git add*)",
+      "PowerShell(git rebase*)",
+      "PowerShell(git reset*)",
+      "PowerShell(git checkout -- *)",
+      "PowerShell(git restore *)"
     ]
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/session-start.ps1"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash|PowerShell",
