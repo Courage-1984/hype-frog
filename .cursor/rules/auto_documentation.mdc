@@ -1,6 +1,12 @@
 ---
 description: Documentation verification, when to update ./docs/, pytest/asyncio test guardrails, and extraction-state assertions.
-alwaysApply: true
+alwaysApply: false
+globs:
+  - docs/**
+  - commands.md
+  - README.md
+  - .env.example
+  - tests/**
 ---
 
 # Documentation discipline and testing guardrails

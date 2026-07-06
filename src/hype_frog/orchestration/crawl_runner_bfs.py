@@ -1,4 +1,11 @@
-"""BFS crawl loop — checkpoint resume, seed phase, frontier expansion."""
+"""BFS crawl loop — checkpoint resume, seed phase, frontier expansion.
+
+AI navigation map (read with offset/limit; do not load entire file blindly):
+  L53   CrawlExecutionResult — crawl phase return dataclass
+  L84   apply_search_intent — per-URL LLM intent enrichment (Unknown fallback)
+  L118  run_bfs_crawl_loop — main BFS loop (checkpoint, frontier, memory guard, progress)
+  Delegates frontier eligibility to crawl_runner_frontier.py; entry via crawl_runner.py.
+"""
 
 from __future__ import annotations
 

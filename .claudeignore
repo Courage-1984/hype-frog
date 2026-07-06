@@ -1,0 +1,13 @@
+# Claude Code indexing exclusions (mirrors .cursorignore)
+
+archive/
+archive_legacy/
+.old/
+__pycache__/
+.pytest_cache/
+dist/
+reports/
+*.xlsx
+*.pdf
+logs/
+.cache/

@@ -192,7 +192,7 @@ async def classify_search_intent_with_llm(
     *,
     session: aiohttp.ClientSession | None = None,
     model: str | None = None,
-    timeout_seconds: float = 12.0,
+    timeout_seconds: float = 5.0,
 ) -> str:
     """Classify page search intent with an OpenAI-compatible LLM.
 

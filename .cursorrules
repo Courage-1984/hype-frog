@@ -2,74 +2,18 @@
 
 # NB | CRITICAL ALWAYS APPLY RULE: YOU ARE NEVER TO TOUCH GIT NOR COMMIT AND OR PUSH!
 
-1. **Architecture ownership is strict.**
+1. **Git sovereignty** — Agents must never run git commands (add, commit, push, rebase, etc.). The user owns repository state.
 
-* **Foundations:** `src/hype_frog/core/` (including `env_vars.py` for centralised env-var access and `discovery_order.py` for URL ranking) and shared `config` (top-level `config.py`/`config_defaults.py`/`config_loader.py`; the `src/hype_frog/config/` directory itself is empty/reserved — see `CLAUDE.md` module map).
-* **Engines:** `src/hype_frog/crawler/` (including `psi_batch.py`, `psi_cache.py`, `psi_merge.py` for PSI split, and `data_assembler_phases.py`), `src/hype_frog/pipeline/`, `src/hype_frog/reporter/`.
-* **Domain analysis:** `src/hype_frog/analysis/` (post-crawl enrichments: hreflang, equity, snippets, delta comparison via `delta_loader.py`, `delta_models.py`, `delta_sheet_builder.py`, etc.).
-* **Validation:** `src/hype_frog/validators/` (schema validation; no workbook I/O).
-* **Rules:** `src/hype_frog/rules/` (`IssueRule` registry and playbook metadata).
-* **Flows:** `src/hype_frog/orchestration/` (BFS loop split: `crawl_runner_bfs.py`, `crawl_runner_frontier.py`, `crawl_runner_interactive.py`; export split: `export_executive_reports.py`, `export_workbook.py`, `export_row_builders.py`, `export_workbook_constants.py`).
-* Keep logic in owning layer; do not collapse modules into new junk-drawer helpers.
+2. **Architecture ownership** — Strict layer boundaries: `core`/`config` → `crawler`/`extractors` → `analysis` → `pipeline`/`rules` → `reporter`; `orchestration` coordinates only. Full module map: `docs/system_architecture.md` and path-scoped `.cursor/rules/*.mdc`.
 
-2. **Typed chain-of-trust is mandatory.**
+3. **Contracts** — Additive row keys only (`core/models.py`). Pydantic whitelist; `IssueRule` in `rules/registry.py`. Reporter treats row dicts as read-only.
 
-* Runtime row/state payloads must validate through Pydantic models in `src/hype_frog/core/models.py` (whitelist via `EXTRA_ROW_DEFAULTS` / `ENRICHMENT_PIPELINE_DEFAULTS`).
-* Issue predicates use **`IssueRule`** dataclass in `src/hype_frog/rules/registry.py` (`scope`: `url` | `site` | `server`).
-* New public APIs require explicit type hints.
-* Prefer additive keys over renames/removals for established payload contracts.
+4. **Scope** — >3 files requires explicit user approval unless approved in-thread. Small, reviewable diffs only.
 
-3. **Logic and layout separation is mandatory.**
+5. **Toolchain** — `uv` only (`uv sync`, `uv run`, `uv add`). British English for user-facing copy.
 
-* Business/scoring logic belongs in crawler/pipeline/rules modules.
-* Workbook layout, style, TOC, and view-state rules belong in reporter modules.
-* Reporter must treat upstream payload dictionaries as read-only.
+6. **Docs** — Exactly 5 `docs/*.md`, 12 `.cursor/rules/*.mdc`. Sync canon when behaviour changes (see `.cursor/rules/auto_documentation.mdc` when editing docs).
 
-4. **Atomic changes and scope control.**
+7. **MCP (if configured)** — Playwright for DOM/hydration checks; Context7 for library docs; sequential-thinking before BFS/ROI/Excel aggregation edits.
 
-* Keep diffs small and reviewable.
-* If work spans more than 3 files, require explicit user approval unless already provided in-thread.
-* Avoid mass rewrites or deletion of legacy material without direct request.
-
-5. **Runtime safety and observability.**
-
-* Keep async paths non-blocking. Use bounded retries/backoff for network operations.
-* Use shared logging helpers; no ad hoc `print()` telemetry in runtime modules.
-* **MCP usage (if configured):** If `chrome-devtools` or `playwright` MCP tooling is available in your environment, use it to verify DOM state/hydration before attempting blind fixes on `network_engine.py`.
-
-6. **Excel integrity rules are non-negotiable.**
-
-* Sanitize string values for workbook safety/injection prevention.
-* Preserve ghost-pane/view-state guardrails and TOC-to-tab consistency.
-* Keep Content Optimisation Hub action semantics aligned with existing conditional formatting rules.
-
-7. **Toolchain policy.**
-
-* Use `uv` only: `uv add`, `uv sync`, `uv run`. Do not use `pip`, `pip freeze`, or `python -m venv`.
-* Treat `uv.lock` as the dependency source of truth.
-
-8. **Language and docs policy.**
-
-* User-facing copy and workbook text use British English.
-* **Continuous documentation sync:** Whenever architecture, contracts, crawl/AEO/ROI behaviour, or reporting invariants change, update the matching canonical file immediately. Ensure README, `docs/*.md`, and `.cursor/rules/*.mdc` remain in sync.
-
-9. **Consolidated layout.**
-
-* **`./docs/`** (Exactly 5): `system_architecture.md`, `data_contracts.md`, `excel_reporting_standards.md`, `logging_architecture.md`, `performance_benchmarks.md`.
-* **`.cursor/rules/`** (Exactly 12): `architecture.mdc`, `auto_documentation.mdc`, `crawler_engine.mdc`, `excel_engine.mdc`, `analysis.mdc`, `orchestration.mdc`, `rules_engine.mdc`, `config.mdc`, `checkpoint.mdc`, `validators.mdc`, `diagnostics.mdc`, `snapshots.mdc`.
-* **Roots:** `README.md`, `.cursorrules`.
-* **Excluded from cap:** operational logs, backlog prompts, `reports/` output — not governance canon.
-
-10. **Advanced Tooling (MCP Integration) — recommended if configured.**
-
-No MCP config for these servers is committed to this repo; the guidance below applies only if you have configured the named server yourself (e.g. via Cursor's Settings UI). Do not assume any of these are available by default.
-
-* **Planning:** If `sequential-thinking` is configured, use it before modifying BFS spider logic, ROI math, or complex Excel aggregations.
-* **Benchmarking:** If `firecrawl-mcp` is configured, compare `SemanticAnalyzer` output against it to help assess AEO information superiority.
-* **Integrity:** If `filesystem` MCP tools are configured, use them to audit doc-sync accuracy during refactors.
-* **Verification:** If `brave-search` is configured, use it to validate LLM "Search Intent" results against live SERP features.
-
-11. **Git Sovereignty.**
-
-* **Git Sovereignty**, the Agent is strictly prohibited from running any git commands (add, commit, push, rebase, etc.)! The user maintains 100% control over the repository state.
-
+8. **Excluded dirs** — Ignore `archive/`, `archive_legacy/`, `.old/` for scans and refactors.

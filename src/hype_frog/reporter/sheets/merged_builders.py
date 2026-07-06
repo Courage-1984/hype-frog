@@ -1,3 +1,17 @@
+"""Merged sheet row builders for export.
+
+AI navigation map (public build_* entry points):
+  L380  build_technical_diagnostics_rows
+  L506  build_content_ai_readiness_rows
+  L599  build_issue_register_rows
+  L698  build_link_intelligence_rows
+  L802  build_link_inventory_rows
+  L809  build_template_duplication_risks_rows
+  L972  build_quick_wins_rows
+  L1092 build_broken_link_impact_rows
+  L1199 build_redirects_sheet_rows
+Helpers: _pair_main_extra_rows (~L304), _merged_export_row (~L330).
+"""
 from __future__ import annotations
 
 import json

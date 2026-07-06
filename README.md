@@ -258,7 +258,7 @@ Canonical technical manuals (keep in sync with code changes):
 ## Governance
 
 - **Root contract:** [`.cursorrules`](.cursorrules) — ownership, chain-of-trust, logic vs layout, `uv` toolchain, **continuous documentation sync**.
-- **Cursor rules (consolidated):** [`.cursor/rules/`](.cursor/rules/) — 8 `.mdc` files. `architecture.mdc` and `auto_documentation.mdc` are `alwaysApply` (repo-wide); `crawler_engine.mdc`, `excel_engine.mdc`, `analysis.mdc`, `orchestration.mdc`, `rules_engine.mdc`, and `config.mdc` are path-scoped via `globs`.
+- **Cursor rules (consolidated):** [`.cursor/rules/`](.cursor/rules/) — 12 `.mdc` files. `architecture.mdc` and `auto_documentation.mdc` are path-scoped via `globs` (not always-on); layer rules (`crawler_engine`, `excel_engine`, `analysis`, `orchestration`, `rules_engine`, `config`, `checkpoint`, `validators`, `diagnostics`, `snapshots`) attach when matching files are edited.
 
 ## Policy notes
 

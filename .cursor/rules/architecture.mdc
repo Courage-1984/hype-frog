@@ -1,6 +1,11 @@
 ---
 description: Module boundaries, async concurrency, logging, data flow, coding guardrails, and incremental change policy.
-alwaysApply: true
+alwaysApply: false
+globs:
+  - src/hype_frog/**
+  - config.py
+  - config_defaults.py
+  - config_loader.py
 ---
 
 # Architecture and engineering guardrails

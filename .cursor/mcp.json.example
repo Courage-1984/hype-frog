@@ -1,0 +1,15 @@
+1# Copy to ~/.cursor/mcp.json or project .cursor/mcp.json (no secrets required).
+# Restart Cursor after editing. Cap at 2-3 active servers to limit context overhead.
+
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    }
+  }
+}

@@ -1,3 +1,13 @@
+"""Pydantic row contracts and default whitelists for main/extra crawl payloads.
+
+AI navigation map:
+  L187  MAIN_ROW_DEFAULTS — Main tab field whitelist defaults
+  L347  EXTRA_ROW_DEFAULTS — Extra tab field whitelist defaults
+  L674  ENRICHMENT_PIPELINE_DEFAULTS — enrichment-phase keys (merged into EXTRA)
+  L810  MainRowPayload — Pydantic model for main row validation
+  L836  ExtraRowPayload — Pydantic model for extra row validation
+New fields must be additive; update defaults before using new keys in pipeline.
+"""
 from __future__ import annotations
 
 import math
