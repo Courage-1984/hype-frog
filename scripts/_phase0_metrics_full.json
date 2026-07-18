@@ -1,0 +1,330 @@
+﻿{
+  "path": "C:\\Users\\Dr0sera\\Github\\hype-frog\\reports\\latest\\SEO_AEO_Audit_africanmarketingconfederation.org_20260707_044649_regen_b513adec_20260707_165205.xlsx",
+  "Main": {
+    "AEO Readiness Score": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Question Heading Count": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Image Alt Coverage (%)": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Schema Types Count": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "SEO Health Score": {
+      "count": 261,
+      "unique": 4,
+      "sample": [
+        20,
+        20,
+        20,
+        20,
+        20
+      ],
+      "degenerate": null,
+      "distribution": {
+        "10": 145,
+        "20": 100,
+        "30": 8,
+        "0": 8
+      }
+    },
+    "Technical Health": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Answer Paragraph Count": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Citation Block Count": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Semantic AEO Score": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Extraction Source": {
+      "count": 262,
+      "unique": 2,
+      "sample": [
+        "rendered_browser",
+        "rendered_browser",
+        "rendered_browser",
+        "rendered_browser",
+        "rendered_browser"
+      ],
+      "degenerate": null,
+      "distribution": {
+        "rendered_browser": 253,
+        "raw_http": 9
+      }
+    },
+    "Extraction State": {
+      "count": 262,
+      "unique": 2,
+      "sample": [
+        "partial",
+        "partial",
+        "partial",
+        "partial",
+        "partial"
+      ],
+      "degenerate": null,
+      "distribution": {
+        "partial": 253,
+        "skipped": 9
+      }
+    },
+    "H1 Count": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Generic Anchor Text Count": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Robots.txt: GPTBot": {
+      "count": 262,
+      "unique": 1,
+      "sample": [
+        "Allow",
+        "Allow",
+        "Allow",
+        "Allow",
+        "Allow"
+      ],
+      "degenerate": "all identical: Allow",
+      "distribution": {
+        "Allow": 262
+      }
+    },
+    "AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    }
+  },
+  "Content & AI Readiness": {
+    "AEO Readiness Score": {
+      "count": 262,
+      "unique": 44,
+      "sample": [
+        16.31,
+        1.25,
+        0,
+        17.78,
+        2.6
+      ],
+      "degenerate": null,
+      "distribution": {
+        "top": [
+          [
+            14.33,
+            124
+          ],
+          [
+            0,
+            39
+          ],
+          [
+            20,
+            10
+          ],
+          [
+            71,
+            9
+          ],
+          [
+            1.25,
+            8
+          ],
+          [
+            12.17,
+            6
+          ],
+          [
+            17.78,
+            5
+          ],
+          [
+            13.04,
+            5
+          ]
+        ]
+      }
+    },
+    "Question Heading Count": {
+      "count": 262,
+      "unique": 3,
+      "sample": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "degenerate": null,
+      "distribution": {
+        "0": 247,
+        "1": 13,
+        "2": 2
+      }
+    },
+    "Image Alt Coverage (%)": {
+      "count": 253,
+      "unique": 69,
+      "sample": [
+        79.37,
+        42.86,
+        44.74,
+        42.86,
+        75
+      ],
+      "degenerate": null,
+      "distribution": {
+        "top": [
+          [
+            76.67,
+            68
+          ],
+          [
+            79.41,
+            42
+          ],
+          [
+            75,
+            21
+          ],
+          [
+            71.43,
+            10
+          ],
+          [
+            86,
+            7
+          ],
+          [
+            85.29,
+            6
+          ],
+          [
+            60,
+            5
+          ],
+          [
+            82.35,
+            5
+          ]
+        ]
+      }
+    },
+    "Schema Types Count": {
+      "count": 262,
+      "unique": 5,
+      "sample": [
+        5,
+        4,
+        4,
+        4,
+        4
+      ],
+      "degenerate": null,
+      "distribution": {
+        "6": 126,
+        "4": 113,
+        "5": 13,
+        "0": 9,
+        "11": 1
+      }
+    },
+    "SEO Health Score": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Technical Health": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Answer Paragraph Count": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Citation Block Count": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Semantic AEO Score": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Extraction Source": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Extraction State": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "H1 Count": {
+      "count": 262,
+      "unique": 7,
+      "sample": [
+        4,
+        2,
+        1,
+        2,
+        0
+      ],
+      "degenerate": null,
+      "distribution": {
+        "1": 196,
+        "0": 46,
+        "2": 13,
+        "4": 3,
+        "3": 2,
+        "9": 1,
+        "10": 1
+      }
+    },
+    "Generic Anchor Text Count": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "Robots.txt: GPTBot": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    },
+    "AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)": {
+      "count": 0,
+      "unique": 0,
+      "degenerate": "empty"
+    }
+  }
+}

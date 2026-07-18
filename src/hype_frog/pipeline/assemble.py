@@ -268,26 +268,42 @@ def compute_aeo_readiness_score(row: Mapping[str, Any]) -> tuple[float, str]:
     return score, badge
 
 
+def _technical_health_from_signals(row: Mapping[str, Any]) -> float:
+    """Technical Health from crawl/delivery signals, independent of issue-rule scoring.
+
+    Covers what the Hub tooltip promises: status class, indexability, redirect
+    behaviour, canonical consistency, plus mobile CWV and broken internal links.
+    """
+    try:
+        status_code = int(float(row.get("Status Code") or 0))
+    except (TypeError, ValueError):
+        status_code = 0
+    if status_code >= 400:
+        return 0.0
+    score = 100.0
+    if 300 <= status_code < 400:
+        score -= 15
+    if "noindex" in str(row.get("Indexability Reason") or "").lower():
+        score -= 25
+    if str(row.get("Canonical Type") or "") in {"missing", "cross-canonical"}:
+        score -= 15
+    lcp_value = value_or_default(row.get("Mobile LCP (s)"), 0.0)
+    score -= 15 if lcp_value > 4.0 else 8 if lcp_value > 2.5 else 0
+    cls_value = value_or_default(row.get("Mobile CLS"), 0.0)
+    score -= 10 if cls_value > 0.25 else 5 if cls_value > 0.1 else 0
+    if value_or_default(row.get("Broken Internal Links Count"), 0.0) > 0:
+        score -= 10
+    if value_or_default(row.get("Redirect Chain Length"), 0.0) > 1:
+        score -= 5
+    return max(0.0, min(100.0, score))
+
+
 def compute_seo_technical_copy_scores(
     row: Mapping[str, Any],
 ) -> tuple[float, float, float]:
     """Return (Technical Health, Copy Score, SEO Score) from an enriched extra row."""
     base_score = value_or_default(row.get("SEO Health Score"), 0.0)
-    lcp_value = value_or_default(row.get("Mobile LCP (s)"), 0.0)
-    technical_health = max(
-        0.0,
-        min(
-            100.0,
-            base_score
-            - (
-                15
-                if str(row.get("Canonical Type") or "")
-                in {"missing", "cross-canonical"}
-                else 0
-            )
-            - (10 if lcp_value > 4.0 else 5 if lcp_value > 2.5 else 0),
-        ),
-    )
+    technical_health = _technical_health_from_signals(row)
     wc = float(value_or_default(row.get("Word Count"), 0.0))
     if wc >= 300.0:
         thin_penalty = 0.0

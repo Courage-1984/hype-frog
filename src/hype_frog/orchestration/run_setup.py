@@ -14,6 +14,7 @@ from hype_frog.core.env_vars import (
     get_hf_competitors,
     get_hf_gsc_url_inspection,
     get_hf_max_memory_mb,
+    get_hf_regen_reenrich,
     get_hf_regen_report,
     get_hf_snapshot_id,
     get_hf_streaming,
@@ -63,6 +64,7 @@ class RunSetup:
     export_pdf: bool = False
     regen_report: bool = False
     snapshot_id: str | None = None
+    re_enrich: bool = False
 
 
 def resolve_run_setup(
@@ -104,6 +106,7 @@ def resolve_run_setup(
             export_pdf=run.export_pdf,
             regen_report=False,
             snapshot_id=None,
+            re_enrich=False,
         )
 
     user = get_user_config()
@@ -121,6 +124,7 @@ def resolve_run_setup(
     export_pdf = False
     regen_report = get_hf_regen_report()
     snapshot_id: str | None = get_hf_snapshot_id()
+    re_enrich = get_hf_regen_reenrich()
     hide_advanced_tabs_preset: bool | None = None
 
     if cli_overrides is not None:
@@ -146,6 +150,8 @@ def resolve_run_setup(
             regen_report = True
         if cli_overrides.snapshot_id:
             snapshot_id = cli_overrides.snapshot_id
+        if cli_overrides.re_enrich:
+            re_enrich = True
         if cli_overrides.show_all_tabs:
             hide_advanced_tabs_preset = False
 
@@ -175,6 +181,7 @@ def resolve_run_setup(
         export_pdf=export_pdf,
         regen_report=regen_report,
         snapshot_id=snapshot_id,
+        re_enrich=re_enrich,
     )
 
 

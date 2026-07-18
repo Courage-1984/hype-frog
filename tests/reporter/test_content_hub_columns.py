@@ -13,13 +13,56 @@ def test_content_hub_ordered_headers_matches_reorder_semantics() -> None:
     assert ordered == CONTENT_HUB_EXPORT_COLUMNS
 
 
+def test_content_hub_workflow_and_nav_columns_lead_the_sheet() -> None:
+    """Most-actionable-first: workflow + nav before scores before evidence."""
+    ordered = content_optimisation_hub_ordered_headers(_CONTENT_HUB_FIELDS_PRE_REORDER)
+    assert ordered[:5] == (
+        "Action Required",
+        "Status",
+        "Assigned Owner",
+        "URL",
+        "Open in Main",
+    )
+
+
+def test_content_hub_metrics_intent_and_roi_columns_lead_the_sheet() -> None:
+    from hype_frog.reporter.engine_rows import CONTENT_HUB_METRICS_EXPORT_COLUMNS
+
+    assert CONTENT_HUB_METRICS_EXPORT_COLUMNS[:6] == (
+        "URL",
+        "Search Intent",
+        "Search Intent Source",
+        "Instant Priority",
+        "Potential Traffic Lift",
+        "AEO Visibility Gain",
+    )
+
+
+def test_priority_urls_action_columns_lead_the_sheet() -> None:
+    from hype_frog.reporter.sheets.layout import _PREFERRED_COLUMN_ORDERS
+
+    order = _PREFERRED_COLUMN_ORDERS["Priority URLs"]
+    assert order[:3] == ["URL", "Action Needed", "Why Prioritized"]
+    # Editable triage fields stay last.
+    assert order[-3:] == ["Owner", "Status", "Sprint"]
+
+
 def test_content_hub_operational_prefix_and_formula_letters() -> None:
-    assert content_hub_column_letter("URL Slug Normalization") == "H"
-    assert content_hub_column_letter("URL") == "I"
-    assert content_hub_column_letter("Current Title") == "K"
-    assert content_hub_column_letter("Title Health") == "L"
-    assert content_hub_column_letter("On-Page Optimization Score") == "B"
-    assert content_hub_column_letter("OG Image Health") == "AC"
+    # Column order (2.4 UX overhaul): Action Required, Status, Assigned Owner,
+    # URL, Open in Main, scores, then editorial slug/title/meta/heading fields.
+    assert content_hub_column_letter("Action Required") == "A"
+    assert content_hub_column_letter("Status") == "B"
+    assert content_hub_column_letter("Assigned Owner") == "C"
+    assert content_hub_column_letter("URL") == "D"
+    assert content_hub_column_letter("Open in Main") == "E"
+    assert content_hub_column_letter("On-Page Optimization Score") == "F"
+    assert content_hub_column_letter("SEO Score") == "G"
+    assert content_hub_column_letter("Technical Health") == "H"
+    assert content_hub_column_letter("Copy Score") == "I"
+    assert content_hub_column_letter("URL Slug Normalization") == "J"
+    assert content_hub_column_letter("Current Title") == "L"
+    assert content_hub_column_letter("Title Health") == "M"
+    assert content_hub_column_letter("OG Image Health") == "AD"
     assert content_hub_column_letter("Recommended Action") == "AF"
     assert content_hub_column_letter("Priority Reason") == "AG"
     assert content_hub_column_letter("Entity Density (%)") == "AH"

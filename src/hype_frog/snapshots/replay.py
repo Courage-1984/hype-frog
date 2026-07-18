@@ -270,6 +270,10 @@ def replay_from_snapshot(
 
     typed_main_rows = [MainRowPayload.model_validate(row) for row in snapshot.main_rows]
     typed_extra_rows = [ExtraRowPayload.model_validate(row) for row in snapshot.extra_rows]
+    from hype_frog.core.skipped_row_contract import apply_skipped_row_contract
+
+    for main_row, extra_row in zip(typed_main_rows, typed_extra_rows, strict=False):
+        apply_skipped_row_contract(main_row.values, extra_row.values)
     crawl_rows = _rows_to_crawl_rows(snapshot.main_rows, snapshot.extra_rows)
 
     crawl_result = CrawlExecutionResult(
@@ -320,6 +324,61 @@ def replay_from_snapshot(
         graph_metrics=enrich_ctx.get("graph_metrics"),
     )
     return crawl_result, enrichment_result
+
+
+def recompute_composite_scores_for_replay(
+    typed_main_rows: list[MainRowPayload],
+    typed_extra_rows: list[ExtraRowPayload],
+) -> None:
+    """Recompute score_url_health / Technical Health / Copy Score / SEO Score
+    in place, from row signals already present in the snapshot.
+
+    Used by ``--regen-report --re-enrich`` to verify scoring-formula changes
+    (e.g. penalty recalibration) against a real crawl. Deliberately narrower
+    than :func:`hype_frog.orchestration.enrichment_flow.run_enrichment`: it
+    performs no network calls (no GSC/PSI/link-status HTTP), so it stays
+    within regen-report's offline contract. Fields outside the scoring chain
+    (Owner, Sprint, Status, Click Depth, Discovery Source, …) are left as
+    recorded in the snapshot — they don't depend on the scoring formula.
+    """
+    from hype_frog.orchestration.enrichment_flow import (
+        _apply_seo_health_export_defaults,
+        _sync_main_rows_seo_fields_from_extra,
+    )
+    from hype_frog.pipeline.assemble import compute_aeo_readiness_score, compute_seo_technical_copy_scores
+    from hype_frog.rules import get_summary_rules
+    from hype_frog.rules.scoring import score_url_health
+
+    summary_rules = get_summary_rules()
+    for row in typed_extra_rows:
+        values = row.values
+        score, badge, icon, matched = score_url_health(values, summary_rules)
+        values["SEO Health Score"] = score
+        values["Severity Badge"] = badge
+        values["Health Icon"] = icon
+        if badge == "Unmeasured":
+            values["Critical Issues Count"] = None
+            values["Warning Issues Count"] = None
+            values["Observation Issues Count"] = None
+            values["Matched Issues"] = "Unmeasured"
+            values["Action Needed"] = ""
+        else:
+            values["Critical Issues Count"] = len(matched["Critical"])
+            values["Warning Issues Count"] = len(matched["Warning"])
+            values["Observation Issues Count"] = len(matched["Observation"])
+            values["Matched Issues"] = " | ".join(
+                matched["Critical"] + matched["Warning"] + matched["Observation"]
+            )
+            values["Action Needed"] = "Yes" if badge in {"Critical", "Warning"} else "No"
+        technical_health, copy_score, seo_score = compute_seo_technical_copy_scores(values)
+        values["Technical Health"] = round(technical_health, 2)
+        values["Copy Score"] = round(copy_score, 2)
+        values["SEO Score"] = round(seo_score, 2)
+        aeo_score, aeo_badge = compute_aeo_readiness_score(values)
+        values["AEO Readiness Score"] = aeo_score
+        values["AEO Badge"] = aeo_badge
+    _apply_seo_health_export_defaults(typed_extra_rows)
+    _sync_main_rows_seo_fields_from_extra(typed_main_rows, typed_extra_rows)
 
 
 def assert_snapshot_domain_matches(

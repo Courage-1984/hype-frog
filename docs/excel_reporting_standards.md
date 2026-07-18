@@ -15,7 +15,7 @@ Excel reporting no longer relies on a single monolithic engine file. Responsibil
 
 Full workbook assembly and delta integration are coordinated from the orchestration layer (not the reporter layer) via:
 
-- `src/hype_frog/orchestration/export_workbook.py` — `build_standard_sheets()` drives all 20+ tab builders (Main, Summary, Priority, FixPlan, Quick Wins, Content Optimisation Hub, Link Equity Map, Anchor Text Audit, Script Inventory, Image Inventory, Crawl Log, DeltaFromPreviousRun, etc.) and integrates `snapshot_from_current_run()` / `build_delta_workbook_output()` from the analysis layer.
+- `src/hype_frog/orchestration/export_workbook.py` — `write_full_suite_workbook()` drives all 20+ tab builders (Main, Priority URLs, FixPlan, Quick Wins, Content Optimisation Hub, Link Equity Map, Anchor Text Audit, Script Inventory, Image Inventory, Crawl Log, DeltaFromPreviousRun, etc. — full inventory: `docs/workbook_tabs.md`) and integrates `snapshot_from_current_run()` / `build_delta_workbook_output()` from the analysis layer.
 - `src/hype_frog/orchestration/export_row_builders.py` — Sheet-specific row builders: `build_aeo_rows()`, `build_aioseo_rows()`, pattern rows, template risk rows.
 - `src/hype_frog/orchestration/export_workbook_constants.py` — `PLAYBOOK_LEGEND_ROWS` and `PLAYBOOK_QUICK_REFERENCE_ROWS` constant tables.
 
@@ -70,8 +70,10 @@ bare-name fallback only applies to legacy/plain rows.
 - `apply_freeze_c2_data_sheets` is the **final freeze authority** for ordinary data
   sheets (normalised to `C3` — return strip row 1 + header row 2 above the data grid).
   Sheets with bespoke layouts are exempt via
-  `FREEZE_C2_EXEMPT_SHEETS` (TOC `A3`, Content Optimisation Hub, Content Planner `E2`,
-  Executive Briefing `A10` — pins the title/KPI/insights band above the
+  `FREEZE_C2_EXEMPT_SHEETS` (TOC `A3`, Content Optimisation Hub, Content Planner `E3`
+  — columns A–D plus the banner+header rows locked, Audit Run Details and Playbook
+  `A3` — rows only, no columns, since neither benefits from locking two columns —
+  Executive Briefing `A12` — pins the title/KPI/insights band above the
   non-overlapping chart grid; the four chart bands are spaced ~19 rows apart with
   the triage matrix and chart source tables stacked well below them).
 - The legacy **Dashboard** tab is no longer exported; **Executive Briefing** is the sole executive landing tab.
@@ -135,6 +137,28 @@ This replaced an earlier 2-branch Excel formula (`=IF(<On-Page Optimization Scor
 Conditional formatting (`apply_content_hub_conditional_rules` in `src/hype_frog/reporter/sheets/conditional.py`) highlights **`Needs Copy`** in the canonical RAG **red** (`RAG_RED` fill, `RAG_RED_FONT` text), **`Needs Optimisation`** in RAG **amber**, and **`Complete`** / legacy `Ready to Publish` in RAG **green** — all drawn from the shared palette (see *Conditional formatting & colour palette* below). Guardrails normalise legacy US spellings to **`Needs Optimisation`** before export audit. The matching `engine_guardrails` direct fills (applied to non-Hub sheets) use the same RAG constants. Do not rename these literals without updating both the formula and the format rules.
 
 A separate **Status** column (data-validation list `To Do, In Progress, Review, Completed`) tracks editorial workflow, distinct from Action Required.
+
+## Content Hub header-row timing (self-correcting resolution)
+
+The Hub's headers physically move from **row 1 to row 2** partway through
+`adjust_sheet_format` — `apply_content_hub_conditional_rules` is the pass that
+inserts the row-1 banner. Any Hub-aware function called **before** that pass
+(most of `adjust_sheet_format`'s early column/format passes) sees headers still
+on row 1; anything called **after** sees them correctly on row 2. A function
+that hardcodes `header_row = 2` regardless of call order will silently read a
+data row as if it were headers on the pre-insert path — this has produced two
+real (found-and-fixed) bugs: `apply_column_widths` misreading `Current Title`/
+`Priority Reason` widths, and `apply_wrapped_row_heights` never setting a row
+height for any Hub row at all.
+
+The fix is `layout.resolve_content_hub_header_row(worksheet)` — checks whether
+`"Action Required"` (the Hub's first header) is on row 1 or row 2 right now and
+returns the answer, independent of what the caller assumed. **Any new
+Hub-specific logic should call this rather than hardcoding a row number.**
+Current callers: `apply_column_widths`, `apply_wrapped_row_heights`,
+`apply_south_african_formats` (all in this codebase's history for the same
+reason — see git history on `sheets/layout.py`, `sheets/conditional.py`,
+`sheets/number_formats.py` for the exact fixes).
 
 ## Conditional formatting & colour palette
 
@@ -222,6 +246,31 @@ Regression guards: `tests/reporter/test_mocha_theme.py`.
 
 Columns with numeric conditional formatting must not receive arbitrary string placeholders; use blank or numeric defaults when data is missing.
 
+## Locale number and date formats
+
+`number_formats.apply_south_african_formats` applies South African locale codes
+(`[$-en-ZA]...`) by header name: fraction percents (`0.00%`), percent-point columns
+that already hold 0–100 values (`0.00"%"` — a literal suffix, not Excel's `%` code,
+which would multiply by 100), integers (`#,##0`), decimals (`#,##0.00`), and dates
+(`dd/mm/yyyy hh:mm:ss`). Takes `header_row` from the caller (self-correcting for the
+Content Optimisation Hub — see *Content Hub header-row timing* above; a hardcoded
+row silently made this entire function a no-op on every sheet carrying a return-strip
+banner, since it read the banner row instead of the real headers).
+
+**Date columns are parsed, not just formatted.** `GSC Last Crawl Date`, `Schema
+Published/Modified Date`, `HTTP Last-Modified`, `Sitemap <lastmod>`, `Published
+Date`, and `Last Modified Date` arrive from extraction as raw strings in whatever
+format the source gave — ISO 8601 with an offset from schema/meta tags, RFC 2822
+from the HTTP header, plain dates from a sitemap. Excel only honours
+`number_format` on numeric/date-*typed* cells, so before formatting, each date
+cell's string value is parsed to a `datetime` (`dateutil.parser`, matching however
+the source formatted it) and the cell value is replaced with that `datetime` —
+otherwise the format is silently inert and the different source formats keep
+reading inconsistently side by side. Unparseable values are left as the original
+string (no format applied, fails soft). This only changes the *worksheet cell*;
+it never mutates the pipeline row dict, so the extractor's own raw-string contract
+(`tests/extractors/test_freshness.py`) is untouched.
+
 ## Testing touchpoints
 
 Excel behavior is covered in part by `test_excel_engine.py` and tests under `tests/`. Run pytest after changing view state, TOC, or conditional formatting.
@@ -243,7 +292,7 @@ Canonical tab order and default visibility: `reporter/sheets/workbook_layout.py`
 
 ### Inventory and opportunity sheets
 
-**Script Inventory**, **Image Inventory**, **Snippet Opportunities**, **Link Equity Map**, **Anchor Text Audit**, **Redirect Map**, **Robots.txt Analysis**, **Crawl Log**, **Competitor Benchmarks** (optional), **CMS Action URLs**, **Template & Duplication Risks**, **Playbook**.
+**Script Inventory**, **Image Inventory**, **Snippet Opportunities**, **Link Equity Map**, **Anchor Text Audit**, **Redirects**, **Robots.txt Analysis**, **Crawl Log**, **Competitor Benchmarks** (optional), **CMS Action URLs**, **Template & Duplication Risks**, **Playbook**.
 
 ## Link Inventory deduplication
 
@@ -263,6 +312,19 @@ Optimisation Hub embeds the same return link in its row-1 banner.
 `navigation.add_return_to_briefing_strip` is idempotent (skips when row 1 already
 carries the return label) and deletes a trailing legacy **BACK TO DASHBOARD** column
 when present before inserting the strip.
+
+## Jump-link visibility
+
+`links.style_unstyled_formula_hyperlinks` styles any cell whose value is a
+`=HYPERLINK(...)` / `=IFERROR(HYPERLINK(...))` formula (blue, underlined) if nothing
+else has already styled it — a single generic pass rather than a per-sheet header-name
+list, so it covers every cross-sheet jump-link column (`Open in Main`, `Open in
+Technical`, `Open in Reference`, `Technical View`, the Hub's `URL Slug Normalization`)
+without needing to be updated when a new one is added. It intentionally skips cells
+another pass already styled (e.g. `apply_editor_url_column_hyperlinks`'s Elementor/
+AIOSEO edit-link colour), so it never overrides a more specific existing style. Runs
+in `tables_impl.adjust_sheet_format` after all link-writing passes, using the
+resolved (not caller-supplied) header row — see *Content Hub header-row timing* below.
 
 ## Column widths, wrap policy, and empty states
 
@@ -344,6 +406,15 @@ other operational/data tab, and Excel's default 100% only for the simple/small
 pages (Table of Contents, Audit Run Details). All standard data sheets receive CF-based zebra
 banding via ``apply_cf_zebra_banding`` (sort/filter-safe); large inventory sheets
 (>500 rows) also get a light header grid via ``large_sheet_presentation.py``.
+Executive Briefing, TOC, Content Optimisation Hub, Content Planner, and Chart Data
+are exempt from the generic pass (``_CF_ZEBRA_EXEMPT_SHEETS``) because they either
+aren't ordinary data grids or already carry dense per-cell status colouring that a
+second zebra layer would visually fight. Content Planner gets a narrower, scoped
+zebra rule instead — ``A2:E{last_row}`` only (the identity/copy columns:
+Primary/Secondary/Tertiary/Page link/Copy Doc), added in
+``apply_content_planner_signoff_rules`` — since its sign-off columns (F:S) already
+have their own RAG fills and the identity columns otherwise had zero
+row-differentiation across a 250+ row workflow list.
 
 ``ensure_print_setup`` (``engine_formatting.py``, called from ``tables_impl.py``
 during per-sheet formatting) applies a fit-to-width landscape print layout and an
@@ -468,7 +539,3 @@ Presentation conventions shared by both deliverables:
 - **RAG is never colour-only.** Status is also conveyed textually (PDF status words + legend; HTML severity counts/totals and numeric cell values) for accessibility and greyscale printing.
 
 Regression guards (`tests/reporter/test_executive_report_parity.py`) lock these invariants in: both deliverables build from a single `ReportContext` (top-issue counts cannot diverge), quick-win effort is always numeric, the severity tally reconciles to the page total, and the PDF audit date comes from the crawl timestamp. The `--full-smoke-test` fixtures (`diagnostics/full_smoke_fixtures.py`) are deterministically enriched to produce a *representative* audit (varied SEO health, AEO readiness, a realistic severity mix, and a populated HTTP status table) rather than an all-missing baseline, so the smoke artefacts exercise the real scoring and reporting paths.
-
-## Content hub — freeze panes
-
-The Hub freezes through column **H** with `freeze_panes = CONTENT_HUB_FREEZE_PANES` (**`"I3"`**, defined in `reporter/sheets/config.py`): banner row 1, headers row 2, data from row 3. `URL` and editorial columns scroll from column **I** onward. Applied via `set_freeze_panes_safe` inside `apply_content_hub_conditional_rules`. (Action Required literals: see the *Content hub — Action Required* section above.)

@@ -59,6 +59,7 @@ class DashboardComputationResult(BaseModel):
     top_issue_rows: list[TopIssueRow]
     traditional_score: float
     aeo_readiness: float
+    aeo_unmeasured_count: int = 0
 
 
 def compute_dashboard_metrics(
@@ -203,8 +204,14 @@ def compute_dashboard_metrics(
     b7_pass_display = summary_metrics.seo_pass_rate_pct if summary_metrics.seo_pass_rate_pct > 0 else pass_rate_pct
 
     aeo_scores: list[float] = []
+    aeo_unmeasured_count = 0
     for row in aeo_rows:
-        raw = row.to_dict().get("AEO Readiness Score")
+        row_dict = row.to_dict()
+        badge = str(row_dict.get("AEO Badge") or "").strip()
+        if badge == "Unmeasured":
+            aeo_unmeasured_count += 1
+            continue
+        raw = row_dict.get("AEO Readiness Score")
         try:
             if raw is not None and str(raw).strip() != "":
                 aeo_scores.append(float(raw))
@@ -251,6 +258,7 @@ def compute_dashboard_metrics(
         top_issue_rows=top_issue_rows,
         traditional_score=traditional_score,
         aeo_readiness=aeo_readiness,
+        aeo_unmeasured_count=aeo_unmeasured_count,
     )
 
 

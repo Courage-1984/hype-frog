@@ -56,10 +56,17 @@ HTTP_STATUS_TIMEOUT_FONT: str = "924012"
 
 # Unified workflow Status column (Phase 5) — FixPlan, Hub, AIOSEO, IssueInventory.
 STATUS_OPTIONS: tuple[str, ...] = ("To Do", "In Progress", "In Review", "Done")
-STATUS_TODO_FILL: str = "F8F9FA"   # neutral slate background
+STATUS_TODO_FILL: str = "E2E8F0"   # visible slate background (was near-white F8F9FA)
 STATUS_TODO_FONT: str = "222A35"   # legible text on todo fill
+STATUS_REVIEW_FILL: str = SEVERITY_OBSERVATION_FILL  # blue — distinct from amber "In Progress"
+STATUS_REVIEW_FONT: str = "1E40AF"
 # Hub grid: row 1 banner, row 2 headers, row 3+ data (Phase 4A — no scope-note row).
 CONTENT_HUB_DATA_START_ROW: int = 3
+
+# Marks a column HEADER (not its data cells) as an editable workflow input the
+# tool never overwrites on re-export — e.g. Priority URLs "Status"/"Sprint".
+EDITABLE_INPUT_HEADER_FILL: str = "FFF2CC"   # soft input-yellow
+EDITABLE_INPUT_HEADER_FONT: str = "7F6000"
 
 
 def status_validation_list_formula() -> str:
@@ -265,7 +272,11 @@ __all__ = [
     "STATUS_OPTIONS",
     "STATUS_TODO_FILL",
     "STATUS_TODO_FONT",
+    "STATUS_REVIEW_FILL",
+    "STATUS_REVIEW_FONT",
     "CONTENT_HUB_DATA_START_ROW",
+    "EDITABLE_INPUT_HEADER_FILL",
+    "EDITABLE_INPUT_HEADER_FONT",
     "SEVERITY_OBSERVATION_FILL",
     "SEVERITY_UNMEASURED_FILL",
     "HTTP_STATUS_ERROR_FONT",

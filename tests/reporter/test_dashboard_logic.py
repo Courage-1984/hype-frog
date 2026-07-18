@@ -133,6 +133,23 @@ def test_fixplan_and_aeo_rollups() -> None:
     assert result.owner_rollup["Bob"].critical == 1
 
 
+def test_aeo_average_excludes_unmeasured_rows() -> None:
+    aeo_rows = [
+        _extra(**{"AEO Readiness Score": 50.0, "AEO Badge": "Needs Work"}),
+        _extra(**{"AEO Readiness Score": 70.0, "AEO Badge": "Good"}),
+        _extra(**{"AEO Readiness Score": 71.0, "AEO Badge": "Unmeasured"}),
+    ]
+    result = compute_dashboard_metrics(
+        summary_metrics=_summary(),
+        technical_main_rows=[],
+        technical_extra_rows=[],
+        fixplan_rows=[],
+        aeo_rows=aeo_rows,
+    )
+    assert result.aeo_readiness == pytest.approx(60.0)
+    assert result.aeo_unmeasured_count == 1
+
+
 def test_traditional_score_blends_success_and_health() -> None:
     result = _result()
     # (success/denominator*100)*0.4 + avg_health*0.6 = 33.33*0.4 + 60*0.6

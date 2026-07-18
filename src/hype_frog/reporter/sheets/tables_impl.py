@@ -47,6 +47,8 @@ from hype_frog.reporter.sheets.config import (
     RAG_GREEN,
     RAG_GREEN_FONT,
     DISABLE_NON_CORE_FREEZE_PANES,
+    EDITABLE_INPUT_HEADER_FILL,
+    EDITABLE_INPUT_HEADER_FONT,
     STD_BLUE,
     STD_NAVY,
     STD_WHITE,
@@ -54,6 +56,7 @@ from hype_frog.reporter.sheets.config import (
 from hype_frog.reporter.sheets.layout import (
     CONTENT_HUB_DENSITY_OVERRIDES,
     apply_column_widths,
+    apply_content_hub_heading_group,
     apply_display_header_aliases,
     apply_intelligent_sorting,
     apply_main_column_group_header_tints,
@@ -63,7 +66,10 @@ from hype_frog.reporter.sheets.layout import (
     sheet_data_column_range,
 )
 from hype_frog.reporter.engine_rows import content_hub_column_letter
-from hype_frog.reporter.sheets.links import apply_editor_url_column_hyperlinks
+from hype_frog.reporter.sheets.links import (
+    apply_editor_url_column_hyperlinks,
+    style_unstyled_formula_hyperlinks,
+)
 from hype_frog.reporter.sheets.navigation import (
     add_return_to_briefing_strip,
     add_url_navigation_links,
@@ -376,6 +382,38 @@ def _write_empty_state_message(worksheet: Worksheet, header_row: int) -> None:
     worksheet.row_dimensions[data_start].height = 20
 
 
+# Headers that are editable workflow inputs — the tool seeds a default value
+# but never overwrites operator edits on re-export. Marked with a distinct
+# header fill so they read as "yours to fill in", not computed output.
+_EDITABLE_INPUT_HEADERS_BY_SHEET: dict[str, tuple[str, ...]] = {
+    "Priority URLs": ("Status", "Sprint"),
+    CONTENT_OPTIMISATION_HUB_SHEET: ("Status", "Assigned Owner"),
+}
+_EDITABLE_INPUT_FILL = PatternFill(
+    start_color=EDITABLE_INPUT_HEADER_FILL,
+    end_color=EDITABLE_INPUT_HEADER_FILL,
+    fill_type="solid",
+)
+
+
+def _mark_editable_input_headers(worksheet: Worksheet, header_row: int) -> None:
+    """Tint editable-workflow-input column headers so they read as inputs."""
+    headers = _EDITABLE_INPUT_HEADERS_BY_SHEET.get(worksheet.title)
+    if not headers:
+        return
+    header_positions = header_index(worksheet, header_row)
+    for header in headers:
+        col_idx = header_positions.get(header)
+        if not col_idx:
+            continue
+        cell = worksheet.cell(row=header_row, column=col_idx)
+        cell.fill = _EDITABLE_INPUT_FILL
+        cell.font = Font(
+            bold=cell.font.bold if cell.font else True,
+            color=EDITABLE_INPUT_HEADER_FONT,
+        )
+
+
 def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
     worksheet = writer.sheets[sheet_name]
     if sheet_name == EXECUTIVE_BRIEFING_SHEET:
@@ -396,6 +434,8 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
     }:
         apply_intelligent_sorting(worksheet, sheet_name)
     apply_generic_sheet_coloring(worksheet, sheet_name, header_row=header_row)
+    if sheet_name == "Priority URLs":
+        _mark_editable_input_headers(worksheet, header_row)
     apply_column_widths(worksheet)
     if sheet_name == "Main":
         _link_main_technical_health_to_diagnostics(worksheet)
@@ -404,7 +444,7 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
     if sheet_name == "FixPlan":
         apply_fixplan_workflow_formatting(worksheet)
     hide_noisy_columns(worksheet, sheet_name)
-    apply_south_african_formats(worksheet)
+    apply_south_african_formats(worksheet, header_row=header_row)
     collapse_technical_deep_dive_columns(
         worksheet, sheet_name, header_index_fn=header_index
     )
@@ -428,6 +468,7 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
         # row insert in ``apply_content_hub_conditional_rules`` has already pushed
         # headers to row 2 / data to row 3.
         apply_executive_priority_formatting(worksheet, header_row=2)
+        _mark_editable_input_headers(worksheet, header_row=2)
     elif sheet_name == CONTENT_HUB_METRICS_SHEET:
         # Content Hub Metrics carries a row-1 return banner, so the real
         # headers (incl. "Instant Priority") live on row 2.
@@ -453,6 +494,7 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
         apply_header_tooltips(worksheet, header_row=1)
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
         header_row = 2
+    style_unstyled_formula_hyperlinks(worksheet, header_row=header_row)
     normalize_table_headers(worksheet, header_row=header_row)
     header_values = [
         worksheet.cell(row=header_row, column=c).value
@@ -511,6 +553,8 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
     # columns (e.g. Main's "Technical View", Priority URLs' "Open in Technical") after
     # the first apply_column_widths pass, leaving them at Excel's default width.
     apply_column_widths(worksheet)
+    if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
+        apply_content_hub_heading_group(worksheet)
     ensure_auto_filter(worksheet)
     ensure_freeze_header(worksheet)
     ensure_print_setup(worksheet)

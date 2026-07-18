@@ -16,6 +16,7 @@ from hype_frog.snapshots.replay import (
     _robots_by_domain_from_json,
     _robots_by_domain_to_json,
     assert_snapshot_domain_matches,
+    recompute_composite_scores_for_replay,
     replay_from_snapshot,
     resolve_snapshot_domain,
 )
@@ -96,6 +97,57 @@ def test_replay_from_snapshot_reconstructs_rows() -> None:
     assert crawl_result.output_filename != snapshot.source_output_path
     assert len(enrichment.typed_main_rows) == 2
     assert enrichment.typed_main_rows[0].values["Extraction State"] == "complete"
+
+
+def test_recompute_composite_scores_for_replay_refreshes_scores_offline() -> None:
+    """``--re-enrich`` must recompute scores from stored signals, no network."""
+    snapshot = _snapshot()
+    # Overwrite with rows carrying real rule inputs so scoring has signal.
+    snapshot.main_rows = [
+        {
+            "URL": "https://example.com/",
+            "Extraction State": "complete",
+            "Status Code": 200,
+        },
+    ]
+    snapshot.extra_rows = [
+        {
+            "URL": "https://example.com/",
+            "Extraction State": "complete",
+            "Status Code": 200,
+            "Title Missing": True,
+            # Stale frozen values a real crawl under the OLD formula would
+            # have produced (penalty-saturation regression).
+            "SEO Health Score": 0.0,
+            "Severity Badge": "Critical",
+            "Technical Health": 0.0,
+        },
+    ]
+    regen_path = build_regen_output_filename(
+        snapshot.source_output_path or "replay.xlsx",
+        snapshot.snapshot_id,
+    )
+    _crawl_result, enrichment = replay_from_snapshot(
+        snapshot, _minimal_setup(), output_filename=regen_path
+    )
+    recompute_composite_scores_for_replay(
+        enrichment.typed_main_rows, enrichment.typed_extra_rows
+    )
+    extra_values = enrichment.typed_extra_rows[0].values
+    # Regression: under the OLD unbounded-linear formula this sparse row (2
+    # Critical + 7 Warning + 13 Observation matches) would floor at 0. The
+    # capped formula must discriminate: 20+10=30 crit cap, 30 warn cap, 10
+    # obs cap -> 100-70=30.
+    assert extra_values["SEO Health Score"] == 30
+    assert extra_values["Severity Badge"] == "Critical"
+    assert extra_values["Critical Issues Count"] == 2
+    # Technical Health is independent of SEO Health Score — unaffected by
+    # content/schema rule matches; a clean 200 page with no canonical/LCP/CLS
+    # signal set scores 100.
+    assert extra_values["Technical Health"] == 100.0
+    # Main row must mirror the refreshed SEO fields.
+    main_values = enrichment.typed_main_rows[0].values
+    assert main_values["SEO Health Score"] == 30
 
 
 def test_crawl_log_entry_round_trip_json() -> None:

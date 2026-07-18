@@ -25,4 +25,4 @@ uv run hype-frog --validate
 - LLM/PSI HTTP: short timeout, instant `Unknown` fallback, no blocking retries
 
 ## Canonical docs
-`docs/system_architecture.md` · `docs/data_contracts.md` · `docs/excel_reporting_standards.md` · `commands.md` · `.env.example`
+`docs/system_architecture.md` · `docs/data_contracts.md` · `docs/excel_reporting_standards.md` · `docs/workbook_tabs.md` · `docs/logging_architecture.md` · `docs/performance_benchmarks.md` · `commands.md` · `.env.example`

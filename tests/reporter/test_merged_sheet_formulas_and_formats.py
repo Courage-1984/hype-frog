@@ -21,10 +21,15 @@ from hype_frog.reporter.sheets.workbook_layout import (
 
 
 def test_fixplan_hub_status_uses_status_not_seo_score_column() -> None:
+    from hype_frog.reporter.engine_rows import content_hub_column_letter
+
     formula = _fixplan_hub_status_formula("H", 4)
-    assert "!F3:F10000" in formula
-    assert "!I3:I10000" in formula
-    assert "!C:C" not in formula
+    status_l = content_hub_column_letter("Status")
+    url_l = content_hub_column_letter("URL")
+    seo_score_l = content_hub_column_letter("SEO Score")
+    assert f"!{status_l}3:{status_l}10000" in formula
+    assert f"!{url_l}3:{url_l}10000" in formula
+    assert f"!{seo_score_l}:{seo_score_l}" not in formula
 
 
 def test_link_inventory_formula_uses_header_resolved_columns() -> None:
@@ -80,4 +85,67 @@ def test_number_formats_apply_to_psi_and_citation_count() -> None:
     ws["B2"] = 3
     apply_south_african_formats(ws)
     assert ws["A2"].number_format == "[$-en-ZA]#,##0"
+    assert ws["B2"].number_format == "[$-en-ZA]#,##0"
+
+
+def test_number_formats_read_resolved_header_row_not_row_one() -> None:
+    """Regression: real data sheets carry a row-1 "Return to Executive
+    Briefing" banner, pushing headers to row 2. The function used to read a
+    hardcoded row 1, silently matching nothing on every such sheet — every
+    percent/integer/decimal/date column fell back to Excel's default
+    "General" format across the whole workbook."""
+    ws = Workbook().active
+    ws["A1"] = "← Return to Executive Briefing"
+    ws["A2"] = "Mobile PSI Score"
+    ws["A3"] = 49
+    apply_south_african_formats(ws, header_row=2)
+    assert ws["A3"].number_format == "[$-en-ZA]#,##0"
+
+
+def test_date_headers_parse_inconsistent_raw_strings_to_matching_format() -> None:
+    """Regression: date-like fields arrive as raw strings in whatever format
+    the source gave (ISO 8601 with offset from schema/meta tags, RFC 2822 from
+    the HTTP Last-Modified header) and render inconsistently side by side.
+    Setting ``number_format`` alone is a no-op on a string cell — Excel only
+    honours it on numeric/date-typed cells — so the value must be parsed into
+    a real ``datetime`` for the format to take visual effect."""
+    ws = Workbook().active
+    ws["A1"] = "Schema Published Date"
+    ws["A2"] = "2021-08-24T07:46:41+02:00"
+    ws["B1"] = "Last Modified Date"
+    ws["B2"] = "Wed, 08 Jul 2026 11:49:40 GMT"
+    apply_south_african_formats(ws)
+
+    import datetime as dt
+
+    assert isinstance(ws["A2"].value, dt.datetime)
+    assert isinstance(ws["B2"].value, dt.datetime)
+    assert ws["A2"].number_format == "[$-en-ZA]dd/mm/yyyy hh:mm:ss"
+    assert ws["B2"].number_format == "[$-en-ZA]dd/mm/yyyy hh:mm:ss"
+
+
+def test_date_header_leaves_unparseable_value_untouched() -> None:
+    ws = Workbook().active
+    ws["A1"] = "Schema Published Date"
+    ws["A2"] = "not a date"
+    apply_south_african_formats(ws)
+    assert ws["A2"].value == "not a date"
+    assert ws["A2"].number_format == "General"
+
+
+def test_number_formats_self_corrects_hub_header_row() -> None:
+    """The Content Optimisation Hub's header row physically moves from row 1
+    to row 2 partway through ``adjust_sheet_format`` (banner insert happens
+    later than the caller's ``header_row`` snapshot), so trusting the passed
+    value blindly would silently miss headers depending on call order."""
+    from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
+
+    ws = Workbook().active
+    ws.title = CONTENT_OPTIMISATION_HUB_SHEET
+    ws["A1"] = "Action Required"
+    ws["B1"] = "Citation Candidate Count"
+    ws["B2"] = 7
+    # Caller passes header_row=2 (the sheet's eventual contract) even though
+    # headers are still physically on row 1 at this point in the pipeline.
+    apply_south_african_formats(ws, header_row=2)
     assert ws["B2"].number_format == "[$-en-ZA]#,##0"

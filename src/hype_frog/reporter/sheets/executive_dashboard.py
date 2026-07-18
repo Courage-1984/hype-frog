@@ -25,6 +25,7 @@ from hype_frog.reporter.dashboard_logic import (
 from hype_frog.reporter.engine_io import _safe_sheet_name, _sanitize_excel_value
 from hype_frog.reporter.sheets.config import (
     AUDIT_RUN_DETAILS_SHEET,
+    DATA_BAR_BLUE,
     DEBUG_EXCEL_ISOLATION_MODE,
     EXECUTIVE_BRIEFING_FREEZE_PANES,
     EXECUTIVE_BRIEFING_SHEET,
@@ -56,7 +57,10 @@ _EXEC_CARD_TOOLTIPS: dict[str, str] = {
         "Illustrative SEO health if the prioritised fixes are completed. "
         "A planning estimate, not a guarantee."
     ),
-    "AEO Readiness": "Share of answer-engine readiness signals present across URLs.",
+    "AEO Readiness": (
+        "Average AEO readiness across measured URLs only (Unmeasured rows excluded). "
+        "The KPI label states how many URLs were dropped from this average."
+    ),
     "Traffic Lift (est.)": (
         "Rough estimated monthly organic visit uplift from remediating priority pages."
     ),
@@ -143,6 +147,43 @@ _OWNER_SLICE_COLORS: tuple[str, ...] = (
     "A6A6A6",
     "FFC000",
 )
+
+# Bar/column chart palettes. Deliberately more saturated than the pastel CF
+# fills in sheets/config.py (STATUS_TODO_FILL etc.) — chart bars need to read
+# at a glance, not sit quietly behind text. Same 6-digit RRGGBB constraint.
+_CHART_SERIES_PRIMARY: str = DATA_BAR_BLUE
+_CHART_SERIES_SECONDARY: str = "9DC3E6"
+# For charts with no inherent severity/pass-fail meaning per bar (priority
+# pages, content-readiness signals, top issues) — a categorical ramp so each
+# bar is visually distinct instead of one flat colour.
+_CHART_CATEGORICAL_COLORS: tuple[str, ...] = (
+    "4472C4",
+    "70AD47",
+    "FFC000",
+    "7030A0",
+    "ED7D31",
+    "A6A6A6",
+    "5B9BD5",
+    "C00000",
+)
+# Status-code buckets ("200 OK", "3xx Redirects", "4xx Errors", "5xx Errors",
+# "Other" — see dashboard_logic.compute_dashboard_metrics) coloured by class.
+_STATUS_CODE_COLOR_RULES: tuple[tuple[str, str], ...] = (
+    ("2", "70AD47"),
+    ("3", "FFC000"),
+    ("4", "C00000"),
+    ("5", "C00000"),
+)
+_STATUS_CODE_OTHER_COLOR: str = "A6A6A6"
+
+
+def _status_bucket_color(label: str) -> str:
+    """Map a status-code bucket label (e.g. '4xx Errors') to a chart colour."""
+    stripped = label.strip()
+    for prefix, color in _STATUS_CODE_COLOR_RULES:
+        if stripped.startswith(prefix):
+            return color
+    return _STATUS_CODE_OTHER_COLOR
 
 
 @dataclass(frozen=True)
@@ -463,6 +504,15 @@ def _meaningful_priority_rows(
     return ranked[:limit]
 
 
+def _format_aeo_readiness_kpi(dashboard_metrics: DashboardComputationResult) -> str:
+    value = f"{dashboard_metrics.aeo_readiness:.0f}%"
+    dropped = dashboard_metrics.aeo_unmeasured_count
+    if dropped > 0:
+        noun = "URL" if dropped == 1 else "URLs"
+        return f"{value} (excludes {dropped} unmeasured {noun})"
+    return value
+
+
 def _build_key_insights(
     summary_metrics: SummaryMetricsPayload,
     dashboard_metrics: DashboardComputationResult,
@@ -482,8 +532,15 @@ def _build_key_insights(
             f"Largest theme: \"{lead.issue_name}\" touches {lead.affected_urls} URL(s) (see Fix Plan)."
         )
     if dashboard_metrics.aeo_readiness < 70:
+        aeo_note = ""
+        if dashboard_metrics.aeo_unmeasured_count > 0:
+            aeo_note = (
+                f" ({dashboard_metrics.aeo_unmeasured_count} unmeasured URL(s) excluded from average)"
+            )
         insights.append(
-            f"AEO readiness averages {dashboard_metrics.aeo_readiness:.0f}% — structure and schema gaps may limit AI visibility."
+            f"AEO readiness averages {dashboard_metrics.aeo_readiness:.0f}%{aeo_note} — "
+            "highest-leverage fix: add question-style H2–H4 headings with concise 40–60 word "
+            "answers directly underneath."
         )
     if dashboard_metrics.error_count > 0:
         insights.append(
@@ -795,7 +852,12 @@ def populate_chart_data_sheet(
     ws.cell(row=tar, column=value_col, value="Score")
     _write_label_cell(ws, tar + 1, "Traditional SEO")
     ws.cell(row=tar + 1, column=value_col, value=round(dashboard_metrics.traditional_score, 1))
-    _write_label_cell(ws, tar + 2, "AEO Readiness")
+    aeo_label = (
+        f"AEO Readiness (excl. {dashboard_metrics.aeo_unmeasured_count} unmeasured)"
+        if dashboard_metrics.aeo_unmeasured_count > 0
+        else "AEO Readiness"
+    )
+    _write_label_cell(ws, tar + 2, aeo_label)
     ws.cell(row=tar + 2, column=value_col, value=round(dashboard_metrics.aeo_readiness, 1))
 
     return ChartDataLayout(
@@ -823,6 +885,32 @@ def populate_chart_data_sheet(
 def _attach_chart(exec_ws: Worksheet, chart: BarChart | DoughnutChart, anchor: str) -> None:
     configure_openpyxl_chart_for_excel(chart)
     exec_ws.add_chart(chart, anchor)
+
+
+def _apply_bar_point_colors(
+    chart: BarChart,
+    colors: tuple[str, ...],
+    *,
+    point_count: int,
+) -> None:
+    """Per-bar colours for a single-series BarChart (openpyxl defaults every
+    bar to one flat colour otherwise)."""
+    if point_count <= 0 or not chart.series:
+        return
+    chart.varyColors = True
+    series = chart.series[0]
+    for point_idx in range(point_count):
+        color = _normalize_chart_rgb(colors[point_idx % len(colors)])
+        pt = DataPoint(idx=point_idx)
+        pt.graphicalProperties.solidFill = color
+        series.data_points.append(pt)
+
+
+def _apply_series_fills(chart: BarChart, colors: tuple[str, ...]) -> None:
+    """Explicit per-series fill for a multi-series BarChart (current vs
+    projected, unique URLs vs instances) so each series reads distinctly."""
+    for series, color in zip(chart.series, colors):
+        series.graphicalProperties.solidFill = _normalize_chart_rgb(color)
 
 
 def _apply_doughnut_colors(
@@ -872,6 +960,7 @@ def _add_health_comparison_chart(
     )
     chart.add_data(data, titles_from_data=True)
     chart.set_categories(cats)
+    _apply_series_fills(chart, (_CHART_SERIES_PRIMARY, _CHART_SERIES_SECONDARY))
     _attach_chart(exec_ws, chart, anchor)
 
 
@@ -944,6 +1033,7 @@ def _add_severity_comparison_chart(
     )
     chart.add_data(data, titles_from_data=True)
     chart.set_categories(cats)
+    _apply_series_fills(chart, (_CHART_SERIES_PRIMARY, _CHART_SERIES_SECONDARY))
     _attach_chart(exec_ws, chart, anchor)
 
 
@@ -968,6 +1058,11 @@ def _add_priority_bar_chart(
     cats = Reference(exec_ws, min_col=_label_col(), min_row=first_data, max_row=last_data)
     chart.add_data(data, titles_from_data=True)
     chart.set_categories(cats)
+    _apply_bar_point_colors(
+        chart, _CHART_CATEGORICAL_COLORS, point_count=layout.priority_rows
+    )
+    chart.dataLabels = DataLabelList()
+    chart.dataLabels.showVal = True
     _attach_chart(exec_ws, chart, anchor)
 
 
@@ -992,6 +1087,11 @@ def _add_content_readiness_bar_chart(
     cats = Reference(exec_ws, min_col=_label_col(), min_row=first_data, max_row=last_data)
     chart.add_data(data, titles_from_data=True)
     chart.set_categories(cats)
+    _apply_bar_point_colors(
+        chart, _CHART_CATEGORICAL_COLORS, point_count=layout.content_rows
+    )
+    chart.dataLabels = DataLabelList()
+    chart.dataLabels.showVal = True
     _attach_chart(exec_ws, chart, anchor)
 
 
@@ -1016,6 +1116,11 @@ def _add_top_issues_chart(
     cats = Reference(exec_ws, min_col=_label_col(), min_row=first_data, max_row=last_data)
     chart.add_data(data, titles_from_data=True)
     chart.set_categories(cats)
+    _apply_bar_point_colors(
+        chart, _CHART_CATEGORICAL_COLORS, point_count=layout.top_issues_rows
+    )
+    chart.dataLabels = DataLabelList()
+    chart.dataLabels.showVal = True
     _attach_chart(exec_ws, chart, anchor)
 
 
@@ -1041,6 +1146,13 @@ def _add_status_code_chart(
     cats = Reference(exec_ws, min_col=_label_col(), min_row=first_data, max_row=last_data)
     chart.add_data(data, titles_from_data=True)
     chart.set_categories(cats)
+    status_colors = tuple(
+        _status_bucket_color(str(exec_ws.cell(row=r, column=_label_col()).value or ""))
+        for r in range(first_data, last_data + 1)
+    )
+    _apply_bar_point_colors(chart, status_colors, point_count=layout.status_rows)
+    chart.dataLabels = DataLabelList()
+    chart.dataLabels.showVal = True
     _attach_chart(exec_ws, chart, anchor)
 
 
@@ -1066,6 +1178,13 @@ def _add_traditional_vs_aeo_chart(
     cats = Reference(exec_ws, min_col=_label_col(), min_row=first_data, max_row=last_data)
     chart.add_data(data, titles_from_data=True)
     chart.set_categories(cats)
+    _apply_bar_point_colors(
+        chart,
+        (_CHART_SERIES_PRIMARY, _CHART_SERIES_SECONDARY),
+        point_count=layout.tradaeo_rows,
+    )
+    chart.dataLabels = DataLabelList()
+    chart.dataLabels.showVal = True
     _attach_chart(exec_ws, chart, anchor)
 
 
@@ -1161,7 +1280,7 @@ def _write_kpi_cards(
             "SEO Health (illustrative projected)",
             f"{summary_metrics.projected_health_score_pct:.0f}%",
         ),
-        ("AEO Readiness", f"{dashboard_metrics.aeo_readiness:.0f}%"),
+        ("AEO Readiness", _format_aeo_readiness_kpi(dashboard_metrics)),
         ("Critical URLs", str(summary_metrics.critical_url_count)),
         ("Traffic Lift (est.)", str(traffic_lift)),
         (

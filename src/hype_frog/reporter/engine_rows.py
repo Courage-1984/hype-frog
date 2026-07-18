@@ -460,18 +460,21 @@ CONTENT_HUB_EXPORT_COLUMNS: tuple[str, ...] = content_optimisation_hub_ordered_h
 )
 
 # Per-URL metrics companion to the Hub (row 1 headers; no banner row).
+# Most-interesting-first: intent + ROI signals before supporting technical
+# evidence (JS dependence, word counts, field CWV, anchor diversity).
 CONTENT_HUB_METRICS_EXPORT_COLUMNS: tuple[str, ...] = (
     "URL",
+    "Search Intent",
+    "Search Intent Source",
+    "Instant Priority",
+    "Potential Traffic Lift",
+    "AEO Visibility Gain",
     "JS Dependent",
     "Raw Words",
     "Rendered Words",
     "Field LCP (ms)",
     "Field CLS",
     "Anchor Text Diversity",
-    "Potential Traffic Lift",
-    "AEO Visibility Gain",
-    "Instant Priority",
-    "Search Intent",
 )
 
 
@@ -750,6 +753,10 @@ def build_content_optimisation_hub_rows(
                 "AEO Visibility Gain": _round2(roi["aeo_visibility_gain"]),
                 "Instant Priority": str(roi["instant_priority"]),
                 "Search Intent": _hub_display_text(str(e.get("Search Intent") or "Unknown"))
+                or "Unknown",
+                "Search Intent Source": _hub_display_text(
+                    str(e.get("Search Intent Source") or "Unknown")
+                )
                 or "Unknown",
             }
         )

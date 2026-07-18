@@ -35,6 +35,7 @@ from hype_frog.core.crawl_log import CrawlLogCollector
 from hype_frog.core.logger import console
 from hype_frog.core.memory_guard import check_memory_limit, memory_circuit_breaker, warn_if_large_crawl
 from hype_frog.core.models import CrawlResult, CrawlRowPayload
+from hype_frog.core.api_clients import classify_search_intent_heuristic
 from hype_frog.extractors.semantic_engine import IntentAnalyzer
 from hype_frog.orchestration.crawl_runner_frontier import (
     ExcludedCmsActionUrl,
@@ -96,18 +97,30 @@ async def apply_search_intent(
         extra_values.get("Current Page Copy Snippet"),
     ]
     rendered_text = " ".join(str(part or "").strip() for part in text_parts if part)
+    url = str(main_values.get("URL") or "")
     try:
-        extra_values["Search Intent"] = await analyzer.analyze_intent(rendered_text)
+        intent = await analyzer.analyze_intent(rendered_text)
+        source = "LLM"
+        if intent == "Unknown":
+            intent = classify_search_intent_heuristic(
+                url,
+                title=str(main_values.get("Title") or ""),
+                meta_description=str(main_values.get("Meta Description") or ""),
+            )
+            source = "Heuristic" if intent != "Unknown" else "Unknown"
+        extra_values["Search Intent"] = intent
+        extra_values["Search Intent Source"] = source
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception(
             "search_intent_classification_failed",
-            url=str(main_values.get("URL") or ""),
+            url=url,
             phase="intent",
         )
         extra_values["Search Intent"] = "Unknown"
+        extra_values["Search Intent Source"] = "Unknown"
         if crawl_log is not None:
             crawl_log.record(
-                url=str(main_values.get("URL") or ""),
+                url=url,
                 phase="intent",
                 error_type="Intent Classification Failed",
                 error_detail=str(exc),

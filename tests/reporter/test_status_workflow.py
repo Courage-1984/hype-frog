@@ -37,7 +37,12 @@ def test_workflow_status_dropdown_uses_unified_list() -> None:
     assert dv.sqref == "B3:B3"
 
 
-def test_workflow_status_conditional_formatting_registers_three_rules() -> None:
+def test_workflow_status_conditional_formatting_registers_four_rules() -> None:
+    """Done / In Progress / In Review / To Do each get a distinct visible rule.
+
+    Regression: "In Review" used to share the amber "In Progress" rule, and
+    "To Do" used a near-white fill that read as unformatted.
+    """
     wb = Workbook()
     ws = wb.active
     ws.cell(row=CONTENT_HUB_DATA_START_ROW, column=6, value="To Do")
@@ -47,4 +52,12 @@ def test_workflow_status_conditional_formatting_registers_three_rules() -> None:
     )
 
     rules = next(iter(ws.conditional_formatting._cf_rules.values()))
-    assert len(rules) == 3
+    assert len(rules) == 4
+    formulas = [rule.formula[0] for rule in rules]
+    assert any('"in review"' in f.lower() for f in formulas)
+    assert any(
+        f.lower() == 'lower(f3)="in progress"' for f in formulas
+    ), formulas
+    fills = {rule.dxf.fill.fgColor.rgb[-6:] for rule in rules if rule.dxf and rule.dxf.fill}
+    # Four distinct fills — no two states share a colour.
+    assert len(fills) == 4

@@ -6,8 +6,4 @@ archive_legacy/
 __pycache__/
 .pytest_cache/
 dist/
-reports/
-*.xlsx
-*.pdf
-logs/
 .cache/

@@ -8,6 +8,7 @@ from openpyxl.workbook.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.reporter.sheets.config import (
+    AUDIT_RUN_DETAILS_SHEET,
     CONTENT_HUB_FREEZE_PANES,
     CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
@@ -25,7 +26,7 @@ from hype_frog.reporter.sheets.config import (
 from hype_frog.reporter.sheets.large_sheet_presentation import (
     apply_large_sheet_presentation,
 )
-from hype_frog.reporter.sheets.navigation import apply_return_strip_run_metadata
+from hype_frog.reporter.sheets.navigation import apply_return_strip_descriptions
 from hype_frog.reporter.sheets.view_state import set_freeze_panes_safe
 from hype_frog.reporter.sheets.workbook_layout import apply_workbook_active_tab
 from hype_frog.reporter.sheets.layout import (
@@ -216,7 +217,8 @@ _HEADER_TOOLTIP_MESSAGES: dict[str, str] = {
         "Draft your optimised meta description here. Include a clear call-to-action."
     ),
     "AEO Answer Block Draft": (
-        "A concise 40-60 word factual answer to the primary page question."
+        "Draft a concise 40–60 word factual answer to the primary page question — "
+        "the highest-leverage AEO pattern when Answer Blocks reads zero on the crawl."
     ),
     "Status": (
         "Workflow state for this URL row. Use the list to move through To Do, "
@@ -407,7 +409,8 @@ def refresh_toc_descriptions_dynamic(wb: Workbook) -> None:
 
 #: Sheets whose bespoke freeze contracts must survive the final C2 normalisation:
 #: the Table of Contents (``A3``), the Content Optimisation Hub (banner-aware freeze),
-#: the Content Planner (``E2`` — columns A–D locked for hierarchy + page link),
+#: the Content Planner (``E3`` — columns A–D plus the banner+header rows locked),
+#: the Audit Run Details / Playbook reading sheets (``A3`` — rows only, no columns),
 #: and Executive Briefing (``A10`` — pins the title/KPI/insights band above the
 #: non-overlapping chart grid).
 FREEZE_C2_EXEMPT_SHEETS: frozenset[str] = frozenset(
@@ -416,6 +419,12 @@ FREEZE_C2_EXEMPT_SHEETS: frozenset[str] = frozenset(
         CONTENT_OPTIMISATION_HUB_SHEET,
         CONTENT_PLANNER_SHEET,
         EXECUTIVE_BRIEFING_SHEET,
+        # Non-tabular / key-value reading sheets: the blanket ``C3`` freeze locks
+        # two columns that add no value here (Audit Run Details has only A/B, so
+        # ``C3`` even points past the data), so they take a bespoke row-only freeze
+        # in :func:`apply_bespoke_freeze_panes` instead.
+        AUDIT_RUN_DETAILS_SHEET,
+        "Playbook",
     }
 )
 
@@ -447,7 +456,15 @@ def apply_bespoke_freeze_panes(wb: Workbook) -> None:
     if "Table of Contents" in wb.sheetnames:
         set_freeze_panes_safe(wb["Table of Contents"], "A3")
     if CONTENT_PLANNER_SHEET in wb.sheetnames:
-        set_freeze_panes_safe(wb[CONTENT_PLANNER_SHEET], "E2")
+        # ``E3`` (not ``E2``): headers sit on row 2 above the row-1 return strip, so
+        # the freeze must span rows 1–2 to keep the column headers on screen while
+        # scrolling. ``E2`` froze only the banner, letting the headers scroll away.
+        set_freeze_panes_safe(wb[CONTENT_PLANNER_SHEET], "E3")
+    # Row-only freeze for narrow / key-value sheets: keep the banner + header rows
+    # (1–2) pinned without locking columns that have nothing to scroll past them.
+    for _row_only_freeze_sheet in (AUDIT_RUN_DETAILS_SHEET, "Playbook"):
+        if _row_only_freeze_sheet in wb.sheetnames:
+            set_freeze_panes_safe(wb[_row_only_freeze_sheet], "A3")
     if CONTENT_OPTIMISATION_HUB_SHEET in wb.sheetnames:
         set_freeze_panes_safe(
             wb[CONTENT_OPTIMISATION_HUB_SHEET], CONTENT_HUB_FREEZE_PANES
@@ -467,6 +484,6 @@ def apply_workbook_export_guardrails(wb: Workbook) -> None:
     apply_bespoke_freeze_panes(wb)
     for name in wb.sheetnames:
         apply_large_sheet_presentation(wb[name], name)
-    apply_return_strip_run_metadata(wb)
+    apply_return_strip_descriptions(wb)
     # Last write wins: open the workbook on Executive Briefing (TOC stays left-most).
     apply_workbook_active_tab(wb)

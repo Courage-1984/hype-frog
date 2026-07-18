@@ -32,6 +32,23 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _run_legacy(args: argparse.Namespace) -> None:
+    if args.regen_report and (
+        args.quick_test
+        or args.quick_test_fast
+        or args.full_smoke_test
+        or args.full_smoke_test_fast
+        or args.validate
+    ):
+        # Must run before the validate/full-smoke/quick-test branches below —
+        # each of those unconditionally intercepts and exits on its own flag,
+        # so checking this guard after them (as it previously was) meant it
+        # could never actually fire: --regen-report combined with any of the
+        # three flags it warns about would silently run that flag's normal
+        # behaviour instead of being rejected.
+        raise SystemExit(
+            "--regen-report cannot be combined with --quick-test, "
+            "--full-smoke-test, or --validate."
+        )
     if args.validate:
         raise SystemExit(
             run_validation_cli(
@@ -74,17 +91,6 @@ def _run_legacy(args: argparse.Namespace) -> None:
             skip_workbook_audit=args.quick_test_skip_audit,
         )
         raise SystemExit(asyncio.run(run_quick_test_gate(options)))
-    if args.regen_report and (
-        args.quick_test
-        or args.quick_test_fast
-        or args.full_smoke_test
-        or args.full_smoke_test_fast
-        or args.validate
-    ):
-        raise SystemExit(
-            "--regen-report cannot be combined with --quick-test, "
-            "--full-smoke-test, or --validate."
-        )
     cli_overrides = legacy_namespace_to_cli_overrides(args)
     asyncio.run(_async_main(None, cli_overrides=cli_overrides))
 

@@ -49,11 +49,23 @@ DEFAULT_DEFINITION_TRIGGERS: tuple[str, ...] = (
     " refers to ",
     " means ",
     " provides ",
+    " offers ",
+    " helps ",
+    " allows ",
+    " includes ",
+    " consists of ",
+    "how to ",
+    "what is ",
 )
 
-# Brief: 40 <= words <= 60 (strict).
-CITATION_MIN_WORDS: int = 40
-CITATION_MAX_WORDS: int = 60
+# Citeable answer-block window. The original strict 40-60 band returned 0 on
+# most marketing copy; answer engines happily cite 25-90 word passages.
+CITATION_MIN_WORDS: int = 25
+CITATION_MAX_WORDS: int = 90
+
+# Q&A blocks: a leading question plus at least this many words of answer also
+# count as one citation candidate.
+_QA_MIN_ANSWER_WORDS: int = 15
 
 # Hard upper bound on text passed to spaCy per page; protects against
 # RAM spikes during bulk crawls of unusually long pages (>~30k words).
@@ -124,7 +136,6 @@ _PROPER_NOUN_PHRASE_RE = re.compile(
     r"(?:\s+(?:[A-Z][a-z]+|&|[A-Z]{2,})){0,3}\b"
 )
 _ACRONYM_RE = re.compile(r"\b[A-Z]{2,6}\b")
-_TOKEN_RE = re.compile(r"[a-zA-Z][a-zA-Z'-]{3,}")
 
 
 def _empty_result(citation_count: int = 0) -> SemanticAnalysisResult:
@@ -167,19 +178,24 @@ def extract_keyword_entities_fallback(
         seen.add(key)
         entities.append(token)
 
-    freq = Counter(
-        token
-        for token in _TOKEN_RE.findall(cleaned.lower())
-        if token not in _FALLBACK_STOPWORDS and not token.isdigit()
-    )
-    for word, _count in freq.most_common(max_terms):
-        key = word.casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        entities.append(word.title())
-
+    # No frequency top-up: promoting every common non-stopword to an "entity"
+    # inflated Entity Density past 100% on short pages. Proper-noun phrases and
+    # acronyms are the only trustworthy entity proxies without NER.
     return entities[:max_terms]
+
+
+# Real pages sit in low single digits of entities-per-100-words; anything past
+# this ceiling is extractor noise (short pages, repeated tokens) and would let
+# one pathological page dominate density-derived averages.
+_ENTITY_DENSITY_MAX_PCT = 50.0
+
+
+def _entity_density_pct(entities: list[str], word_count: int) -> float:
+    """Entity density in percent-points (0–100 scale), sanity-clamped."""
+    if word_count <= 0:
+        return 0.0
+    density = (len(entities) / word_count) * 100.0
+    return min(density, _ENTITY_DENSITY_MAX_PCT)
 
 
 def _keyword_fallback_result(
@@ -187,8 +203,7 @@ def _keyword_fallback_result(
     citation_count: int,
     entities: list[str],
 ) -> SemanticAnalysisResult:
-    word_count = len(cleaned.split())
-    density = (len(entities) / word_count) * 100.0 if word_count > 0 else 0.0
+    density = _entity_density_pct(entities, len(cleaned.split()))
     top_entities = _top_entities_by_frequency(entities, n=3)
     aeo_score = _compute_aeo_score(density, citation_count)
     return SemanticAnalysisResult(
@@ -225,14 +240,18 @@ def count_citation_candidates(
     min_words: int = CITATION_MIN_WORDS,
     max_words: int = CITATION_MAX_WORDS,
 ) -> int:
-    """Count 40-60 word paragraphs/clusters that contain a definition trigger.
+    """Count citeable answer blocks: definition passages and Q&A blocks.
+
+    A block counts when it is ``min_words``-``max_words`` long and either
+    contains a definition trigger, or opens with a question sentence followed
+    by at least ``_QA_MIN_ANSWER_WORDS`` words of answer.
 
     When ``paragraphs`` is provided (the normal call path from
     :func:`hype_frog.crawler.data_assembler.assemble_from_html` which has
     already extracted ``<p>`` text), each paragraph is evaluated directly.
-    Otherwise sentences from ``body_text`` are clustered into 40-60 word
-    windows and each window is evaluated. Both modes return ``0`` on empty
-    input rather than raising.
+    Otherwise sentences from ``body_text`` are clustered into word windows and
+    each window is evaluated. Both modes return ``0`` on empty input rather
+    than raising.
     """
     blocks: list[str] = []
 
@@ -258,9 +277,18 @@ def count_citation_candidates(
         word_count = len(block.split())
         if not (min_words <= word_count <= max_words):
             continue
-        if _matches_definition_trigger(block, triggers):
+        if _matches_definition_trigger(block, triggers) or _is_qa_block(block):
             candidate_count += 1
     return candidate_count
+
+
+def _is_qa_block(block: str) -> bool:
+    """True when the block opens with a question and carries a real answer."""
+    sentences = _split_sentences(block)
+    if len(sentences) < 2 or not sentences[0].endswith("?"):
+        return False
+    answer_words = sum(len(sentence.split()) for sentence in sentences[1:])
+    return answer_words >= _QA_MIN_ANSWER_WORDS
 
 
 def _top_entities_by_frequency(
@@ -428,8 +456,7 @@ class SemanticAnalyzer:
             fallback_entities = extract_keyword_entities_fallback(cleaned)
             return _keyword_fallback_result(cleaned, citation_count, fallback_entities)
 
-        word_count = len(cleaned.split())
-        density = (len(entities) / word_count) * 100.0 if word_count > 0 else 0.0
+        density = _entity_density_pct(entities, len(cleaned.split()))
         top_entities = _top_entities_by_frequency(entities, n=3)
         aeo_score = _compute_aeo_score(density, citation_count)
 

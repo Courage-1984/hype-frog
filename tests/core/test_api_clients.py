@@ -24,8 +24,13 @@ import pytest
 
 from hype_frog.core.api_clients import (
     SEARCH_INTENT_LABELS,
+    _format_validation_failure,
     _normalise_search_intent,
+    classify_search_intent_heuristic,
     classify_search_intent_with_llm,
+    parse_gsc_row,
+    parse_http_crawl_result,
+    parse_psi_response,
 )
 
 _FAKE_KEY = "sk-test-fake-key-not-a-real-secret"
@@ -253,3 +258,295 @@ def test_normalise_search_intent_substring_match_in_chatty_output() -> None:
     """LLMs often pad: ``'Intent: Informational.'`` should still classify."""
     assert _normalise_search_intent("Intent: Informational.") == "Informational"
     assert _normalise_search_intent("Navigational search") == "Navigational"
+
+
+# ---------------------------------------------------------------------------
+# Local OpenAI-compatible server (Ollama / LM Studio) via OPENAI_BASE_URL
+# ---------------------------------------------------------------------------
+
+
+async def test_local_base_url_bypasses_missing_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A configured local server must not require OPENAI_API_KEY."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:11434/v1")
+    session = _make_mock_session(
+        status=200,
+        json_data=_ok_chat_completion("Informational"),
+    )
+    result = await classify_search_intent_with_llm("how to compost", session=session)
+    assert result == "Informational"
+    called_url = session.post.call_args.args[0]
+    assert called_url == "http://localhost:11434/v1/chat/completions"
+
+
+async def test_local_base_url_still_returns_unknown_on_http_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:11434/v1")
+    session = _make_mock_session(status=500, text_data="model not loaded")
+    result = await classify_search_intent_with_llm("buy shoes", session=session)
+    assert result == "Unknown"
+
+
+async def test_no_key_and_no_base_url_still_short_circuits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    session = _make_mock_session()
+    result = await classify_search_intent_with_llm("buy shoes", session=session)
+    assert result == "Unknown"
+    session.post.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Zero-config heuristic fallback (classify_search_intent_heuristic)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://example.com/pricing", "Transactional"),
+        ("https://example.com/buy-now", "Transactional"),
+        ("https://example.com/contact", "Transactional"),
+        ("https://example.com/best-running-shoes", "Commercial Investigation"),
+        ("https://example.com/widgets-vs-gadgets", "Commercial Investigation"),
+        ("https://example.com/login", "Navigational"),
+        ("https://example.com/about", "Navigational"),
+        ("https://example.com/", "Navigational"),
+        ("https://example.com/blog/how-to-bake-bread", "Informational"),
+        ("https://example.com/faq", "Informational"),
+        ("https://example.com/random-slug-xyz", "Unknown"),
+    ],
+)
+def test_classify_search_intent_heuristic_url_rules(url: str, expected: str) -> None:
+    assert classify_search_intent_heuristic(url) == expected
+
+
+def test_classify_search_intent_heuristic_uses_title_and_meta() -> None:
+    assert (
+        classify_search_intent_heuristic(
+            "https://example.com/p/123", title="Buy our best pricing plans"
+        )
+        == "Transactional"
+    )
+    assert (
+        classify_search_intent_heuristic(
+            "https://example.com/p/456",
+            meta_description="A complete guide on how to compost at home",
+        )
+        == "Informational"
+    )
+
+
+def test_classify_search_intent_heuristic_blank_input_is_unknown() -> None:
+    assert classify_search_intent_heuristic(None) == "Unknown"
+    assert classify_search_intent_heuristic("") == "Unknown"
+    assert classify_search_intent_heuristic("not-a-url-at-all") == "Unknown"
+
+
+# ---------------------------------------------------------------------------
+# _format_validation_failure
+# ---------------------------------------------------------------------------
+
+
+def test_format_validation_failure_renders_field_and_reason() -> None:
+    from pydantic import BaseModel as _BM
+
+    class _Probe(_BM):
+        clicks: int
+
+    try:
+        _Probe.model_validate({"clicks": "not-a-number"})
+        raise AssertionError("expected ValidationError")
+    except Exception as exc:  # pydantic.ValidationError
+        message = _format_validation_failure(exc)
+        assert "clicks=" in message
+
+
+# ---------------------------------------------------------------------------
+# parse_http_crawl_result
+# ---------------------------------------------------------------------------
+
+
+def test_parse_http_crawl_result_valid_payload() -> None:
+    result = parse_http_crawl_result(
+        {"url": "https://example.com/", "status_code": 200, "response_time_ms": 123.4}
+    )
+    assert result is not None
+    assert result.status_code == 200
+    assert result.response_time_ms == 123.4
+
+
+def test_parse_http_crawl_result_none_payload_returns_none() -> None:
+    assert parse_http_crawl_result(None) is None
+
+
+def test_parse_http_crawl_result_missing_url_returns_none() -> None:
+    assert parse_http_crawl_result({"status_code": 200, "response_time_ms": 1.0}) is None
+
+
+def test_parse_http_crawl_result_status_code_out_of_range_returns_none() -> None:
+    result = parse_http_crawl_result(
+        {"url": "https://example.com/", "status_code": 999, "response_time_ms": 1.0}
+    )
+    assert result is None
+
+
+def test_parse_http_crawl_result_negative_response_time_returns_none() -> None:
+    result = parse_http_crawl_result(
+        {"url": "https://example.com/", "status_code": 200, "response_time_ms": -5.0}
+    )
+    assert result is None
+
+
+def test_parse_http_crawl_result_ignores_unknown_extra_keys() -> None:
+    result = parse_http_crawl_result(
+        {
+            "url": "https://example.com/",
+            "status_code": 200,
+            "response_time_ms": 10.0,
+            "some_future_field": "unrecognised",
+        }
+    )
+    assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# parse_psi_response
+# ---------------------------------------------------------------------------
+
+
+def test_parse_psi_response_valid_payload() -> None:
+    result = parse_psi_response({"performance_score": 90, "lcp_seconds": 1.2})
+    assert result is not None
+    assert result.performance_score == 90
+    assert result.lcp_seconds == 1.2
+
+
+def test_parse_psi_response_none_payload_returns_none() -> None:
+    assert parse_psi_response(None) is None
+
+
+def test_parse_psi_response_no_recognisable_signal_returns_none() -> None:
+    """All Lighthouse/CrUX fields absent must fail the model's
+    ``_require_some_signal`` guard rather than validate as an empty shell."""
+    assert parse_psi_response({}) is None
+
+
+def test_parse_psi_response_nan_metric_returns_none() -> None:
+    assert parse_psi_response({"lcp_seconds": float("nan")}) is None
+
+
+def test_parse_psi_response_inf_metric_returns_none() -> None:
+    assert parse_psi_response({"cls": float("inf")}) is None
+
+
+def test_parse_psi_response_out_of_range_score_returns_none() -> None:
+    assert parse_psi_response({"performance_score": 150}) is None
+
+
+def test_parse_psi_response_injects_url_when_missing() -> None:
+    result = parse_psi_response({"performance_score": 80}, url="https://example.com/page")
+    assert result is not None
+    assert result.url == "https://example.com/page"
+
+
+def test_parse_psi_response_does_not_override_existing_url() -> None:
+    result = parse_psi_response(
+        {"performance_score": 80, "url": "https://example.com/original"},
+        url="https://example.com/override",
+    )
+    assert result is not None
+    assert result.url == "https://example.com/original"
+
+
+# ---------------------------------------------------------------------------
+# parse_gsc_row
+# ---------------------------------------------------------------------------
+
+
+def test_parse_gsc_row_native_gsc_shape() -> None:
+    row = parse_gsc_row(
+        {
+            "keys": ["https://example.com/page"],
+            "clicks": 10,
+            "impressions": 100,
+            "ctr": 0.1,
+            "position": 5.5,
+        }
+    )
+    assert row is not None
+    assert row.url == "https://example.com/page"
+    assert row.clicks == 10
+
+
+def test_parse_gsc_row_flattened_shape() -> None:
+    row = parse_gsc_row(
+        {
+            "GSC Clicks": 3,
+            "GSC Impressions": 50,
+            "GSC CTR": 0.06,
+            "GSC Average Position": 12.3,
+        }
+    )
+    assert row is not None
+    assert row.clicks == 3
+    assert row.impressions == 50
+    assert row.position == 12.3
+
+
+def test_parse_gsc_row_flattened_shape_uses_avg_position_alias() -> None:
+    row = parse_gsc_row(
+        {
+            "GSC Clicks": 1,
+            "GSC Impressions": 10,
+            "GSC CTR": 0.1,
+            "GSC Avg Position": 3.0,
+        }
+    )
+    assert row is not None
+    assert row.position == 3.0
+
+
+def test_parse_gsc_row_none_row_returns_none() -> None:
+    assert parse_gsc_row(None) is None
+
+
+def test_parse_gsc_row_missing_clicks_returns_none() -> None:
+    row = parse_gsc_row({"impressions": 10, "ctr": 0.1, "position": 1.0})
+    assert row is None
+
+
+def test_parse_gsc_row_nan_clicks_returns_none() -> None:
+    row = parse_gsc_row(
+        {"clicks": float("nan"), "impressions": 10, "ctr": 0.1, "position": 1.0}
+    )
+    assert row is None
+
+
+def test_parse_gsc_row_ctr_out_of_range_returns_none() -> None:
+    row = parse_gsc_row({"clicks": 1, "impressions": 10, "ctr": 1.5, "position": 1.0})
+    assert row is None
+
+
+def test_parse_gsc_row_url_kwarg_used_when_row_has_no_url() -> None:
+    row = parse_gsc_row(
+        {"clicks": 1, "impressions": 10, "ctr": 0.1, "position": 1.0},
+        url="https://example.com/fallback",
+    )
+    assert row is not None
+    assert row.url == "https://example.com/fallback"
+
+
+def test_parse_gsc_row_empty_keys_list_falls_back_to_url_kwarg() -> None:
+    row = parse_gsc_row(
+        {"keys": [], "clicks": 1, "impressions": 10, "ctr": 0.1, "position": 1.0},
+        url="https://example.com/fallback",
+    )
+    assert row is not None
+    assert row.url == "https://example.com/fallback"

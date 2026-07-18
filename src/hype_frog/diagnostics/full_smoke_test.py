@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 import time
 from collections import Counter
@@ -14,6 +13,7 @@ from rich.table import Table
 
 from hype_frog.config import PROJECT_ROOT, load_environment
 from hype_frog.core import configure_logging, get_logger
+from hype_frog.core.env_vars import get_hf_output_filename, set_env_default_if_blank
 from hype_frog.core.logger import console
 from hype_frog.diagnostics.full_smoke_fixtures import (
     build_full_smoke_fixture,
@@ -72,14 +72,14 @@ class FullSmokeOptions:
 
 def _apply_full_smoke_env(config: RunConfig) -> None:
     if config.bfs_max_depth is not None:
-        os.environ.setdefault("HF_MAX_DEPTH", str(config.bfs_max_depth))
-    if not os.getenv("HF_OUTPUT_FILENAME", "").strip():
+        set_env_default_if_blank("HF_MAX_DEPTH", str(config.bfs_max_depth))
+    if not get_hf_output_filename():
         out_dir = PROJECT_ROOT / "reports" / "full_smoke_test"
         out_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        os.environ["HF_OUTPUT_FILENAME"] = str(
-            out_dir
-            / f"SEO_AEO_Audit_africanmarketingconfederation.org_fullsmoke_{stamp}.xlsx"
+        set_env_default_if_blank(
+            "HF_OUTPUT_FILENAME",
+            str(out_dir / f"SEO_AEO_Audit_africanmarketingconfederation.org_fullsmoke_{stamp}.xlsx"),
         )
 
 

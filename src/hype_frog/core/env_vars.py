@@ -41,6 +41,16 @@ def get_openai_model(default: str = "gpt-4o-mini") -> str:
     return _env_str("OPENAI_MODEL") or default
 
 
+def get_openai_base_url() -> str | None:
+    """OpenAI-compatible API base (e.g. Ollama ``http://localhost:11434/v1``).
+
+    Returns the base with any trailing slash removed, or ``None`` when unset
+    (the hosted OpenAI endpoint is used).
+    """
+    value = _env_str("OPENAI_BASE_URL").rstrip("/")
+    return value or None
+
+
 def get_anthropic_api_key() -> str | None:
     value = _env_str("ANTHROPIC_API_KEY")
     return value or None
@@ -73,6 +83,19 @@ def get_hf_max_memory_mb() -> int | None:
 
 def get_hf_output_filename() -> str | None:
     return _env_str("HF_OUTPUT_FILENAME") or None
+
+
+def set_env_default_if_blank(name: str, value: str) -> None:
+    """Seed ``name`` in the process environment only if unset or blank.
+
+    The sanctioned write path for callers (e.g. the smoke-test gates) that need
+    to inject a computed default ahead of a later ``get_hf_*`` read elsewhere in
+    the app, instead of touching ``os.environ`` directly outside this module.
+    Blank-aware (unlike ``os.environ.setdefault``) so a variable present but set
+    to an empty string still gets the computed default.
+    """
+    if not _env_str(name):
+        os.environ[name] = value
 
 
 def get_hf_test_sitemap_url(default: str) -> str:
@@ -134,6 +157,15 @@ def get_hf_regen_report() -> bool:
 def get_hf_snapshot_id() -> str | None:
     value = _env_str("HF_SNAPSHOT_ID")
     return value or None
+
+
+def get_hf_regen_reenrich() -> bool:
+    return _env_flag("HF_REGEN_REENRICH")
+
+
+def get_hf_refetch_skipped() -> bool:
+    """When set, --regen-report re-fetches HTTP-200 skipped rows via Playwright before export."""
+    return _env_flag("HF_REFETCH_SKIPPED")
 
 
 def get_hf_snapshot_retention_per_domain() -> int:

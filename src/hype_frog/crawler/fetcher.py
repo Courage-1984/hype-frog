@@ -321,111 +321,124 @@ async def fetch_and_parse(
         and html is None
         and "text/html" not in ct_lower
     )
-    if unsupported_mime:
-        main_values["Extraction Source"] = "raw_http"
-        extra_values["Extraction Source"] = "raw_http"
-        main_values["Extraction State"] = "skipped"
-        extra_values["Extraction State"] = "skipped"
-        extra_values["skip_reason"] = "unsupported_mime"
-        if crawl_log is not None:
-            crawl_log.record(
-                url=url,
-                phase="extract",
-                error_type="Unsupported MIME",
-                error_detail=str(response_headers.get("Content-Type") or "unknown"),
-                recovery_action="Skipped HTML extraction for non-text body.",
-            )
-    elif isinstance(status_code, int) and status_code == 200 and html is not None:
-        extraction_source = "raw_http"
-        extraction_state_hint = "complete"
-        rendered_headers: dict[str, str] = {}
-        diagnostics: RenderedFetchDiagnostics | None = None
-        if render_pages or crawl_mode == "accurate":
-            render_target = resolved_url or url
-            diagnostics = await _fetch_render_with_retries(
-                primary_url=render_target,
-                fallback_url=url if render_target != url else None,
-                render_wait_ms=render_wait_ms,
-                selector_wait_ms=selector_wait_ms,
-                playwright_session_manager=playwright_session_manager,
-            )
-            rendered_html = diagnostics["html"]
-            if rendered_html:
-                html = rendered_html
-                extraction_source = diagnostics["extraction_source"]
-                extraction_state_hint = diagnostics["extraction_state"]
-                rendered_headers = {
-                    str(k).lower(): str(v)
-                    for k, v in (diagnostics["response_headers"] or {}).items()
-                }
-            else:
-                extraction_state_hint = diagnostics["extraction_state"]
-                if extraction_state_hint == "skipped":
-                    extraction_state_hint = "partial"
-                extra_values["Extraction Source Fallback"] = True
-                logger.info(
-                    "Render unavailable for %s; using raw_http HTML for extraction.",
-                    render_target,
+    should_render = render_pages or crawl_mode == "accurate"
+    if isinstance(status_code, int) and status_code == 200 and (
+        html is not None or should_render or unsupported_mime
+    ):
+        if unsupported_mime and not should_render:
+            main_values["Extraction Source"] = "raw_http"
+            extra_values["Extraction Source"] = "raw_http"
+            main_values["Extraction State"] = "skipped"
+            extra_values["Extraction State"] = "skipped"
+            extra_values["skip_reason"] = "unsupported_mime"
+            if crawl_log is not None:
+                crawl_log.record(
+                    url=url,
+                    phase="extract",
+                    error_type="Unsupported MIME",
+                    error_detail=str(response_headers.get("Content-Type") or "unknown"),
+                    recovery_action="Skipped HTML extraction for non-text body.",
                 )
-                if crawl_log is not None:
-                    crawl_log.record(
-                        url=url,
-                        phase="render",
-                        error_type="Render Unavailable",
-                        error_detail=str(diagnostics.get("failure_reason") or "empty render"),
-                        recovery_action="Fell back to raw_http HTML extraction.",
+            finalize_row_state(main_data, extra)
+        else:
+            extraction_source = "raw_http"
+            extraction_state_hint = "complete"
+            rendered_headers: dict[str, str] = {}
+            diagnostics: RenderedFetchDiagnostics | None = None
+            if should_render or html is None:
+                render_target = resolved_url or url
+                diagnostics = await _fetch_render_with_retries(
+                    primary_url=render_target,
+                    fallback_url=url if render_target != url else None,
+                    render_wait_ms=render_wait_ms,
+                    selector_wait_ms=selector_wait_ms,
+                    playwright_session_manager=playwright_session_manager,
+                )
+                rendered_html = diagnostics["html"]
+                if rendered_html:
+                    html = rendered_html
+                    extraction_source = diagnostics["extraction_source"]
+                    extraction_state_hint = diagnostics["extraction_state"]
+                    rendered_headers = {
+                        str(k).lower(): str(v)
+                        for k, v in (diagnostics["response_headers"] or {}).items()
+                    }
+                elif html is not None:
+                    extraction_state_hint = diagnostics["extraction_state"]
+                    if extraction_state_hint == "skipped":
+                        extraction_state_hint = "partial"
+                    extra_values["Extraction Source Fallback"] = True
+                    logger.info(
+                        "Render unavailable for %s; using raw_http HTML for extraction.",
+                        render_target,
                     )
-            extra_values["JS Dependent"] = bool(diagnostics["is_js_dependent"])
-            extra_values["Raw Words"] = int(diagnostics["raw_word_count"] or 0)
-            extra_values["Rendered Words"] = int(diagnostics["rendered_word_count"] or 0)
-            extra_values["Field LCP (ms)"] = diagnostics["field_lcp_ms"]
-            extra_values["Field CLS"] = diagnostics["field_cls"]
-        main_values["Extraction Source"] = extraction_source
-        extra_values["Extraction Source"] = extraction_source
-        if extraction_source == "rendered_browser":
-            extra_values["Extraction Source Fallback"] = False
-        if rendered_headers:
-            extra_values["Cache-Control"] = rendered_headers.get(
-                "cache-control", extra_values["Cache-Control"]
-            )
-            extra_values["ETag"] = rendered_headers.get("etag", extra_values["ETag"])
-            extra_values["X-Robots-Tag"] = rendered_headers.get(
-                "x-robots-tag", extra_values["X-Robots-Tag"]
-            )
-            extra_values["Strict-Transport-Security"] = rendered_headers.get(
-                "strict-transport-security", extra_values["Strict-Transport-Security"]
-            )
-            extra_values["Content-Security-Policy"] = rendered_headers.get(
-                "content-security-policy", extra_values["Content-Security-Policy"]
-            )
-            extra_values["X-Content-Type-Options"] = rendered_headers.get(
-                "x-content-type-options", extra_values["X-Content-Type-Options"]
-            )
-            extra_values["X-Frame-Options"] = rendered_headers.get(
-                "x-frame-options", extra_values["X-Frame-Options"]
-            )
-            extra_values["Referrer-Policy"] = rendered_headers.get(
-                "referrer-policy", extra_values["Referrer-Policy"]
-            )
-            extra_values["Permissions-Policy"] = rendered_headers.get(
-                "permissions-policy", extra_values["Permissions-Policy"]
-            )
-            rendered_encoding = (rendered_headers.get("content-encoding") or "").lower()
-            if rendered_encoding:
-                extra_values["Compression Enabled"] = any(
-                    token in rendered_encoding for token in ("gzip", "br", "deflate")
+                    if crawl_log is not None:
+                        crawl_log.record(
+                            url=url,
+                            phase="render",
+                            error_type="Render Unavailable",
+                            error_detail=str(diagnostics.get("failure_reason") or "empty render"),
+                            recovery_action="Fell back to raw_http HTML extraction.",
+                        )
+                extra_values["JS Dependent"] = bool(diagnostics["is_js_dependent"])
+                extra_values["Raw Words"] = int(diagnostics["raw_word_count"] or 0)
+                extra_values["Rendered Words"] = int(diagnostics["rendered_word_count"] or 0)
+                extra_values["Field LCP (ms)"] = diagnostics["field_lcp_ms"]
+                extra_values["Field CLS"] = diagnostics["field_cls"]
+            if html:
+                main_values["Extraction Source"] = extraction_source
+                extra_values["Extraction Source"] = extraction_source
+                if extraction_source == "rendered_browser":
+                    extra_values["Extraction Source Fallback"] = False
+                if rendered_headers:
+                    extra_values["Cache-Control"] = rendered_headers.get(
+                        "cache-control", extra_values["Cache-Control"]
+                    )
+                    extra_values["ETag"] = rendered_headers.get("etag", extra_values["ETag"])
+                    extra_values["X-Robots-Tag"] = rendered_headers.get(
+                        "x-robots-tag", extra_values["X-Robots-Tag"]
+                    )
+                    extra_values["Strict-Transport-Security"] = rendered_headers.get(
+                        "strict-transport-security", extra_values["Strict-Transport-Security"]
+                    )
+                    extra_values["Content-Security-Policy"] = rendered_headers.get(
+                        "content-security-policy", extra_values["Content-Security-Policy"]
+                    )
+                    extra_values["X-Content-Type-Options"] = rendered_headers.get(
+                        "x-content-type-options", extra_values["X-Content-Type-Options"]
+                    )
+                    extra_values["X-Frame-Options"] = rendered_headers.get(
+                        "x-frame-options", extra_values["X-Frame-Options"]
+                    )
+                    extra_values["Referrer-Policy"] = rendered_headers.get(
+                        "referrer-policy", extra_values["Referrer-Policy"]
+                    )
+                    extra_values["Permissions-Policy"] = rendered_headers.get(
+                        "permissions-policy", extra_values["Permissions-Policy"]
+                    )
+                    rendered_encoding = (rendered_headers.get("content-encoding") or "").lower()
+                    if rendered_encoding:
+                        extra_values["Compression Enabled"] = any(
+                            token in rendered_encoding for token in ("gzip", "br", "deflate")
+                        )
+                await asyncio.to_thread(
+                    _assemble_row_from_html_sync,
+                    main_data=main_data,
+                    extra=extra,
+                    html=html,
+                    resolved_url=resolved_url,
+                    depth=depth,
+                    response_headers=response_headers,
                 )
-        await asyncio.to_thread(
-            _assemble_row_from_html_sync,
-            main_data=main_data,
-            extra=extra,
-            html=html,
-            resolved_url=resolved_url,
-            depth=depth,
-            response_headers=response_headers,
-        )
-        main_values["Extraction State"] = extraction_state_hint
-        extra_values["Extraction State"] = extraction_state_hint
+                main_values["Extraction State"] = extraction_state_hint
+                extra_values["Extraction State"] = extraction_state_hint
+            else:
+                main_values["Extraction State"] = "skipped"
+                extra_values["Extraction State"] = "skipped"
+                extra_values["skip_reason"] = (
+                    "unsupported_mime" if unsupported_mime else "no_renderable_html"
+                )
+                finalize_row_state(main_data, extra)
     else:
         main_values["Extraction State"] = "skipped"
         extra_values["Extraction State"] = "skipped"

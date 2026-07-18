@@ -16,6 +16,6 @@ alwaysApply: false
 
 Checkpoint writes must be **idempotent and resumable**: a crash mid-write must never corrupt the state `crawl_runner_bfs.py` reads on resume. Prefer atomic write patterns (write-to-temp-then-replace) over in-place mutation of the checkpoint file.
 
-## Known test gap
+## Testing
 
-`link_inventory_cache.py` has no dedicated test file — it is currently only exercised indirectly via `tests/pipeline/test_link_inventory_stream.py` and `tests/reporter/test_engine_io.py`. A direct `tests/checkpoint/test_link_inventory_cache.py` is planned; when adding it, test the module's public functions in isolation rather than only through the stream pipeline.
+`link_inventory_cache.py` has a dedicated `tests/checkpoint/test_link_inventory_cache.py` testing its public functions in isolation (init, upsert, iteration, close), plus indirect coverage via `tests/pipeline/test_link_inventory_stream.py` and `tests/reporter/test_engine_io.py`.

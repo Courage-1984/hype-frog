@@ -650,7 +650,7 @@ ISSUE_CONTENT: dict[str, dict[str, str]] = {
     "Redirect Loop": {
         "what_it_is": "The URL's redirect chain loops back on itself instead of reaching a final 200 destination.",
         "why_it_matters": "Browsers and crawlers abandon looping redirects, so the page is completely unreachable for users and search engines alike.",
-        "how_to_fix": "Trace the redirect chain (see Redirects/Redirect Map tabs) and correct whichever hop points back to an earlier URL in the chain.",
+        "how_to_fix": "Trace the redirect chain (see the Redirects tab) and correct whichever hop points back to an earlier URL in the chain.",
         "how_to_verify": "Follow the redirect chain manually or re-crawl and confirm it terminates in a single 200 response with no loop flag.",
     },
     "Canonical Loop": {
@@ -725,7 +725,7 @@ ISSUE_CONTENT: dict[str, dict[str, str]] = {
         "what_it_is": "A single redirect chain contains both 301 and 302 hops.",
         "why_it_matters": "Mixed-type chains create ambiguous signals about permanence, and search engines may not fully consolidate ranking value along the chain.",
         "how_to_fix": "Standardise every hop in the chain to 301 unless a hop is genuinely temporary, and shorten the chain where possible.",
-        "how_to_verify": "Trace the full chain on the Redirect Map tab and confirm consistent 301 status codes end to end.",
+        "how_to_verify": "Trace the full chain on the Redirects tab and confirm consistent 301 status codes end to end.",
     },
     "Canonical Chain (>1 hop)": {
         "what_it_is": "Canonical tags chain through more than one intermediate URL before reaching the final canonical target.",
@@ -1123,9 +1123,28 @@ ISSUE_CONTENT: dict[str, dict[str, str]] = {
     },
     "No Question Headings": {
         "what_it_is": "None of the page's headings are phrased as user questions.",
-        "why_it_matters": "Question-style headings make it far easier for answer engines/AI overviews to extract a direct answer to a matching search query.",
-        "how_to_fix": "Rewrite priority H2/H3 headings into natural-language questions (Who/What/How) so the following paragraph can serve as a direct extractable answer.",
-        "how_to_verify": "Check Question Heading Count on Main rises above 0 after the rewrite.",
+        "why_it_matters": (
+            "Question-style H2–H4 headings are the highest-leverage AEO fix on most sites: "
+            "they give answer engines a clear query–answer pair to extract."
+        ),
+        "how_to_fix": (
+            "Rewrite priority H2–H4 as natural-language questions (Who/What/How/Why) and place "
+            "a concise 40–60 word factual answer directly underneath each heading."
+        ),
+        "how_to_verify": "Check Question Heading Count and Answer Blocks rise above 0 after the rewrite.",
+        "owner": "Copy Writer",
+    },
+    "No 40-60 Word Answer Paragraphs": {
+        "what_it_is": "No 40–60 word definitional paragraph appears directly under a question-style H2/H3.",
+        "why_it_matters": (
+            "This word-count band is what answer engines most often cite — without it, even good "
+            "content is less likely to surface in AI overviews."
+        ),
+        "how_to_fix": (
+            "Under each question-style heading, lead with a ~45-word factual answer (no fluff), "
+            "then expand with supporting detail in lists or tables."
+        ),
+        "how_to_verify": "Check Answer Blocks (Paragraphs 40-60 Words Count) rises above 0 after the rewrite.",
         "owner": "Copy Writer",
     },
     "No Answer-Friendly Structure": {
@@ -1133,13 +1152,6 @@ ISSUE_CONTENT: dict[str, dict[str, str]] = {
         "why_it_matters": "LLMs and answer engines strongly prefer scannable, structured formats when extracting facts to cite — dense prose is harder to parse into a discrete answer.",
         "how_to_fix": "Break data-heavy explanations into ul/ol steps or a comparison table so key facts are chunked and independently citable.",
         "how_to_verify": "Check List/Table Answer Signal reads true on Main after restructuring.",
-        "owner": "Copy Writer",
-    },
-    "No 40-60 Word Answer Paragraphs": {
-        "what_it_is": "No 40–60 word definitional paragraph appears directly under a question-style H2/H3.",
-        "why_it_matters": "This word-count band matches what answer engines most commonly extract for 'Position Zero'-style featured answers — content outside this band is less likely to be cited directly.",
-        "how_to_fix": "Refactor each target section to lead with a ~45-word factual definition (no fluff) immediately under the question heading.",
-        "how_to_verify": "Check Paragraphs 40-60 Words Count on Main rises above 0 after the rewrite.",
         "owner": "Copy Writer",
     },
     "Lab TBT 150ms–300ms (Mobile)": {

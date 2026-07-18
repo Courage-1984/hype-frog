@@ -50,7 +50,7 @@ SEVERITY_ROW_STYLE: list[tuple[str, str]] = [
 ]
 
 QUICK_LINKS: list[tuple[str, str]] = [
-    ("Issue Summary", "#Summary!A1"),
+    ("Issue Summary", "#'Issue Register'!A1"),
     ("Fix Plan", "#FixPlan!A1"),
     ("Main URL Data", "#Main!A1"),
     ("Technical Diagnostics", "#'Technical Diagnostics'!A1"),

@@ -1,0 +1,2824 @@
+﻿{
+  "path": "C:\\Users\\Dr0sera\\Github\\hype-frog\\reports\\latest\\SEO_AEO_Audit_africanmarketingconfederation.org_20260707_164510.xlsx",
+  "sheets": [
+    {
+      "name": "Table of Contents",
+      "state": "visible",
+      "max_row": 33,
+      "max_column": 3,
+      "used_range": "A1:C33",
+      "detected_header_row": 2,
+      "code_expected_header_row": 1,
+      "headers": [
+        "Section",
+        "Open",
+        "Description"
+      ],
+      "header_count": 3,
+      "freeze_panes": "A3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A18:C18",
+        "A3:C3"
+      ],
+      "hyperlink_count": 0,
+      "hyperlinks_sample": [],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 58,
+      "formulas_sample": [
+        {
+          "cell": "A4",
+          "formula": "=HYPERLINK(\"#'Executive Briefing'!A1\",\"Executive Briefing\")"
+        },
+        {
+          "cell": "B4",
+          "formula": "=HYPERLINK(\"#'Executive Briefing'!A1\",\"Open\")"
+        },
+        {
+          "cell": "A5",
+          "formula": "=HYPERLINK(\"#'Priority URLs'!A1\",\"Priority URLs\")"
+        },
+        {
+          "cell": "B5",
+          "formula": "=HYPERLINK(\"#'Priority URLs'!A1\",\"Open\")"
+        },
+        {
+          "cell": "A6",
+          "formula": "=HYPERLINK(\"#'FixPlan'!A1\",\"FixPlan\")"
+        },
+        {
+          "cell": "B6",
+          "formula": "=HYPERLINK(\"#'FixPlan'!A1\",\"Open\")"
+        },
+        {
+          "cell": "A7",
+          "formula": "=HYPERLINK(\"#'Quick Wins'!A1\",\"Quick Wins\")"
+        },
+        {
+          "cell": "B7",
+          "formula": "=HYPERLINK(\"#'Quick Wins'!A1\",\"Open\")"
+        }
+      ]
+    },
+    {
+      "name": "Executive Briefing",
+      "state": "visible",
+      "max_row": 228,
+      "max_column": 14,
+      "used_range": "A1:N228",
+      "detected_header_row": 7,
+      "code_expected_header_row": 1,
+      "headers": [
+        "SEO Health (now)",
+        "SEO Health (illustrative projected)",
+        "AEO Readiness",
+        "Critical URLs",
+        "Traffic Lift (est.)",
+        "Performance (PSI)"
+      ],
+      "header_count": 6,
+      "freeze_panes": "A12",
+      "merged_count": 39,
+      "merged_ranges_sample": [
+        "A108:L108",
+        "A153:L153",
+        "K9:L9",
+        "A89:L89",
+        "A69:L69",
+        "G8:H8",
+        "A3:L3",
+        "E8:F8",
+        "A12:L12",
+        "A50:L50",
+        "A2:L2",
+        "C10:D10",
+        "A7:B7",
+        "G7:H7",
+        "E10:F10"
+      ],
+      "hyperlink_count": 0,
+      "hyperlinks_sample": [],
+      "chart_count": 8,
+      "charts": [
+        {
+          "index": 0,
+          "type": "BarChart",
+          "anchor": "<openpyxl.drawing.spreadsheet_drawing.OneCellAnchor object>\nParameters:\ncontentPart=None, _from=<openpyxl.drawing.spreadsheet_drawing.AnchorMarker object>\nParameters:\ncol=0, colOff=0, row=12, rowOff=0, ext=<openpyxl.drawing.xdr.XDRPositiveSize2D object>\nParameters:\ncx=6480000, cy=3024000, sp=None, grpSp=None, graphicFrame=None, cxnSp=None, pic=None, contentPart=None, clientData=<openpyxl.drawing.spreadsheet_drawing.AnchorClientData object>\nParameters:\nfLocksWithSheet=None, fPrintsWithSheet=None"
+        },
+        {
+          "index": 1,
+          "type": "BarChart",
+          "anchor": "<openpyxl.drawing.spreadsheet_drawing.OneCellAnchor object>\nParameters:\ncontentPart=None, _from=<openpyxl.drawing.spreadsheet_drawing.AnchorMarker object>\nParameters:\ncol=0, colOff=0, row=31, rowOff=0, ext=<openpyxl.drawing.xdr.XDRPositiveSize2D object>\nParameters:\ncx=3311999, cy=3024000, sp=None, grpSp=None, graphicFrame=None, cxnSp=None, pic=None, contentPart=None, clientData=<openpyxl.drawing.spreadsheet_drawing.AnchorClientData object>\nParameters:\nfLocksWithSheet=None, fPrintsWithSheet=None"
+        },
+        {
+          "index": 2,
+          "type": "DoughnutChart",
+          "anchor": "<openpyxl.drawing.spreadsheet_drawing.OneCellAnchor object>\nParameters:\ncontentPart=None, _from=<openpyxl.drawing.spreadsheet_drawing.AnchorMarker object>\nParameters:\ncol=6, colOff=0, row=31, rowOff=0, ext=<openpyxl.drawing.xdr.XDRPositiveSize2D object>\nParameters:\ncx=3240000, cy=3024000, sp=None, grpSp=None, graphicFrame=None, cxnSp=None, pic=None, contentPart=None, clientData=<openpyxl.drawing.spreadsheet_drawing.AnchorClientData object>\nParameters:\nfLocksWithSheet=None, fPrintsWithSheet=None"
+        },
+        {
+          "index": 3,
+          "type": "BarChart",
+          "anchor": "<openpyxl.drawing.spreadsheet_drawing.OneCellAnchor object>\nParameters:\ncontentPart=None, _from=<openpyxl.drawing.spreadsheet_drawing.AnchorMarker object>\nParameters:\ncol=0, colOff=0, row=50, rowOff=0, ext=<openpyxl.drawing.xdr.XDRPositiveSize2D object>\nParameters:\ncx=3311999, cy=3024000, sp=None, grpSp=None, graphicFrame=None, cxnSp=None, pic=None, contentPart=None, clientData=<openpyxl.drawing.spreadsheet_drawing.AnchorClientData object>\nParameters:\nfLocksWithSheet=None, fPrintsWithSheet=None"
+        },
+        {
+          "index": 4,
+          "type": "BarChart",
+          "anchor": "<openpyxl.drawing.spreadsheet_drawing.OneCellAnchor object>\nParameters:\ncontentPart=None, _from=<openpyxl.drawing.spreadsheet_drawing.AnchorMarker object>\nParameters:\ncol=6, colOff=0, row=50, rowOff=0, ext=<openpyxl.drawing.xdr.XDRPositiveSize2D object>\nParameters:\ncx=3311999, cy=3024000, sp=None, grpSp=None, graphicFrame=None, cxnSp=None, pic=None, contentPart=None, clientData=<openpyxl.drawing.spreadsheet_drawing.AnchorClientData object>\nParameters:\nfLocksWithSheet=None, fPrintsWithSheet=None"
+        },
+        {
+          "index": 5,
+          "type": "BarChart",
+          "anchor": "<openpyxl.drawing.spreadsheet_drawing.OneCellAnchor object>\nParameters:\ncontentPart=None, _from=<openpyxl.drawing.spreadsheet_drawing.AnchorMarker object>\nParameters:\ncol=0, colOff=0, row=69, rowOff=0, ext=<openpyxl.drawing.xdr.XDRPositiveSize2D object>\nParameters:\ncx=6480000, cy=3024000, sp=None, grpSp=None, graphicFrame=None, cxnSp=None, pic=None, contentPart=None, clientData=<openpyxl.drawing.spreadsheet_drawing.AnchorClientData object>\nParameters:\nfLocksWithSheet=None, fPrintsWithSheet=None"
+        },
+        {
+          "index": 6,
+          "type": "BarChart",
+          "anchor": "<openpyxl.drawing.spreadsheet_drawing.OneCellAnchor object>\nParameters:\ncontentPart=None, _from=<openpyxl.drawing.spreadsheet_drawing.AnchorMarker object>\nParameters:\ncol=0, colOff=0, row=89, rowOff=0, ext=<openpyxl.drawing.xdr.XDRPositiveSize2D object>\nParameters:\ncx=3311999, cy=3024000, sp=None, grpSp=None, graphicFrame=None, cxnSp=None, pic=None, contentPart=None, clientData=<openpyxl.drawing.spreadsheet_drawing.AnchorClientData object>\nParameters:\nfLocksWithSheet=None, fPrintsWithSheet=None"
+        },
+        {
+          "index": 7,
+          "type": "BarChart",
+          "anchor": "<openpyxl.drawing.spreadsheet_drawing.OneCellAnchor object>\nParameters:\ncontentPart=None, _from=<openpyxl.drawing.spreadsheet_drawing.AnchorMarker object>\nParameters:\ncol=0, colOff=0, row=108, rowOff=0, ext=<openpyxl.drawing.xdr.XDRPositiveSize2D object>\nParameters:\ncx=3311999, cy=3024000, sp=None, grpSp=None, graphicFrame=None, cxnSp=None, pic=None, contentPart=None, clientData=<openpyxl.drawing.spreadsheet_drawing.AnchorClientData object>\nParameters:\nfLocksWithSheet=None, fPrintsWithSheet=None"
+        }
+      ],
+      "formula_count": 35,
+      "formulas_sample": [
+        {
+          "cell": "A3",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Total URLs\",'Audit Run Details'!$A:$A,0)),\"\") & \" URLs crawled\""
+        },
+        {
+          "cell": "B5",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Run Timestamp\",'Audit Run Details'!$A:$A,0)),\"\")"
+        },
+        {
+          "cell": "N130",
+          "formula": "=HYPERLINK(\"#Summary!A1\",\"Open\")"
+        },
+        {
+          "cell": "G131",
+          "formula": "=HYPERLINK(\"#'FixPlan'!A1\",\"Copy Writer\")"
+        },
+        {
+          "cell": "H131",
+          "formula": "=COUNTIF(OFFSET('FixPlan'!$A$1,2,MATCH(\"Owner\",'FixPlan'!$2:$2,0)-1,99998,1),\"Copy Writer\")"
+        },
+        {
+          "cell": "I131",
+          "formula": "=SUMIF(OFFSET('FixPlan'!$A$1,2,MATCH(\"Owner\",'FixPlan'!$2:$2,0)-1,99998,1),\"Copy Writer\",OFFSET('FixPlan'!$A$1,2,MATCH(\""
+        },
+        {
+          "cell": "J131",
+          "formula": "=COUNTIFS(OFFSET('FixPlan'!$A$1,2,MATCH(\"Owner\",'FixPlan'!$2:$2,0)-1,99998,1),\"Copy Writer\",OFFSET('FixPlan'!$A$1,2,MATC"
+        },
+        {
+          "cell": "K131",
+          "formula": "=COUNTIFS(OFFSET('FixPlan'!$A$1,2,MATCH(\"Owner\",'FixPlan'!$2:$2,0)-1,99998,1),\"Copy Writer\",OFFSET('FixPlan'!$A$1,2,MATC"
+        }
+      ]
+    },
+    {
+      "name": "Priority URLs",
+      "state": "visible",
+      "max_row": 12,
+      "max_column": 21,
+      "used_range": "A1:U12",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "URL",
+        "Action Needed",
+        "Why Prioritized",
+        "Business Risk Score",
+        "Severity Badge",
+        "SEO Health Score",
+        "Critical Issues Count",
+        "Warning Issues Count",
+        "GSC Impressions",
+        "GSC CTR",
+        "GSC Data Freshness",
+        "GSC Coverage Note",
+        "Revenue Intent",
+        "Owner",
+        "Status",
+        "Sprint",
+        "Indexability Reason",
+        "Broken Internal Links Count",
+        "Canonical Type",
+        "Open in Main",
+        "Open in Technical"
+      ],
+      "header_count": 21,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 11,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "A3",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "A4",
+          "target": "https://africanmarketingconfederation.org/members",
+          "display": "https://africanmarketingconfederation.org/members"
+        },
+        {
+          "cell": "A5",
+          "target": "https://africanmarketingconfederation.org/test-calendar-styling",
+          "display": "https://africanmarketingconfederation.org/test-calendar-styling"
+        },
+        {
+          "cell": "A6",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy"
+        },
+        {
+          "cell": "A7",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "A8",
+          "target": "https://africanmarketingconfederation.org/about-us",
+          "display": "https://africanmarketingconfederation.org/about-us"
+        },
+        {
+          "cell": "A9",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026"
+        },
+        {
+          "cell": "A10",
+          "target": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference",
+          "display": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference"
+        },
+        {
+          "cell": "A11",
+          "target": "https://africanmarketingconfederation.org/awards-remake",
+          "display": "https://africanmarketingconfederation.org/awards-remake"
+        },
+        {
+          "cell": "A12",
+          "target": "https://africanmarketingconfederation.org/awards-2026",
+          "display": "https://africanmarketingconfederation.org/awards-2026"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 21,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "T3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A3),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "U3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Technical Diagnostics'!A\"&MATCH(A3,'Technical Diagnostics'!A:A,0),\"Open\"),HYPERLINK(\"#'Technical D"
+        },
+        {
+          "cell": "T4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A4),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "U4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Technical Diagnostics'!A\"&MATCH(A4,'Technical Diagnostics'!A:A,0),\"Open\"),HYPERLINK(\"#'Technical D"
+        },
+        {
+          "cell": "T5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A5),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "U5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Technical Diagnostics'!A\"&MATCH(A5,'Technical Diagnostics'!A:A,0),\"Open\"),HYPERLINK(\"#'Technical D"
+        },
+        {
+          "cell": "T6",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A6),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        }
+      ]
+    },
+    {
+      "name": "FixPlan",
+      "state": "visible",
+      "max_row": 36,
+      "max_column": 30,
+      "used_range": "A1:AD36",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "Issue Type",
+        "Severity",
+        "Priority Score",
+        "Affected Count",
+        "Affected Link Instances",
+        "Affected URLs",
+        "Detail Reference Tab",
+        "Resolution Type",
+        "URL",
+        "Recommended Fix",
+        "What It Is",
+        "Likely Root Cause",
+        "Owner",
+        "Agency Owner",
+        "Effort",
+        "Est. Hours",
+        "Est. Sprint Points",
+        "Aging/Priority",
+        "Status",
+        "Verified By",
+        "Date Resolved",
+        "Revenue Risk",
+        "Action Needed",
+        "Jump to Details",
+        "Jump to Playbook",
+        "Sprint",
+        "Category",
+        "Discovery Rank",
+        "Open in Main",
+        "Hub Status (Content Hub)"
+      ],
+      "header_count": 30,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 69,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "L2",
+          "target": "#'Technical Diagnostics'!A1",
+          "display": "Likely Root Cause"
+        },
+        {
+          "cell": "I3",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "L3",
+          "target": "#'Technical Diagnostics'!A1",
+          "display": "The server response has no ETag header for this resource."
+        },
+        {
+          "cell": "I4",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "L4",
+          "target": "#'Technical Diagnostics'!A1",
+          "display": "No cookie/privacy consent management platform was detected site-wide."
+        },
+        {
+          "cell": "I5",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "L5",
+          "target": "#'Technical Diagnostics'!A1",
+          "display": "robots.txt does not explicitly allow the major AI crawlers (GPTBot, ClaudeBot, P"
+        },
+        {
+          "cell": "I6",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "L6",
+          "target": "#'Link Intelligence'!A1",
+          "display": "No footer/navigation link to a Terms of Service or Terms & Conditions page was f"
+        },
+        {
+          "cell": "I7",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "L7",
+          "target": "#'Technical Diagnostics'!A1",
+          "display": "One or more internal links on this page resolve to a missing or error page."
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 103,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "Y3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Playbook'!A\"&MATCH(\"No ETag Header\",'Playbook'!B:B,0),\"Open in Playbook\"),HYPERLINK(\"#'Playbook'!A"
+        },
+        {
+          "cell": "AC3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(I3),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "AD3",
+          "formula": "=IFERROR(INDEX('Content Optimisation Hub'!B3:B10000,MATCH(I3,'Content Optimisation Hub'!D3:D10000,0)),\"Not in Hub\")"
+        },
+        {
+          "cell": "Y4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Playbook'!A\"&MATCH(\"No Consent Manager Detected\",'Playbook'!B:B,0),\"Open in Playbook\"),HYPERLINK(\""
+        },
+        {
+          "cell": "AC4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(I4),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "AD4",
+          "formula": "=IFERROR(INDEX('Content Optimisation Hub'!B3:B10000,MATCH(I4,'Content Optimisation Hub'!D3:D10000,0)),\"Not in Hub\")"
+        },
+        {
+          "cell": "Y5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Playbook'!A\"&MATCH(\"AI Crawlers Not Explicitly Allowed\",'Playbook'!B:B,0),\"Open in Playbook\"),HYPE"
+        }
+      ]
+    },
+    {
+      "name": "Quick Wins",
+      "state": "visible",
+      "max_row": 32,
+      "max_column": 17,
+      "used_range": "A1:Q32",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "URL",
+        "Issue",
+        "Severity",
+        "Priority Score",
+        "Business Risk Score",
+        "GSC Clicks (30d)",
+        "Effort (hrs)",
+        "What It Is",
+        "Why It Matters",
+        "Recommended Fix",
+        "How To Verify",
+        "Owner",
+        "Sprint",
+        "Revenue Risk",
+        "Jump to FixPlan",
+        "Jump to Playbook",
+        "Open in Main"
+      ],
+      "header_count": 17,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 31,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "A3",
+          "target": "https://africanmarketingconfederation.org/awards-2026",
+          "display": "https://africanmarketingconfederation.org/awards-2026"
+        },
+        {
+          "cell": "A4",
+          "target": "https://africanmarketingconfederation.org/awards-remake",
+          "display": "https://africanmarketingconfederation.org/awards-remake"
+        },
+        {
+          "cell": "A5",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "A6",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "A7",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "A8",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "A9",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "A10",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "A11",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "A12",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "A13",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 91,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "O3",
+          "formula": "=IFERROR(HYPERLINK(\"#'FixPlan'!A\"&MATCH(\"Non-200 Status\",'FixPlan'!A:A,0),\"Open in FixPlan\"),HYPERLINK(\"#'FixPlan'!A1\",\""
+        },
+        {
+          "cell": "P3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Playbook'!A\"&MATCH(\"Non-200 Status\",'Playbook'!B:B,0),\"Open in Playbook\"),HYPERLINK(\"#'Playbook'!A"
+        },
+        {
+          "cell": "Q3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A3),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "O4",
+          "formula": "=IFERROR(HYPERLINK(\"#'FixPlan'!A\"&MATCH(\"Non-200 Status\",'FixPlan'!A:A,0),\"Open in FixPlan\"),HYPERLINK(\"#'FixPlan'!A1\",\""
+        },
+        {
+          "cell": "P4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Playbook'!A\"&MATCH(\"Non-200 Status\",'Playbook'!B:B,0),\"Open in Playbook\"),HYPERLINK(\"#'Playbook'!A"
+        },
+        {
+          "cell": "Q4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A4),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "O5",
+          "formula": "=IFERROR(HYPERLINK(\"#'FixPlan'!A\"&MATCH(\"Low Image Alt Coverage\",'FixPlan'!A:A,0),\"Open in FixPlan\"),HYPERLINK(\"#'FixPla"
+        }
+      ]
+    },
+    {
+      "name": "Content Optimisation Hub",
+      "state": "visible",
+      "max_row": 11,
+      "max_column": 37,
+      "used_range": "A1:AK11",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "Action Required",
+        "Status",
+        "Assigned Owner",
+        "URL",
+        "Open in Main",
+        "On-Page Optimisation Score",
+        "SEO Score",
+        "Technical Health",
+        "Copy Score",
+        "URL Slug Normalization",
+        "Proposed URL Slug",
+        "Current Title",
+        "Title Health",
+        "Current Meta Desc",
+        "Meta Health",
+        "H1",
+        "H1 Health",
+        "H2",
+        "H2 Health",
+        "H3",
+        "H3 Health",
+        "H4",
+        "H4 Health",
+        "H5",
+        "H5 Health",
+        "H6",
+        "H6 Health",
+        "Elementor Builder Link",
+        "Current OG-Image URL",
+        "OG Image Health",
+        "OG Image Preview",
+        "Recommended Action",
+        "Priority Reason",
+        "Entity Density (%)",
+        "Top Entities",
+        "Citation Candidate Count",
+        "Semantic AEO Score"
+      ],
+      "header_count": 37,
+      "freeze_panes": "I3",
+      "merged_count": 3,
+      "merged_ranges_sample": [
+        "A1:D1",
+        "AA1:AK1",
+        "E1:Z1"
+      ],
+      "hyperlink_count": 0,
+      "hyperlinks_sample": [],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 150,
+      "formulas_sample": [
+        {
+          "cell": "D3",
+          "formula": "=HYPERLINK(\"https://africanmarketingconfederation.org/\",\"https://africanmarketingconfederation.org/\")"
+        },
+        {
+          "cell": "E3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(D3),'Main'!B:B,0),\"Open in Main\"),IFERROR(HYPERLINK(\"#'Technical Diagnostics'!"
+        },
+        {
+          "cell": "F3",
+          "formula": "=MIN(100,ROUND(0.30*(IF(M3=\"\",0,IF(LEFT(M3,7)=\"MISSING\",0,IF(ISNUMBER(SEARCH(\"OK\",M3)),100,IF(ISNUMBER(SEARCH(\"SHORT\",M3"
+        },
+        {
+          "cell": "G3",
+          "formula": "=IFERROR(INDEX(OFFSET('Main'!$A$1,2,MATCH(\"SEO Score\",'Main'!$2:$2,0)-1,99998,1),MATCH(TRIM(D3),OFFSET('Main'!$A$1,2,MAT"
+        },
+        {
+          "cell": "H3",
+          "formula": "=IFERROR(INDEX(OFFSET('Main'!$A$1,2,MATCH(\"Technical Health\",'Main'!$2:$2,0)-1,99998,1),MATCH(TRIM(D3),OFFSET('Main'!$A$"
+        },
+        {
+          "cell": "I3",
+          "formula": "=IFERROR(INDEX(OFFSET('Main'!$A$1,2,MATCH(\"Copy Score\",'Main'!$2:$2,0)-1,99998,1),MATCH(TRIM(D3),OFFSET('Main'!$A$1,2,MA"
+        },
+        {
+          "cell": "J3",
+          "formula": "=HYPERLINK(\"https://africanmarketingconfederation.org/\",\"/\")"
+        },
+        {
+          "cell": "M3",
+          "formula": "=IF(L3=\"\",\"MISSING\",IF(AND(LEN(L3)>=50,LEN(L3)<=60),\"OK 50-60 chars\",IF(LEN(L3)<50,\"SHORT: \"&LEN(L3),\"LONG: \"&LEN(L3))))"
+        }
+      ]
+    },
+    {
+      "name": "Content Planner",
+      "state": "visible",
+      "max_row": 12,
+      "max_column": 19,
+      "used_range": "A1:S12",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "Primary",
+        "Secondary",
+        "Tertiary",
+        "Page link",
+        "Copy Doc",
+        "Copywriter Sign off",
+        "Copy First Check",
+        "2nd Revisions",
+        "Client copy sign off",
+        "Web design off",
+        "UXI sign off",
+        "Visual Design sign off",
+        "Client final sign off",
+        "Optimisations",
+        "Desktop",
+        "Tablet",
+        "Mobile",
+        "SEO",
+        "Performance"
+      ],
+      "header_count": 19,
+      "freeze_panes": "E2",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 1,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 1,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        }
+      ]
+    },
+    {
+      "name": "Content Hub Metrics",
+      "state": "visible",
+      "max_row": 11,
+      "max_column": 13,
+      "used_range": "A1:M11",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "URL",
+        "Search Intent",
+        "Search Intent Source",
+        "Instant Priority",
+        "Potential Traffic Lift",
+        "AEO Visibility Gain",
+        "JS Dependent",
+        "Raw Words",
+        "Rendered Words",
+        "Field LCP (ms)",
+        "Field CLS",
+        "Anchor Text Diversity",
+        "Open in Main"
+      ],
+      "header_count": 13,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 10,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "A3",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "A4",
+          "target": "https://africanmarketingconfederation.org/awards-remake",
+          "display": "https://africanmarketingconfederation.org/awards-remake"
+        },
+        {
+          "cell": "A5",
+          "target": "https://africanmarketingconfederation.org/members",
+          "display": "https://africanmarketingconfederation.org/members"
+        },
+        {
+          "cell": "A6",
+          "target": "https://africanmarketingconfederation.org/test-calendar-styling",
+          "display": "https://africanmarketingconfederation.org/test-calendar-styling"
+        },
+        {
+          "cell": "A7",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "A8",
+          "target": "https://africanmarketingconfederation.org/about-us",
+          "display": "https://africanmarketingconfederation.org/about-us"
+        },
+        {
+          "cell": "A9",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026"
+        },
+        {
+          "cell": "A10",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy"
+        },
+        {
+          "cell": "A11",
+          "target": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference",
+          "display": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 10,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "M3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A3),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "M4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A4),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "M5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A5),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "M6",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A6),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "M7",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A7),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "M8",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A8),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "M9",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A9),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        }
+      ]
+    },
+    {
+      "name": "Main",
+      "state": "visible",
+      "max_row": 12,
+      "max_column": 217,
+      "used_range": "A1:HI12",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "Health Icon",
+        "URL",
+        "Status Code",
+        "Indexability",
+        "Load Time (s)",
+        "Title",
+        "Meta Description",
+        "Word Count (Body)",
+        "SEO Health Score",
+        "Severity Badge",
+        "Action Needed",
+        "CWV LCP (s)",
+        "CWV CLS",
+        "Field vs Lab",
+        "CWV Data Source",
+        "PSI Data Status",
+        "CrUX Level",
+        "CWV INP (ms)",
+        "CWV FCP (ms)",
+        "CWV TTFB (ms)",
+        "CrUX LCP Category",
+        "CrUX CLS Category",
+        "CrUX INP Category",
+        "Origin CrUX LCP (s)",
+        "Origin CrUX CLS",
+        "Origin CrUX INP (ms)",
+        "Desktop PSI Score",
+        "Mobile PSI Score",
+        "Lighthouse Performance (Mobile)",
+        "Lighthouse Accessibility (Mobile)",
+        "Lighthouse Best Practices (Mobile)",
+        "Lighthouse SEO Score (Mobile)",
+        "Mobile LCP (s)",
+        "Mobile CLS",
+        "Mobile TTFB (s)",
+        "Lab LCP (Mobile) (s)",
+        "Lab CLS (Mobile)",
+        "Lab TBT (Mobile) (ms)",
+        "Lab INP (Mobile) (ms)",
+        "Lab FCP (Mobile) (s)"
+      ],
+      "header_count": 217,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 11,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "B3",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "B4",
+          "target": "https://africanmarketingconfederation.org/awards-remake",
+          "display": "https://africanmarketingconfederation.org/awards-remake"
+        },
+        {
+          "cell": "B5",
+          "target": "https://africanmarketingconfederation.org/awards-2026",
+          "display": "https://africanmarketingconfederation.org/awards-2026"
+        },
+        {
+          "cell": "B6",
+          "target": "https://africanmarketingconfederation.org/members",
+          "display": "https://africanmarketingconfederation.org/members"
+        },
+        {
+          "cell": "B7",
+          "target": "https://africanmarketingconfederation.org/test-calendar-styling",
+          "display": "https://africanmarketingconfederation.org/test-calendar-styling"
+        },
+        {
+          "cell": "B8",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "B9",
+          "target": "https://africanmarketingconfederation.org/about-us",
+          "display": "https://africanmarketingconfederation.org/about-us"
+        },
+        {
+          "cell": "B10",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026"
+        },
+        {
+          "cell": "B11",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy"
+        },
+        {
+          "cell": "B12",
+          "target": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference",
+          "display": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 21,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "CV3",
+          "formula": "=IFERROR(INDEX(OFFSET('Technical Diagnostics'!$A$1,2,MATCH(\"SEO Health Score\",'Technical Diagnostics'!$2:$2,0)-1,99998,1"
+        },
+        {
+          "cell": "HI3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Technical Diagnostics'!A\"&MATCH(B3,'Technical Diagnostics'!A:A,0),\"Open Technical\"),HYPERLINK(\"#'T"
+        },
+        {
+          "cell": "CV4",
+          "formula": "=IFERROR(INDEX(OFFSET('Technical Diagnostics'!$A$1,2,MATCH(\"SEO Health Score\",'Technical Diagnostics'!$2:$2,0)-1,99998,1"
+        },
+        {
+          "cell": "HI4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Technical Diagnostics'!A\"&MATCH(B4,'Technical Diagnostics'!A:A,0),\"Open Technical\"),HYPERLINK(\"#'T"
+        },
+        {
+          "cell": "CV5",
+          "formula": "=IFERROR(INDEX(OFFSET('Technical Diagnostics'!$A$1,2,MATCH(\"SEO Health Score\",'Technical Diagnostics'!$2:$2,0)-1,99998,1"
+        },
+        {
+          "cell": "HI5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Technical Diagnostics'!A\"&MATCH(B5,'Technical Diagnostics'!A:A,0),\"Open Technical\"),HYPERLINK(\"#'T"
+        },
+        {
+          "cell": "CV6",
+          "formula": "=IFERROR(INDEX(OFFSET('Technical Diagnostics'!$A$1,2,MATCH(\"SEO Health Score\",'Technical Diagnostics'!$2:$2,0)-1,99998,1"
+        }
+      ]
+    },
+    {
+      "name": "AIOSEO Recommendations",
+      "state": "visible",
+      "max_row": 92,
+      "max_column": 20,
+      "used_range": "A1:T92",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "URL",
+        "WordPress Post ID",
+        "Direct Edit Link",
+        "AIOSEO Panel",
+        "Severity",
+        "Issue",
+        "Priority Score",
+        "Current Value",
+        "Recommended Target",
+        "How to Fix in AIOSEO",
+        "Reference Tab",
+        "Reference Field",
+        "Action Needed",
+        "Owner",
+        "Status",
+        "Est. Hours",
+        "Stable Issue ID",
+        "Why It Matters",
+        "Open in Main",
+        "Open in Technical"
+      ],
+      "header_count": 20,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 178,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "A3",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "C3",
+          "target": "https://africanmarketingconfederation.org/wp-admin/post.php?post=8&action=edit",
+          "display": "https://africanmarketingconfederation.org/wp-admin/post.php?post=8&action=edit"
+        },
+        {
+          "cell": "A4",
+          "target": "https://africanmarketingconfederation.org/about-us",
+          "display": "https://africanmarketingconfederation.org/about-us"
+        },
+        {
+          "cell": "C4",
+          "target": "https://africanmarketingconfederation.org/wp-admin/post.php?post=84&action=edit",
+          "display": "https://africanmarketingconfederation.org/wp-admin/post.php?post=84&action=edit"
+        },
+        {
+          "cell": "A5",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "C5",
+          "target": "https://africanmarketingconfederation.org/wp-admin/post.php?post=31478&action=edit",
+          "display": "https://africanmarketingconfederation.org/wp-admin/post.php?post=31478&action=ed"
+        },
+        {
+          "cell": "A6",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026"
+        },
+        {
+          "cell": "C6",
+          "target": "https://africanmarketingconfederation.org/wp-admin/post.php?post=35946&action=edit",
+          "display": "https://africanmarketingconfederation.org/wp-admin/post.php?post=35946&action=ed"
+        },
+        {
+          "cell": "A7",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy"
+        },
+        {
+          "cell": "C7",
+          "target": "https://africanmarketingconfederation.org/wp-admin/post.php?post=35962&action=edit",
+          "display": "https://africanmarketingconfederation.org/wp-admin/post.php?post=35962&action=ed"
+        },
+        {
+          "cell": "A8",
+          "target": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference",
+          "display": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 181,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "S3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A3),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "T3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Technical Diagnostics'!A\"&MATCH(A3,'Technical Diagnostics'!A:A,0),\"Open\"),HYPERLINK(\"#'Technical D"
+        },
+        {
+          "cell": "S4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A4),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "T4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Technical Diagnostics'!A\"&MATCH(A4,'Technical Diagnostics'!A:A,0),\"Open\"),HYPERLINK(\"#'Technical D"
+        },
+        {
+          "cell": "S5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A5),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "T5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Technical Diagnostics'!A\"&MATCH(A5,'Technical Diagnostics'!A:A,0),\"Open\"),HYPERLINK(\"#'Technical D"
+        },
+        {
+          "cell": "S6",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A6),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        }
+      ]
+    },
+    {
+      "name": "Link Inventory",
+      "state": "visible",
+      "max_row": 237,
+      "max_column": 7,
+      "used_range": "A1:G237",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "Source URL",
+        "Target URL",
+        "Anchor Text",
+        "Rel Attribute",
+        "Link Type",
+        "Status Code",
+        "Generic Anchor"
+      ],
+      "header_count": 7,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "C1:G1",
+        "A1:B1"
+      ],
+      "hyperlink_count": 1,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 1,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        }
+      ]
+    },
+    {
+      "name": "Broken Link Impact",
+      "state": "visible",
+      "max_row": 3,
+      "max_column": 8,
+      "used_range": "A1:H3",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "Priority Score",
+        "Broken URL",
+        "Status Code",
+        "Inbound Link Count",
+        "Source Page Clicks Total",
+        "Source Pages (first 5)",
+        "Anchor Texts Used",
+        "Recommended Action"
+      ],
+      "header_count": 8,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 1,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 1,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        }
+      ]
+    },
+    {
+      "name": "SitemapQA",
+      "state": "visible",
+      "max_row": 92,
+      "max_column": 26,
+      "used_range": "A1:Z92",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "Record Type",
+        "Sitemap URL",
+        "Final URL",
+        "Status Code",
+        "Found via Crawl",
+        "Found via Sitemap",
+        "Discovery Source",
+        "In Sitemap but Non-200",
+        "Sitemap URL Redirects",
+        "Redirect Type",
+        "In Sitemap but Canonicalized Elsewhere",
+        "Missing <lastmod>",
+        "Missing <changefreq>",
+        "Missing <priority>",
+        "Sitemap <lastmod>",
+        "Sitemap <changefreq>",
+        "Sitemap <priority>",
+        "Sitemap Image Count",
+        "Sitemap First Image",
+        "Source Sitemap",
+        "Sitemap Kind",
+        "Sitemap URL Count",
+        "Sitemap Size (KB)",
+        "Lastmod vs HTTP Match",
+        "Canonical vs Sitemap Match",
+        "Crawled but Missing from Sitemap"
+      ],
+      "header_count": 26,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 1,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 1,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        }
+      ]
+    },
+    {
+      "name": "Template & Duplication Risks",
+      "state": "visible",
+      "max_row": 7,
+      "max_column": 11,
+      "used_range": "A1:K7",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "URL",
+        "Risk Category",
+        "Subfolder / Template Group",
+        "Issue",
+        "Affected Ratio",
+        "Affected URL Count",
+        "Example URLs",
+        "Exact Action",
+        "Severity",
+        "Source Legacy Tab",
+        "Open in Main"
+      ],
+      "header_count": 11,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 2,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "A3",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 6,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "K3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A3),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "K4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A4),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "K5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A5),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "K6",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A6),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "K7",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A7),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        }
+      ]
+    },
+    {
+      "name": "Playbook",
+      "state": "visible",
+      "max_row": 137,
+      "max_column": 4,
+      "used_range": "A1:D137",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "Section",
+        "Item",
+        "Guideline",
+        "Why It Matters"
+      ],
+      "header_count": 4,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "C1:D1",
+        "A1:B1"
+      ],
+      "hyperlink_count": 1,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 1,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        }
+      ]
+    },
+    {
+      "name": "Issue Register",
+      "state": "hidden",
+      "max_row": 185,
+      "max_column": 19,
+      "used_range": "A1:S185",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "URL",
+        "Section",
+        "Issue",
+        "Severity",
+        "Affected URL Count",
+        "Reference Area",
+        "Stable Issue ID",
+        "Owner",
+        "Sprint",
+        "Status",
+        "Affected URLs Sample",
+        "Source Legacy Tab",
+        "Source Row ID",
+        "Date First Detected",
+        "Days Open",
+        "Assigned To",
+        "Client Notes",
+        "Open in Main",
+        "Open in Reference"
+      ],
+      "header_count": 19,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 445,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "F2",
+          "target": "#'Content & AI Readiness'!A1",
+          "display": "Reference Area"
+        },
+        {
+          "cell": "C3",
+          "target": "#FixPlan!A16",
+          "display": "Low AEO Readiness Score"
+        },
+        {
+          "cell": "F3",
+          "target": "#'Content & AI Readiness'!A1",
+          "display": "Content & AI Readiness"
+        },
+        {
+          "cell": "C4",
+          "target": "#FixPlan!A12",
+          "display": "No 40-60 Word Answer Paragraphs"
+        },
+        {
+          "cell": "F4",
+          "target": "#'Content & AI Readiness'!A1",
+          "display": "Content & AI Readiness"
+        },
+        {
+          "cell": "C5",
+          "target": "#FixPlan!A11",
+          "display": "No Answer-Friendly Structure"
+        },
+        {
+          "cell": "F5",
+          "target": "#'Content & AI Readiness'!A1",
+          "display": "Content & AI Readiness"
+        },
+        {
+          "cell": "C6",
+          "target": "#FixPlan!A10",
+          "display": "No Question Headings"
+        },
+        {
+          "cell": "F6",
+          "target": "#'Link Intelligence'!A1",
+          "display": "Content & AI Readiness"
+        },
+        {
+          "cell": "C7",
+          "target": "#FixPlan!A7",
+          "display": "Broken Internal Links"
+        },
+        {
+          "cell": "F7",
+          "target": "#'Technical Diagnostics'!A1",
+          "display": "Link Intelligence"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 367,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "R3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A3),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "S3",
+          "formula": "=IFERROR(HYPERLINK(\"#'\"&SUBSTITUTE(F3,\"'\",\"''\")&\"'!A\"&MATCH(A3,INDIRECT(\"'\"&SUBSTITUTE(F3,\"'\",\"''\")&\"'!A:A\"),0),\"Open\"),"
+        },
+        {
+          "cell": "R4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A4),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "S4",
+          "formula": "=IFERROR(HYPERLINK(\"#'\"&SUBSTITUTE(F4,\"'\",\"''\")&\"'!A\"&MATCH(A4,INDIRECT(\"'\"&SUBSTITUTE(F4,\"'\",\"''\")&\"'!A:A\"),0),\"Open\"),"
+        },
+        {
+          "cell": "R5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A5),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "S5",
+          "formula": "=IFERROR(HYPERLINK(\"#'\"&SUBSTITUTE(F5,\"'\",\"''\")&\"'!A\"&MATCH(A5,INDIRECT(\"'\"&SUBSTITUTE(F5,\"'\",\"''\")&\"'!A:A\"),0),\"Open\"),"
+        },
+        {
+          "cell": "R6",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A6),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        }
+      ]
+    },
+    {
+      "name": "Technical Diagnostics",
+      "state": "hidden",
+      "max_row": 12,
+      "max_column": 60,
+      "used_range": "A1:BH12",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "URL",
+        "Diagnostic Category",
+        "Status Code",
+        "Severity Badge",
+        "SEO Health Score",
+        "Pass Flag",
+        "Critical Issues Count",
+        "Warning Issues Count",
+        "Extraction State",
+        "Extraction Source",
+        "Indexability Reason",
+        "Canonical Type",
+        "Redirect Chain Length",
+        "Redirect Loop Flag",
+        "Strict-Transport-Security",
+        "Content-Security-Policy",
+        "X-Content-Type-Options",
+        "Desktop PSI Score",
+        "Mobile PSI Score",
+        "Mobile LCP (s)",
+        "Mobile CLS",
+        "Mobile TTFB (s)",
+        "CrUX Level",
+        "Lab LCP (Mobile) (s)",
+        "Lab TBT (Mobile) (ms)",
+        "Lab FCP (Mobile) (s)",
+        "Lab CLS (Mobile)",
+        "Lab TTFB (Mobile) (ms)",
+        "Lighthouse Accessibility (Mobile)",
+        "Lighthouse Best Practices (Mobile)",
+        "Lighthouse SEO Score (Mobile)",
+        "Lab LCP (Desktop) (s)",
+        "Lab TBT (Desktop) (ms)",
+        "Lighthouse Performance (Desktop)",
+        "Page Size (KB)",
+        "DOM Size (nodes)",
+        "JS Execution (ms)",
+        "Network Request Count",
+        "Origin CrUX LCP (s)",
+        "Origin CrUX INP (ms)"
+      ],
+      "header_count": 60,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 11,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "A3",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "A4",
+          "target": "https://africanmarketingconfederation.org/awards-remake",
+          "display": "https://africanmarketingconfederation.org/awards-remake"
+        },
+        {
+          "cell": "A5",
+          "target": "https://africanmarketingconfederation.org/awards-2026",
+          "display": "https://africanmarketingconfederation.org/awards-2026"
+        },
+        {
+          "cell": "A6",
+          "target": "https://africanmarketingconfederation.org/members",
+          "display": "https://africanmarketingconfederation.org/members"
+        },
+        {
+          "cell": "A7",
+          "target": "https://africanmarketingconfederation.org/test-calendar-styling",
+          "display": "https://africanmarketingconfederation.org/test-calendar-styling"
+        },
+        {
+          "cell": "A8",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "A9",
+          "target": "https://africanmarketingconfederation.org/about-us",
+          "display": "https://africanmarketingconfederation.org/about-us"
+        },
+        {
+          "cell": "A10",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026"
+        },
+        {
+          "cell": "A11",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy"
+        },
+        {
+          "cell": "A12",
+          "target": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference",
+          "display": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 11,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "BH3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A3),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "BH4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A4),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "BH5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A5),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "BH6",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A6),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "BH7",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A7),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "BH8",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A8),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "BH9",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A9),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        }
+      ]
+    },
+    {
+      "name": "Content & AI Readiness",
+      "state": "hidden",
+      "max_row": 12,
+      "max_column": 25,
+      "used_range": "A1:Y12",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "URL",
+        "Content Category",
+        "Word Count",
+        "Readability (Rough Flesch)",
+        "Flesch-Kincaid Grade (Est.)",
+        "Thin Content Flag",
+        "H1 Count",
+        "Missing H1 Flag",
+        "Meta Description Missing",
+        "AEO Readiness Score",
+        "AEO Badge",
+        "Schema Types Count",
+        "Schema Types Found",
+        "Schema Parse Errors",
+        "Question Heading Count",
+        "Answer Blocks",
+        "FAQ Section Count",
+        "Image Count",
+        "Images Missing Alt",
+        "Image Alt Coverage (%)",
+        "AEO Extractability Score",
+        "Title Missing",
+        "Media Mixed Content Detected",
+        "Source Legacy Tab",
+        "Open in Main"
+      ],
+      "header_count": 25,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 11,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "A3",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "A4",
+          "target": "https://africanmarketingconfederation.org/awards-remake",
+          "display": "https://africanmarketingconfederation.org/awards-remake"
+        },
+        {
+          "cell": "A5",
+          "target": "https://africanmarketingconfederation.org/awards-2026",
+          "display": "https://africanmarketingconfederation.org/awards-2026"
+        },
+        {
+          "cell": "A6",
+          "target": "https://africanmarketingconfederation.org/members",
+          "display": "https://africanmarketingconfederation.org/members"
+        },
+        {
+          "cell": "A7",
+          "target": "https://africanmarketingconfederation.org/test-calendar-styling",
+          "display": "https://africanmarketingconfederation.org/test-calendar-styling"
+        },
+        {
+          "cell": "A8",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "A9",
+          "target": "https://africanmarketingconfederation.org/about-us",
+          "display": "https://africanmarketingconfederation.org/about-us"
+        },
+        {
+          "cell": "A10",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026"
+        },
+        {
+          "cell": "A11",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy"
+        },
+        {
+          "cell": "A12",
+          "target": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference",
+          "display": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 11,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "Y3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A3),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "Y4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A4),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "Y5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A5),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "Y6",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A6),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "Y7",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A7),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "Y8",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A8),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "Y9",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A9),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        }
+      ]
+    },
+    {
+      "name": "Link Intelligence",
+      "state": "hidden",
+      "max_row": 362,
+      "max_column": 22,
+      "used_range": "A1:V362",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "URL",
+        "Record Type",
+        "Target URL",
+        "Anchor Text",
+        "Target Status (if crawled)",
+        "Crawlable",
+        "Internal Links Count",
+        "Broken Internal Links Count",
+        "Unresolved Internal Links Count",
+        "External Links Count",
+        "Inlinks Count",
+        "Orphan Candidate",
+        "Click Depth",
+        "Internal PageRank",
+        "Generic Anchor Text Count",
+        "Nofollow Internal Links Count",
+        "Nofollow External Links Count",
+        "Internal Link Statuses",
+        "Actionable Fixes",
+        "Source Legacy Tab",
+        "Broken Links (computed)",
+        "Open in Main"
+      ],
+      "header_count": 22,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 361,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "A3",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "A4",
+          "target": "https://africanmarketingconfederation.org/awards-remake",
+          "display": "https://africanmarketingconfederation.org/awards-remake"
+        },
+        {
+          "cell": "A5",
+          "target": "https://africanmarketingconfederation.org/awards-2026",
+          "display": "https://africanmarketingconfederation.org/awards-2026"
+        },
+        {
+          "cell": "A6",
+          "target": "https://africanmarketingconfederation.org/members",
+          "display": "https://africanmarketingconfederation.org/members"
+        },
+        {
+          "cell": "A7",
+          "target": "https://africanmarketingconfederation.org/test-calendar-styling",
+          "display": "https://africanmarketingconfederation.org/test-calendar-styling"
+        },
+        {
+          "cell": "A8",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "A9",
+          "target": "https://africanmarketingconfederation.org/about-us",
+          "display": "https://africanmarketingconfederation.org/about-us"
+        },
+        {
+          "cell": "A10",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026"
+        },
+        {
+          "cell": "A11",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy"
+        },
+        {
+          "cell": "A12",
+          "target": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference",
+          "display": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference"
+        },
+        {
+          "cell": "A13",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 381,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "H3",
+          "formula": "=SUMPRODUCT(('Link Inventory'!$A$2:$A$100000=INDIRECT(\"$A\"&ROW()))*('Link Inventory'!$E$2:$E$100000=\"Internal\")*('Link I"
+        },
+        {
+          "cell": "S3",
+          "formula": "=IF(H2>0,\"Fix \"&H2&\" broken links (See Link Inventory tab for details).\",\"\")"
+        },
+        {
+          "cell": "V3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A3),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "H4",
+          "formula": "=SUMPRODUCT(('Link Inventory'!$A$2:$A$100000=INDIRECT(\"$A\"&ROW()))*('Link Inventory'!$E$2:$E$100000=\"Internal\")*('Link I"
+        },
+        {
+          "cell": "S4",
+          "formula": "=IF(H3>0,\"Fix \"&H3&\" broken links (See Link Inventory tab for details).\",\"\")"
+        },
+        {
+          "cell": "V4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A4),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "H5",
+          "formula": "=SUMPRODUCT(('Link Inventory'!$A$2:$A$100000=INDIRECT(\"$A\"&ROW()))*('Link Inventory'!$E$2:$E$100000=\"Internal\")*('Link I"
+        }
+      ]
+    },
+    {
+      "name": "CMS Action URLs",
+      "state": "hidden",
+      "max_row": 2,
+      "max_column": 5,
+      "used_range": "A1:E2",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "URL",
+        "Excluded Query Parameters",
+        "Exclusion Reason",
+        "Discovered On URL",
+        "Review Note"
+      ],
+      "header_count": 5,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "C1:E1",
+        "A1:B1"
+      ],
+      "hyperlink_count": 1,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 1,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        }
+      ]
+    },
+    {
+      "name": "Redirects",
+      "state": "hidden",
+      "max_row": 12,
+      "max_column": 20,
+      "used_range": "A1:T12",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "URL",
+        "Status Code",
+        "Final URL",
+        "Redirect Chain",
+        "Redirect Chain Length",
+        "Redirect Chain Hops",
+        "Has 302 in Chain",
+        "Has Mixed Redirect Types",
+        "Redirect Target",
+        "Redirect Hops",
+        "HTTP->HTTPS Redirect",
+        "Redirect Loop Flag",
+        "Redirect SEO Risk",
+        "Hop 1 URL",
+        "Hop 1 Status",
+        "Hop 2 URL",
+        "Hop 2 Status",
+        "Hop 3 URL",
+        "Hop 3 Status",
+        "Open in Main"
+      ],
+      "header_count": 20,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 11,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "A3",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "A4",
+          "target": "https://africanmarketingconfederation.org/awards-remake",
+          "display": "https://africanmarketingconfederation.org/awards-remake"
+        },
+        {
+          "cell": "A5",
+          "target": "https://africanmarketingconfederation.org/awards-2026",
+          "display": "https://africanmarketingconfederation.org/awards-2026"
+        },
+        {
+          "cell": "A6",
+          "target": "https://africanmarketingconfederation.org/members",
+          "display": "https://africanmarketingconfederation.org/members"
+        },
+        {
+          "cell": "A7",
+          "target": "https://africanmarketingconfederation.org/test-calendar-styling",
+          "display": "https://africanmarketingconfederation.org/test-calendar-styling"
+        },
+        {
+          "cell": "A8",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "A9",
+          "target": "https://africanmarketingconfederation.org/about-us",
+          "display": "https://africanmarketingconfederation.org/about-us"
+        },
+        {
+          "cell": "A10",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026"
+        },
+        {
+          "cell": "A11",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy"
+        },
+        {
+          "cell": "A12",
+          "target": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference",
+          "display": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 11,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "T3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A3),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "T4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A4),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "T5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A5),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "T6",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A6),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "T7",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A7),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "T8",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A8),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "T9",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A9),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        }
+      ]
+    },
+    {
+      "name": "Robots.txt Analysis",
+      "state": "hidden",
+      "max_row": 17,
+      "max_column": 6,
+      "used_range": "A1:F17",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "Section",
+        "User Agent",
+        "URL",
+        "Status",
+        "Detail",
+        "Open in Main"
+      ],
+      "header_count": 6,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "C1:E1",
+        "A1:B1"
+      ],
+      "hyperlink_count": 2,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "C3",
+          "target": "https://africanmarketingconfederation.org/robots.txt",
+          "display": "https://africanmarketingconfederation.org/robots.txt"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 16,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "F3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(C3),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "F4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(C4),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "F5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(C5),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "F6",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(C6),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "F7",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(C7),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "F8",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(C8),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "F9",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(C9),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        }
+      ]
+    },
+    {
+      "name": "Crawl Log",
+      "state": "hidden",
+      "max_row": 19,
+      "max_column": 7,
+      "used_range": "A1:G19",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "Timestamp",
+        "URL",
+        "Phase",
+        "Error Type",
+        "Error Detail",
+        "Recovery Action Taken",
+        "Open in Main"
+      ],
+      "header_count": 7,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "C1:F1",
+        "A1:B1"
+      ],
+      "hyperlink_count": 18,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "B3",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "B4",
+          "target": "https://africanmarketingconfederation.org/members",
+          "display": "https://africanmarketingconfederation.org/members"
+        },
+        {
+          "cell": "B5",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "B6",
+          "target": "https://africanmarketingconfederation.org/test-calendar-styling",
+          "display": "https://africanmarketingconfederation.org/test-calendar-styling"
+        },
+        {
+          "cell": "B7",
+          "target": "https://africanmarketingconfederation.org/about-us",
+          "display": "https://africanmarketingconfederation.org/about-us"
+        },
+        {
+          "cell": "B8",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026"
+        },
+        {
+          "cell": "B9",
+          "target": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference",
+          "display": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference"
+        },
+        {
+          "cell": "B10",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy"
+        },
+        {
+          "cell": "B11",
+          "target": "https://africanmarketingconfederation.org/awards-2026",
+          "display": "https://africanmarketingconfederation.org/awards-2026"
+        },
+        {
+          "cell": "B12",
+          "target": "https://africanmarketingconfederation.org/awards-remake",
+          "display": "https://africanmarketingconfederation.org/awards-remake"
+        },
+        {
+          "cell": "B13",
+          "target": "https://africanmarketingconfederation.org/test-calendar-styling/",
+          "display": "https://africanmarketingconfederation.org/test-calendar-styling/"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 18,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "G3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(B3),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "G4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(B4),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "G5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(B5),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "G6",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(B6),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "G7",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(B7),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "G8",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(B8),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "G9",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(B9),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        }
+      ]
+    },
+    {
+      "name": "Link Equity Map",
+      "state": "hidden",
+      "max_row": 12,
+      "max_column": 10,
+      "used_range": "A1:J12",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "URL",
+        "Inbound Link Count",
+        "Unique Source Pages",
+        "Anchor Texts (top 5)",
+        "PageRank Score",
+        "PageRank Percentile",
+        "Click Depth",
+        "Equity Tier",
+        "Recommended Action",
+        "Open in Main"
+      ],
+      "header_count": 10,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 11,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "A3",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "A4",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "A5",
+          "target": "https://africanmarketingconfederation.org/members",
+          "display": "https://africanmarketingconfederation.org/members"
+        },
+        {
+          "cell": "A6",
+          "target": "https://africanmarketingconfederation.org/about-us",
+          "display": "https://africanmarketingconfederation.org/about-us"
+        },
+        {
+          "cell": "A7",
+          "target": "https://africanmarketingconfederation.org/awards-2026",
+          "display": "https://africanmarketingconfederation.org/awards-2026"
+        },
+        {
+          "cell": "A8",
+          "target": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference",
+          "display": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference"
+        },
+        {
+          "cell": "A9",
+          "target": "https://africanmarketingconfederation.org/awards-remake",
+          "display": "https://africanmarketingconfederation.org/awards-remake"
+        },
+        {
+          "cell": "A10",
+          "target": "https://africanmarketingconfederation.org/test-calendar-styling",
+          "display": "https://africanmarketingconfederation.org/test-calendar-styling"
+        },
+        {
+          "cell": "A11",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026"
+        },
+        {
+          "cell": "A12",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 11,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "J3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A3),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "J4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A4),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "J5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A5),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "J6",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A6),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "J7",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A7),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "J8",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A8),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "J9",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(A9),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        }
+      ]
+    },
+    {
+      "name": "Anchor Text Audit",
+      "state": "hidden",
+      "max_row": 29,
+      "max_column": 7,
+      "used_range": "A1:G29",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "Destination URL",
+        "Inbound Link Count",
+        "Generic Anchor Count",
+        "Generic Anchor %",
+        "Top Anchor Texts",
+        "Generic Anchor Dominance",
+        "Recommended Action"
+      ],
+      "header_count": 7,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "C1:G1",
+        "A1:B1"
+      ],
+      "hyperlink_count": 1,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 1,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        }
+      ]
+    },
+    {
+      "name": "Snippet Opportunities",
+      "state": "hidden",
+      "max_row": 3,
+      "max_column": 8,
+      "used_range": "A1:H3",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "URL",
+        "Current GSC Position",
+        "GSC Clicks",
+        "GSC Impressions",
+        "Snippet Type Detected",
+        "Featured Snippet Readiness",
+        "Recommended Restructuring",
+        "Effort"
+      ],
+      "header_count": 8,
+      "freeze_panes": "C3",
+      "merged_count": 3,
+      "merged_ranges_sample": [
+        "A3:H3",
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 1,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 1,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        }
+      ]
+    },
+    {
+      "name": "Script Inventory",
+      "state": "hidden",
+      "max_row": 8,
+      "max_column": 7,
+      "used_range": "A1:G8",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "Domain",
+        "Service Name",
+        "Category",
+        "Pages Found On",
+        "Average Size (KB)",
+        "Total Transferred (KB)",
+        "Is Render Blocking"
+      ],
+      "header_count": 7,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "C1:G1",
+        "A1:B1"
+      ],
+      "hyperlink_count": 1,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 1,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        }
+      ]
+    },
+    {
+      "name": "Image Inventory",
+      "state": "hidden",
+      "max_row": 175,
+      "max_column": 13,
+      "used_range": "A1:M175",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "Image URL",
+        "Image Category",
+        "Status Code",
+        "Size (KB)",
+        "Width",
+        "Height",
+        "Is Broken",
+        "Is Oversized",
+        "Alt Text",
+        "Alt Source",
+        "File Extension",
+        "Found On Pages",
+        "Found On Pages (first 5)"
+      ],
+      "header_count": 13,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 1,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 1,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        }
+      ]
+    },
+    {
+      "name": "DeltaFromPreviousRun",
+      "state": "hidden",
+      "max_row": 16,
+      "max_column": 17,
+      "used_range": "A1:Q16",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "Section",
+        "Stable Issue ID",
+        "URL",
+        "Issue",
+        "Severity",
+        "Previous Value",
+        "Current Value",
+        "Change",
+        "Direction",
+        "First Seen",
+        "Last Seen",
+        "Days Open",
+        "Trend Run 1",
+        "Trend Run 2 (populated on run 2+)",
+        "Trend Run 3 (populated on run 3+)",
+        "Notes",
+        "Open in Main"
+      ],
+      "header_count": 17,
+      "freeze_panes": "C3",
+      "merged_count": 2,
+      "merged_ranges_sample": [
+        "A1:B1",
+        "C1:H1"
+      ],
+      "hyperlink_count": 11,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        },
+        {
+          "cell": "C7",
+          "target": "https://africanmarketingconfederation.org/",
+          "display": "https://africanmarketingconfederation.org/"
+        },
+        {
+          "cell": "C8",
+          "target": "https://africanmarketingconfederation.org/about-us",
+          "display": "https://africanmarketingconfederation.org/about-us"
+        },
+        {
+          "cell": "C9",
+          "target": "https://africanmarketingconfederation.org/amc-conference-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-2026"
+        },
+        {
+          "cell": "C10",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026"
+        },
+        {
+          "cell": "C11",
+          "target": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy",
+          "display": "https://africanmarketingconfederation.org/amc-conference-speakers-2026-copy"
+        },
+        {
+          "cell": "C12",
+          "target": "https://africanmarketingconfederation.org/awards-2026",
+          "display": "https://africanmarketingconfederation.org/awards-2026"
+        },
+        {
+          "cell": "C13",
+          "target": "https://africanmarketingconfederation.org/awards-remake",
+          "display": "https://africanmarketingconfederation.org/awards-remake"
+        },
+        {
+          "cell": "C14",
+          "target": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference",
+          "display": "https://africanmarketingconfederation.org/launch-event-2026-amc-conference"
+        },
+        {
+          "cell": "C15",
+          "target": "https://africanmarketingconfederation.org/members",
+          "display": "https://africanmarketingconfederation.org/members"
+        },
+        {
+          "cell": "C16",
+          "target": "https://africanmarketingconfederation.org/test-calendar-styling",
+          "display": "https://africanmarketingconfederation.org/test-calendar-styling"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 15,
+      "formulas_sample": [
+        {
+          "cell": "C1",
+          "formula": "=IFERROR(INDEX('Audit Run Details'!$B:$B,MATCH(\"Target Site\",'Audit Run Details'!$A:$A,0)),\"\") & \" \u2014 \" & IFERROR(INDEX('"
+        },
+        {
+          "cell": "Q3",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(C3),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "Q4",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(C4),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "Q5",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(C5),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "Q6",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(C6),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "Q7",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(C7),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "Q8",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(C8),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        },
+        {
+          "cell": "Q9",
+          "formula": "=IFERROR(HYPERLINK(\"#'Main'!B\"&MATCH(TRIM(C9),'Main'!B:B,0),\"Open\"),HYPERLINK(\"#'Main'!B1\",\"Open\"))"
+        }
+      ]
+    },
+    {
+      "name": "Audit Run Details",
+      "state": "hidden",
+      "max_row": 25,
+      "max_column": 2,
+      "used_range": "A1:B25",
+      "detected_header_row": 2,
+      "code_expected_header_row": 2,
+      "headers": [
+        "Key",
+        "Value"
+      ],
+      "header_count": 2,
+      "freeze_panes": "C3",
+      "merged_count": 1,
+      "merged_ranges_sample": [
+        "A1:B1"
+      ],
+      "hyperlink_count": 1,
+      "hyperlinks_sample": [
+        {
+          "cell": "A1",
+          "target": "#'Executive Briefing'!A1",
+          "display": "\u2190 Return to Executive Briefing"
+        }
+      ],
+      "chart_count": 0,
+      "charts": [],
+      "formula_count": 0,
+      "formulas_sample": []
+    }
+  ],
+  "named_ranges": [],
+  "totals": {
+    "merged_ranges": 98,
+    "hyperlinks": 1204,
+    "charts": 8,
+    "formulas": 1527,
+    "freeze_panes": 30
+  }
+}

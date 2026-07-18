@@ -12,7 +12,7 @@
 
 5. **Toolchain** — `uv` only (`uv sync`, `uv run`, `uv add`). British English for user-facing copy.
 
-6. **Docs** — Exactly 5 `docs/*.md`, 12 `.cursor/rules/*.mdc`. Sync canon when behaviour changes (see `.cursor/rules/auto_documentation.mdc` when editing docs).
+6. **Docs** — Exactly 6 `docs/*.md`, 12 `.cursor/rules/*.mdc`. Sync canon when behaviour changes (see `.cursor/rules/auto_documentation.mdc` when editing docs).
 
 7. **MCP (if configured)** — Playwright for DOM/hydration checks; Context7 for library docs; sequential-thinking before BFS/ROI/Excel aggregation edits.
 

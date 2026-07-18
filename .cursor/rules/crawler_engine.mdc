@@ -39,10 +39,10 @@ CMS/WooCommerce action query parameters block crawl-queue and internal-link disc
 
 ## Data assembler contract
 
-`crawler/data_assembler.py` (`DataAssembler`) owns the merge of raw HTTP and rendered signals into a single row dict; phase-level assembly helpers live in `crawler/data_assembler_phases.py`:
+`crawler/data_assembler.py` owns the merge of raw HTTP and rendered signals into a single row dict via module-level functions — `init_rows()`, `assemble_from_html()`, `finalize_row_state()` (there is no `DataAssembler` class); phase-level assembly helpers live in `crawler/data_assembler_phases.py`:
 - `finalize_row_state` maps non-integer `Status Code` values (`timeout`, `connection error`, `dns error`, etc.) to indexable string codes before scoring.
-- Never call `DataAssembler` methods from outside `crawler/`; pipeline consumers receive the already-assembled row dict.
-- Any new signal source (new fetcher, new extractor) must wire its output through `DataAssembler` — not merged ad hoc in `crawl_runner.py` or `pipeline/`.
+- Never call these functions from outside `crawler/`; pipeline consumers receive the already-assembled row dict.
+- Any new signal source (new fetcher, new extractor) must wire its output through `data_assembler.py` — not merged ad hoc in `crawl_runner.py` or `pipeline/`.
 
 ## GSC authentication and engine
 
@@ -54,19 +54,19 @@ CMS/WooCommerce action query parameters block crawl-queue and internal-link disc
 
 ## Network engine
 
-`crawler/network_engine.py` owns low-level HTTP mechanics (connection pooling, SSL handling, header management). Keep it free of business logic. Domain-level retry decisions belong in `fetcher.py`; concurrency limits belong in `crawl_runner.py`.
+`crawler/network_engine.py` owns low-level HTTP mechanics (connection pooling, SSL handling, header management) **and** the HTTP retry/backoff decision loop itself (`fetch_http()`, `_retry_wait_seconds()`) — `fetcher.py` supplies the retry config constants (`max_retries`, etc.) into `fetch_http()` but does not decide when/how to retry. `create_session` lives in `crawler/client.py`. Concurrency limits belong in `crawl_runner.py`.
 
 ## PSI Lighthouse categories and CrUX
 
 `psi_engine.py` is the entry point; the implementation is split:
 
-- `psi_batch.py` — `PsiRequestPacer` serialises minimum spacing between requests; `batch_fetch_psi()` runs concurrent requests with exponential backoff (up to 6 retries) and jitter. Detects API key errors (`_API_KEY_ERROR_RE`) and retryable errors (`_RETRYABLE_ERROR_RE`).
+- `psi_batch.py` — `PsiRequestPacer` serialises minimum spacing between requests; `fetch_psi_metrics_batch()` runs concurrent requests with exponential backoff (up to 6 retries, `_MAX_RETRY_ATTEMPTS`) and jitter. Detects API key errors (`_API_KEY_ERROR_RE`) and retryable errors (`_RETRYABLE_ERROR_RE`). Sustained quota exhaustion (message matches `_RETRYABLE_ERROR_RE`, e.g. "quota") retries that URL up to the attempt cap rather than aborting the remaining batch — only an outright key rejection (HTTP 403, or a 400 matching `_API_KEY_ERROR_RE`) sets `abort_state.api_key_rejected` and skips the rest of the batch.
 - `psi_cache.py` — SQLite WAL-mode cache (`CACHE_TTL_SECONDS = 86400`). `open_cache_db()`, `cache_get()`, `cache_put()`; auto-evicts expired rows.
-- `psi_merge.py` — `PSI_LIGHTHOUSE_EXPORT_KEYS` (48 keys), `lab_strategy_metrics()`, `category_score()`, `merge_url_results()`, `strategy_ok()`, `store_psi_result()`, `psi_index_key()`.
+- `psi_merge.py` — `PSI_LIGHTHOUSE_EXPORT_KEYS` (32 keys), `lab_strategy_metrics()`, `category_score()`, `merge_url_results()`, `strategy_ok()`, `store_psi_result()`, `psi_index_key()`.
 
 `psi_engine._PSI_CATEGORIES` requests **performance**, **accessibility**, **best-practices**, and **seo** for each mobile/desktop call.
 
-- **Rate limits:** PSI quota is per API key per day. Log a warning and skip remaining PSI calls (marking affected rows with a `PSI Data Status` value indicating quota exhaustion) rather than hard-failing the crawl.
+- **Rate limits:** PSI quota is per API key per day. A quota/rate-limit error on one URL retries that URL (bounded, see `psi_batch.py` above) rather than hard-failing the crawl; only an outright key rejection aborts the remaining batch. Either way, affected rows get a `PSI Data Status` value indicating unavailable/quota-exhausted data rather than a crash.
 - **CrUX data:** CrUX field data may be absent (new page / low traffic). Treat absent CrUX as `None`/blank — never substitute a synthetic value.
 - **Response caching:** handled by `psi_cache.py`; do not re-fetch within TTL. Delete `.cache/*.sqlite` when breaking PSI schema changes ship.
 - **Timeout:** every PSI HTTP call must respect the global LLM/API timeout policy from `architecture.mdc` (≈5 s hard cap unless documented otherwise).

@@ -601,6 +601,10 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     # explicit in downstream reports instead of disappearing during
     # ExtraRowPayload re-validation.
     "Search Intent": "Unknown",
+    # Provenance for "Search Intent": LLM (hosted or local OpenAI-compatible),
+    # Heuristic (URL/title keyword fallback), or Unknown (neither classified
+    # the page). Additive field — see docs/data_contracts.md.
+    "Search Intent Source": "Unknown",
     # Sprint 4 — structural intelligence, security boolean digests, and
     # internationalisation. ``Crawl Depth`` is the BFS distance from the
     # seed URL (``0`` for the seed); ``Security: HSTS`` / ``Security: CSP``

@@ -26,8 +26,8 @@ def test_fixplan_hub_status_formula_indexes_status_matches_url() -> None:
     url_l = content_hub_column_letter("URL")
     formula = _fixplan_hub_status_formula("J", 5)
 
-    assert status_l == "F"
-    assert url_l == "I"
+    assert status_l == "B"
+    assert url_l == "D"
     assert f"'{CONTENT_OPTIMISATION_HUB_SHEET}'!{status_l}{CONTENT_HUB_DATA_START_ROW}:{status_l}10000" in formula
     assert f"'{CONTENT_OPTIMISATION_HUB_SHEET}'!{url_l}{CONTENT_HUB_DATA_START_ROW}:{url_l}10000" in formula
     assert "J5" in formula

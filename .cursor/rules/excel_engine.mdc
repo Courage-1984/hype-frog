@@ -122,7 +122,21 @@ All env vars above must be documented in `.env.example` whenever they change.
 
 ## Duplicate column prevention
 
-Use `header_exists_in_worksheet` before inserting navigation headers such as **BACK TO DASHBOARD**.
+The legacy trailing **BACK TO DASHBOARD** column is no longer inserted — the current
+navigation mechanism is the row-1 return-strip banner (`navigation.add_return_to_briefing_strip`,
+idempotent). `BACK TO DASHBOARD` now only appears as a legacy-removal target
+(`navigation._LEGACY_BACK_NAV_HEADER`), stripped from old data if found before the
+strip is inserted. Use `header_exists_in_worksheet` before inserting any new
+navigation-style header column to avoid the same duplicate-column class of bug.
+
+## Content Hub header-row timing
+
+The Hub's headers physically move from row 1 to row 2 partway through
+`adjust_sheet_format` (`apply_content_hub_conditional_rules` inserts the banner).
+Hub-aware functions must resolve the header row via `layout.resolve_content_hub_header_row`
+rather than hardcoding a row number — a hardcoded row silently produced two real bugs
+this codebase already hit (`apply_column_widths`, `apply_wrapped_row_heights`). Full
+narrative: `docs/excel_reporting_standards.md` (*Content Hub header-row timing*).
 
 ## Testing touchpoints
 

@@ -12,8 +12,11 @@ from hype_frog.reporter.engine_rows import content_hub_column_letter
 from hype_frog.reporter.sheets.config import (
     CONTENT_HUB_DATA_START_ROW,
     CONTENT_OPTIMISATION_HUB_SHEET,
+    STD_BLUE,
 )
 from hype_frog.reporter.sheets.layout import main_sheet_url_column_letter
+
+_HYPERLINK_FORMULA_PREFIXES: tuple[str, ...] = ("=HYPERLINK(", "=IFERROR(HYPERLINK(")
 
 TECHNICAL_DIAGNOSTICS_SHEET = "Technical Diagnostics"
 
@@ -183,6 +186,45 @@ def add_url_navigation_links(
                         f'\'Main\'!{main_u}:{main_u},0),"Open"),HYPERLINK("#\'Main\'!{main_u}1","Open"))'
                     ),
                 )
+
+
+def style_unstyled_formula_hyperlinks(worksheet: Worksheet, *, header_row: int) -> None:
+    """Give visible link styling to any un-styled ``HYPERLINK`` formula column.
+
+    Cross-sheet jump-link columns (``Open in Main``, ``Open in Technical``,
+    ``Open in Reference``, ``Technical View``, the Hub's ``URL Slug
+    Normalization``, …) are written as working ``=HYPERLINK(...)`` /
+    ``=IFERROR(HYPERLINK(...))`` formulas by :func:`add_url_navigation_links`,
+    :func:`apply_cross_sheet_links`, and other builders, but none of them set
+    ``cell.font`` — the formula works when clicked, but nothing tells the
+    reader the cell is clickable versus plain text. Detecting by formula
+    prefix (rather than a hardcoded header-name list) catches every current
+    and future jump-link column in one pass, while skipping cells another
+    pass already styled (e.g. ``apply_editor_url_column_hyperlinks``'s
+    Excel-native-blue edit links) so this never overrides an established,
+    more specific style.
+    """
+    data_start = header_row + 1
+    if worksheet.max_row < data_start:
+        return
+    link_font = Font(color=STD_BLUE, underline="single")
+    link_alignment = Alignment(wrap_text=False, vertical="center")
+    for col_idx in range(1, worksheet.max_column + 1):
+        sample = worksheet.cell(row=data_start, column=col_idx).value
+        if not isinstance(sample, str):
+            continue
+        if not sample.strip().upper().startswith(_HYPERLINK_FORMULA_PREFIXES):
+            continue
+        for row_idx in range(data_start, worksheet.max_row + 1):
+            cell = worksheet.cell(row=row_idx, column=col_idx)
+            value = cell.value
+            if (
+                isinstance(value, str)
+                and value.strip().upper().startswith(_HYPERLINK_FORMULA_PREFIXES)
+                and cell.font.underline != "single"
+            ):
+                cell.font = link_font
+                cell.alignment = link_alignment
 
 
 def apply_cross_sheet_links(

@@ -8,7 +8,6 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.reporter.sheets.config import (
-    AUDIT_RUN_DETAILS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     DEBUG_EXCEL_ISOLATION_MODE,
     DISABLE_EXTERNAL_LINKS_AND_IMAGES,
@@ -16,10 +15,12 @@ from hype_frog.reporter.sheets.config import (
     STD_BLUE,
     WORKBOOK_NAV_TARGET_SHEET,
 )
+from hype_frog.reporter.narrative_engine import sanitize_cell_text
 from hype_frog.reporter.sheets.links import (
     add_url_navigation_links as add_url_navigation_links_impl,
     apply_cross_sheet_links as apply_cross_sheet_links_impl,
 )
+from hype_frog.reporter.sheets.sheet_descriptions import sheet_end_user_description
 from hype_frog.reporter.sheets.sheet_rows import (
     sheet_data_header_row,
     sheet_data_start_row,
@@ -29,23 +30,6 @@ from hype_frog.reporter.sheets.style_helpers import header_row_index
 from hype_frog.reporter.sheets.workbook_layout import excel_sheet_link_target
 
 _LEGACY_BACK_NAV_HEADER = "BACK TO DASHBOARD"
-
-
-def _audit_details_lookup_formula(key: str) -> str:
-    audit_esc = AUDIT_RUN_DETAILS_SHEET.replace("'", "''")
-    return (
-        f'IFERROR(INDEX(\'{audit_esc}\'!$B:$B,'
-        f'MATCH("{key}",\'{audit_esc}\'!$A:$A,0)),"")'
-    )
-
-
-def build_run_metadata_subtitle_formula() -> str:
-    """Excel formula for row-1 run context (domain, URL count, audit date)."""
-    return (
-        f'={_audit_details_lookup_formula("Target Site")} & " — " & '
-        f'{_audit_details_lookup_formula("Total URLs")} & " URLs crawled — " & '
-        f'LEFT({_audit_details_lookup_formula("Run Timestamp")},10)'
-    )
 
 
 def _has_return_strip(worksheet: Worksheet) -> bool:
@@ -79,7 +63,7 @@ def add_return_to_briefing_strip(worksheet: Worksheet, sheet_name: str) -> None:
     _remove_legacy_back_to_dashboard_column(worksheet, header_row=header_row)
     worksheet.insert_rows(1)
 
-    # Return link in A1:B1; run metadata formula is applied in guardrails (C1:H1).
+    # Return link in A1:B1; sheet description text is applied in guardrails (C1:H1).
     merge_end_col = min(max(worksheet.max_column, 1), 8)
     return_end = get_column_letter(min(2, merge_end_col))
     worksheet.merge_cells(f"A1:{return_end}1")
@@ -92,17 +76,16 @@ def add_return_to_briefing_strip(worksheet: Worksheet, sheet_name: str) -> None:
     if merge_end_col >= 3:
         meta_end = get_column_letter(merge_end_col)
         worksheet.merge_cells(f"C1:{meta_end}1")
-        meta_cell = worksheet["C1"]
-        meta_cell.alignment = Alignment(horizontal="right", vertical="center")
-        meta_cell.font = Font(size=9, italic=True, color="666666")
-    worksheet.row_dimensions[1].height = 20
+        desc_cell = worksheet["C1"]
+        desc_cell.alignment = Alignment(
+            horizontal="left", vertical="center", wrap_text=True
+        )
+        desc_cell.font = Font(size=9, italic=True, color="595959")
+    worksheet.row_dimensions[1].height = 30
 
 
-def apply_return_strip_run_metadata(wb: Workbook) -> None:
-    """Populate row-1 metadata on data sheets from Audit Run Details."""
-    if AUDIT_RUN_DETAILS_SHEET not in wb.sheetnames:
-        return
-    formula = build_run_metadata_subtitle_formula()
+def apply_return_strip_descriptions(wb: Workbook) -> None:
+    """Populate the row-1 strip (C1:H1) with each sheet's end-user description."""
     for name in wb.sheetnames:
         if not sheet_uses_return_strip(name):
             continue
@@ -114,7 +97,10 @@ def apply_return_strip_run_metadata(wb: Workbook) -> None:
         meta_end = get_column_letter(min(ws.max_column, 8))
         if meta_end <= "B":
             continue
-        ws["C1"].value = formula
+        description = sanitize_cell_text(sheet_end_user_description(name))
+        if not description:
+            continue
+        ws["C1"].value = description
 
 
 def add_back_to_dashboard_link(worksheet: Worksheet, sheet_name: str) -> None:
@@ -182,8 +168,7 @@ __all__ = [
     "add_return_to_briefing_strip",
     "add_url_navigation_links",
     "apply_cross_sheet_links",
-    "apply_return_strip_run_metadata",
-    "build_run_metadata_subtitle_formula",
+    "apply_return_strip_descriptions",
     "sheet_data_header_row",
     "sheet_data_start_row",
     "sheet_uses_return_strip",

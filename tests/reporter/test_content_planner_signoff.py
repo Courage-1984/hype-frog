@@ -81,6 +81,31 @@ def test_cf_disabled_flag_adds_no_rules(monkeypatch: pytest.MonkeyPatch) -> None
     assert _rule_count(ws) == 0
 
 
+def test_zebra_banding_scoped_to_identity_columns_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: columns A-E (Primary/Secondary/Tertiary/Page link/Copy Doc)
+    had zero row-differentiation, unlike every other large data sheet in the
+    workbook — only the F:S sign-off columns got RAG conditional colouring.
+    The zebra rule must stay confined to A:E so it doesn't visually fight the
+    existing RAG fills on F:S."""
+    monkeypatch.setattr(cond_module, "DISABLE_CONDITIONAL_FORMATTING", False)
+    ws = _worksheet_with_data()
+    apply_content_planner_signoff_rules(ws)
+
+    zebra_ranges = [
+        str(rng)
+        for rng, rules in ws.conditional_formatting._cf_rules.items()
+        for rule in rules
+        if rule.formula and "MOD(ROW(),2)=0" in rule.formula[0]
+    ]
+    assert len(zebra_ranges) == 1
+    assert "A2:E" in zebra_ranges[0]
+    assert "F2:E" not in zebra_ranges[0] and not any(
+        f"{col}2:" in zebra_ranges[0] for col in "FGHIJKLMNOPQRS"
+    )
+
+
 def test_cf_formulas_reference_column_f(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cond_module, "DISABLE_CONDITIONAL_FORMATTING", False)
     ws = _worksheet_with_data()

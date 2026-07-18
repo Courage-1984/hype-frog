@@ -13,10 +13,6 @@ __pycache__/
 
 # Build artefacts and generated reports
 dist/
-reports/
-*.xlsx
-*.pdf
 
 # Local data/logs that don't help with code understanding
-logs/
 .cache/

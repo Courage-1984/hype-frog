@@ -93,6 +93,10 @@ TOC_ADVANCED_SECTION_LABEL = (
     "Technical & Historical (Advanced) — tabs hidden; use Open links or "
     "right-click tab bar → Unhide Sheet"
 )
+TOC_ADVANCED_SECTION_LABEL_SHOWN = (
+    "Technical & Historical (Advanced) — tabs shown (--show-all-tabs); use Open links "
+    "or right-click tab bar → Hide Sheet"
+)
 
 DASHBOARD_ADVANCED_SHEETS_NOTE = (
     "Technical & historical tabs are hidden to reduce clutter. Use the links below or "
@@ -224,6 +228,7 @@ __all__ = [
     "HIDDEN_SHEETS_BY_DEFAULT",
     "PREFERRED_WORKBOOK_TAB_ORDER",
     "TOC_ADVANCED_SECTION_LABEL",
+    "TOC_ADVANCED_SECTION_LABEL_SHOWN",
     "TOC_PRIMARY_SECTION_LABEL",
     "SHEETS_EXCLUDED_FROM_TOC",
     "VISIBLE_WORKBOOK_TAB_ORDER",

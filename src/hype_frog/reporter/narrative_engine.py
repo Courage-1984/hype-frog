@@ -12,13 +12,17 @@ from hype_frog.pipeline.broken_links import is_broken_http_status, is_internal_l
 _DEFAULT_NO_CRAWL = "No data available. Please run a full crawl to generate insights."
 
 
-def _sanitize_cell_text(text: str) -> str:
+def sanitize_cell_text(text: str) -> str:
     """Strip Excel formula injection prefixes and non-printable controls (keep newlines/tabs)."""
     s = "".join(ch for ch in text if ord(ch) >= 32 or ch in "\n\t")
     s = s.lstrip()
     while s and s[0] in "=+-@":
         s = s[1:].lstrip()
     return s
+
+
+# Backwards-compatible private alias (historical call sites in this module).
+_sanitize_cell_text = sanitize_cell_text
 
 
 def _normalize_row_seo_value(raw: float) -> float:
@@ -244,4 +248,5 @@ class NarrativeEngine:
 __all__ = [
     "NarrativeEngine",
     "average_seo_score_pct",
+    "sanitize_cell_text",
 ]

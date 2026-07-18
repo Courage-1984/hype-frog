@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from openpyxl.styles import Font, PatternFill
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.cell.cell import MergedCell
 from openpyxl.worksheet.worksheet import Worksheet
@@ -137,19 +137,21 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "Affected URLs (sample)",
     ],
     "Priority URLs": [
+        # Most-actionable-first: what to do, then risk/scores, then supporting
+        # GSC evidence, editable triage fields last.
         "URL",
+        "Action Needed",
+        "Why Prioritized",
         "Business Risk Score",
         "Severity Badge",
         "SEO Health Score",
+        "Critical Issues Count",
+        "Warning Issues Count",
         "GSC Impressions",
         "GSC CTR",
         "GSC Data Freshness",
         "GSC Coverage Note",
         "Revenue Intent",
-        "Critical Issues Count",
-        "Warning Issues Count",
-        "Action Needed",
-        "Why Prioritized",
         "Owner",
         "Status",
         "Sprint",
@@ -174,15 +176,18 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "Stable Issue ID",
     ],
     CONTENT_OPTIMISATION_HUB_SHEET: [
+        # Workflow + nav first, scores next, editorial evidence after —
+        # matches the most-actionable-first pattern used across the workbook.
         "Action Required",
+        "Status",
+        "Assigned Owner",
+        "URL",
+        "Open in Main",
         "On-Page Optimization Score",
         "SEO Score",
         "Technical Health",
         "Copy Score",
-        "Status",
-        "Assigned Owner",
         "URL Slug Normalization",
-        "URL",
         "Proposed URL Slug",
         "Current Title",
         "Title Health",
@@ -204,7 +209,6 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "Current OG-Image URL",
         "OG Image Health",
         "OG Image Preview",
-        "Open in Main",
     ],
 }
 
@@ -270,6 +274,16 @@ CONTENT_HUB_ROW2_HEADER_COMMENTS: dict[str, str] = {
     "Proposed URL Slug": (
         "Editorial URL-slug suggestion — not applied automatically; use alongside Title/H1 "
         "guidance before publishing."
+    ),
+    "Recommended Action": (
+        "Specific, writer-friendly next step for this page, chosen at export time from the "
+        "highest-leverage gap (missing title/meta, H1 count, missing alt text, no 40–60 word "
+        "answer paragraph, snippet restructure, or on-page fundamentals). Not a live formula."
+    ),
+    "Priority Reason": (
+        "Plain-language explanation of why this URL is in the priority set — joins whichever "
+        "signals apply (high GSC impressions/clicks, missing answer paragraphs, search intent, "
+        "snippet opportunity, open issues, instant priority)."
     ),
 }
 
@@ -873,6 +887,31 @@ def _autofit_column_width(
     return float(max_length)
 
 
+def _apply_wrap_to_column(worksheet: Worksheet, col_idx: int, *, start_row: int) -> None:
+    """Enable text wrapping on a prose column's data cells (top-aligned).
+
+    ``apply_column_widths`` sizes prose columns to :data:`_PROSE_COL_WIDTH`, but
+    width alone leaves long guidance text (Recommended Fix, Why It Matters, …)
+    clipped at the column edge — the reader must click each cell to see it. The
+    width contract's docstring promises a "wrapped width"; this makes it true by
+    turning on ``wrap_text`` so Excel reflows guidance onto multiple lines and
+    auto-fits the row height on open. Existing horizontal/indent alignment is
+    preserved; URL/link columns are deliberately excluded (a wrapped URL token
+    reads worse than a clipped one behind a hyperlink).
+    """
+    for row_idx in range(start_row, worksheet.max_row + 1):
+        cell = worksheet.cell(row=row_idx, column=col_idx)
+        if isinstance(cell, MergedCell):
+            continue
+        current = cell.alignment
+        cell.alignment = Alignment(
+            horizontal=current.horizontal,
+            vertical="top",
+            wrap_text=True,
+            indent=current.indent,
+        )
+
+
 CONTENT_HUB_DENSITY_OVERRIDES: dict[str, float] = {
     "Action Required": 17.43,
     "On-Page Optimization Score": 12.0,
@@ -882,7 +921,46 @@ CONTENT_HUB_DENSITY_OVERRIDES: dict[str, float] = {
     "OG Image Health": 42.0,
     "Open in Main": 22.57,
     "URL Slug Normalization": 22.0,
+    # Guaranteed widths for editorial payload columns previously left at
+    # Excel's default (~8.4) by the pre-insert header-row misread.
+    "Current Title": 34.0,
+    "Current Meta Desc": 42.0,
 }
+
+# Contiguous H2-H6 heading columns (content + health pairs). Collapsed into an
+# Excel outline group by default — most audits only need H1; expand on demand.
+CONTENT_HUB_HEADING_GROUP_HEADERS: tuple[str, ...] = (
+    "H2",
+    "H2 Health",
+    "H3",
+    "H3 Health",
+    "H4",
+    "H4 Health",
+    "H5",
+    "H5 Health",
+    "H6",
+    "H6 Health",
+)
+
+
+def resolve_content_hub_header_row(worksheet: Worksheet) -> int:
+    """Verify whether Hub headers currently sit on row 1 or row 2.
+
+    ``adjust_sheet_format`` calls :func:`apply_column_widths` twice: once
+    before ``apply_content_hub_conditional_rules`` inserts the row-1 banner
+    (headers still physically on row 1) and once after (headers pushed to
+    row 2, matching the ``CONTENT_HUB_DATA_START_ROW`` contract). Trusting a
+    fixed row 2 on the pre-insert call silently reads the first *data* row as
+    if it were headers, so real header names like "Current Title" and
+    "Priority Reason" never match ``PROSE_HEADERS`` and fall back to
+    Excel's default width. Checking the known first Hub header ("Action
+    Required") makes the resolution self-correcting regardless of call order.
+    """
+    if str(worksheet.cell(row=2, column=1).value or "").strip() == "Action Required":
+        return 2
+    if str(worksheet.cell(row=1, column=1).value or "").strip() == "Action Required":
+        return 1
+    return 2
 
 
 def apply_column_widths(worksheet: Worksheet) -> None:
@@ -898,7 +976,7 @@ def apply_column_widths(worksheet: Worksheet) -> None:
 
     header_row = sheet_data_header_row(worksheet.title)
     if worksheet.title == CONTENT_OPTIMISATION_HUB_SHEET:
-        header_row = 2
+        header_row = resolve_content_hub_header_row(worksheet)
     data_start = header_row + 1
     headers = header_row_index(worksheet, header_row)
     header_by_col = {col_idx: name for name, col_idx in headers.items()}
@@ -911,6 +989,7 @@ def apply_column_widths(worksheet: Worksheet) -> None:
             continue
         if header_name in PROSE_HEADERS:
             worksheet.column_dimensions[letter].width = _PROSE_COL_WIDTH
+            _apply_wrap_to_column(worksheet, col_idx, start_row=data_start)
             continue
         content_len = _autofit_column_width(worksheet, col_idx, start_row=data_start)
         # A header floor keeps the label legible without forcing very wide
@@ -926,6 +1005,30 @@ def apply_column_widths(worksheet: Worksheet) -> None:
             worksheet.column_dimensions[get_column_letter(col_idx)].width = width
 
 
+def apply_content_hub_heading_group(worksheet: Worksheet) -> None:
+    """Collapse the H2-H6 content/health column block into a hidden outline group.
+
+    Most copy-optimisation work only needs H1; H2-H6 are edge cases (H5 had 5
+    values, H6 had 1, in a 253-row export) that ate ten 11-42-wide columns.
+    Grouped + collapsed keeps the data one click away without the clutter.
+    """
+    if worksheet.title != CONTENT_OPTIMISATION_HUB_SHEET:
+        return
+    header_row = resolve_content_hub_header_row(worksheet)
+    headers = header_row_index(worksheet, header_row)
+    cols = sorted(
+        headers[h] for h in CONTENT_HUB_HEADING_GROUP_HEADERS if h in headers
+    )
+    if not cols:
+        return
+    worksheet.column_dimensions.group(
+        get_column_letter(cols[0]),
+        get_column_letter(cols[-1]),
+        hidden=True,
+        outline_level=1,
+    )
+
+
 __all__ = [
     "DISPLAY_HEADER_ALIASES",
     "MAIN_COLUMN_GROUP_DEFINITIONS",
@@ -937,12 +1040,14 @@ __all__ = [
     "apply_main_column_group_header_tints",
     "apply_main_triage_column_layout",
     "apply_column_widths",
+    "apply_content_hub_heading_group",
     "apply_intelligent_sorting",
     "content_optimisation_hub_ordered_headers",
     "hide_noisy_columns",
     "link_intelligence_column_letter",
     "link_inventory_column_letter",
     "main_sheet_url_column_letter",
+    "resolve_content_hub_header_row",
     "reorder_columns",
     "sheet_data_column_range",
     "sort_worksheet_rows",

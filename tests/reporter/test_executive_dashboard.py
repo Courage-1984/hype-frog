@@ -310,6 +310,60 @@ def test_executive_dashboard_chart_xml_uses_valid_rgb_and_visible_data(
             assert 'plotVisOnly val="0"' in xml or "plotVisOnly" not in xml
 
 
+def test_executive_dashboard_charts_have_per_point_or_per_series_colour(
+    tmp_path: Path,
+    sample_export_context: dict[str, object],
+) -> None:
+    """Regression: single-series bar charts must not render as one flat
+    colour, and multi-series charts must distinguish their series by fill.
+
+    Before this fix, 6 of 8 charts had no ``dPt``/series ``solidFill`` at
+    all, so every bar in a chart rendered identically regardless of what it
+    represented.
+    """
+    out = tmp_path / "exec_dash_colours.xlsx"
+    writer = __import__("pandas").ExcelWriter(out, engine="openpyxl")
+    write_executive_dashboard(
+        writer,
+        summary_metrics=sample_export_context["summary_metrics"],  # type: ignore[arg-type]
+        typed_main_rows=sample_export_context["typed_main_rows"],  # type: ignore[arg-type]
+        typed_extra_rows=sample_export_context["typed_extra_rows"],  # type: ignore[arg-type]
+        priority_rows=sample_export_context["priority_rows"],  # type: ignore[arg-type]
+        fixplan_rows=sample_export_context["fixplan_rows"],  # type: ignore[arg-type]
+        hub_metrics_rows=sample_export_context["hub_metrics_rows"],  # type: ignore[arg-type]
+    )
+    writer.close()
+    patch_xlsx_app_xml_for_excel_compatibility(out)
+
+    with zipfile.ZipFile(out) as zf:
+        chart_xmls = {
+            name: zf.read(name).decode()
+            for name in zf.namelist()
+            if name.startswith("xl/charts/chart")
+        }
+
+    def _titled(fragment: str) -> str:
+        for xml in chart_xmls.values():
+            if fragment in xml:
+                return xml
+        raise AssertionError(f"no chart XML contains {fragment!r}")
+
+    # Two-series charts: each series must carry its own solidFill, and the
+    # two fills must differ (else the comparison reads as one colour).
+    health_xml = _titled("Health components")
+    series_fills = re.findall(r"<ser>.*?</ser>", health_xml, flags=re.S)
+    assert len(series_fills) == 2
+    fills = [re.findall(r'srgbClr val="([^"]+)"', s) for s in series_fills]
+    assert all(fills), "expected an explicit solidFill on every series"
+    assert fills[0][0] != fills[1][0]
+
+    # Single-series charts: at least one <dPt> per-point override, proving
+    # per-bar colouring (not just the theme's default single accent colour).
+    status_xml = _titled("Status code")
+    assert "<dPt>" in status_xml
+    assert "70AD47" in status_xml  # 200 OK bucket -> green
+
+
 def test_adjust_sheet_format_tolerates_executive_dashboard_merges(
     tmp_path: Path,
     sample_export_context: dict[str, object],

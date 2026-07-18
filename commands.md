@@ -116,7 +116,7 @@ Override preset BFS depth: `HF_MAX_DEPTH=1 uv run hype-frog --quick-test-fast`
 
 Useful crawl flags (see `uv run hype-frog --help`):
 
-`--check-images` · `--check-og-images` · `--gsc-url-inspection` · `--gsc-url-inspection-full` · `--competitors domain.com` · `--previous-run path.xlsx` · `--regen-report` · `--snapshot-id <uuid>` · `--streaming` · `--export-pdf` · `--psi-delay 2.5`
+`--check-images` · `--check-og-images` · `--gsc-url-inspection` · `--gsc-url-inspection-full` · `--competitors domain.com` · `--previous-run path.xlsx` · `--regen-report` · `--snapshot-id <uuid>` · `--re-enrich` · `--streaming` · `--export-pdf` · `--psi-delay 2.5`
 
 Output defaults to `reports/latest/` unless `HF_OUTPUT_FILENAME` is set.
 
@@ -183,7 +183,7 @@ uv run hype-frog --previous-run reports/latest/audit_20240601.xlsx
 uv run hype-frog --previous-run reports/latest/audit_20240601_delta_summary.json
 ```
 
-Populates `DeltaFromPreviousRun` and `ResolvedIssues` sheets with new/resolved issue rows, KPI deltas, and up to three SEO Health trend points per URL. Each full-suite run auto-writes `{basename}_delta_summary.json` for use as the next run's `--previous-run` input.
+Populates the `DeltaFromPreviousRun` sheet with new/resolved issue rows, KPI deltas, and up to three SEO Health trend points per URL (the legacy standalone `ResolvedIssues` sheet was folded into `DeltaFromPreviousRun` and is no longer exported). Each full-suite run auto-writes `{basename}_delta_summary.json` for use as the next run's `--previous-run` input.
 
 ---
 
@@ -216,6 +216,8 @@ python scripts\_run_regen_report_test.py <snapshot-uuid>
 | `HF_REGEN_REPORT=1` | Env equivalent of `--regen-report` |
 | `--snapshot-id <uuid>` | Load that snapshot instead of latest for domain |
 | `HF_SNAPSHOT_ID=<uuid>` | Env equivalent of `--snapshot-id` |
+| `--re-enrich` | Recompute SEO Health / Technical Health / Copy Score / SEO Score from snapshot signals instead of replaying frozen values (no network calls) |
+| `HF_REGEN_REENRICH=1` | Env equivalent of `--re-enrich` |
 | `HF_SNAPSHOT_RETENTION_PER_DOMAIN` | Snapshots kept per domain (default **10**) |
 | `HF_SNAPSHOTS_DB_PATH` | Override `.cache/crawl_snapshots.sqlite` |
 
@@ -282,6 +284,6 @@ cd dist
 ```
 
 
+
 https://africanmarketingconfederation.org/page-sitemap.xml
 https://ticonafrica.org/page-sitemap.xml
-

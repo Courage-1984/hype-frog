@@ -213,6 +213,14 @@ Baseline numbers to be recorded after first benchmark run.
 
 First recorded baseline (full suite, all packages under `src/hype_frog`): **79%**
 line coverage (16,623 statements, 3,005 missed; 5,644 branches, 915 partial).
+
+Latest recorded run (full suite, same scope): **80%** line coverage (17,094
+statements, 2,949 missed; 5,820 branches, 937 partial) — moved up from the first
+baseline after targeted test additions for `crawler/skipped_render_refetch.py`
+(17%→97%), `crawler/psi_batch.py`'s pacing/retry/fallback contract (19%→54%), and
+`cli_parser.py` (0%→100%). Statement/branch counts grew alongside coverage because
+the codebase itself grew between the two runs, not because of a scope change.
+
 No `fail_under` threshold is set yet — set one only once the team agrees on a
 target based on this baseline, not before.
 

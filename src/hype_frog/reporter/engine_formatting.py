@@ -21,6 +21,8 @@ from hype_frog.reporter.sheets.config import (
     RAG_NEUTRAL,
     RAG_RED,
     RAG_RED_FONT,
+    STATUS_REVIEW_FILL,
+    STATUS_REVIEW_FONT,
     STATUS_TODO_FILL,
     STATUS_TODO_FONT,
 )
@@ -98,20 +100,21 @@ def apply_workflow_status_conditional_formatting(
     done_font = Font(color=RAG_GREEN_FONT)
     progress_fill = PatternFill("solid", fgColor=RAG_AMBER)
     progress_font = Font(color=RAG_AMBER_FONT)
+    review_fill = PatternFill("solid", fgColor=STATUS_REVIEW_FILL)
+    review_font = Font(color=STATUS_REVIEW_FONT)
     todo_fill = PatternFill("solid", fgColor=STATUS_TODO_FILL)
     todo_font = Font(color=STATUS_TODO_FONT)
     legacy_done = (
         f'OR(LOWER({top})="done",LOWER({top})="completed",'
         f'LOWER({top})="fixed",LOWER({top})="closed")'
     )
-    legacy_progress = (
-        f'OR(LOWER({top})="in progress",LOWER({top})="in review",'
-        f'LOWER({top})="review")'
-    )
+    legacy_progress = f'LOWER({top})="in progress"'
+    legacy_review = f'OR(LOWER({top})="in review",LOWER({top})="review")'
     legacy_todo = f'OR(LOWER({top})="to do",LOWER({top})="open")'
     for formula, fill, font in (
         (legacy_done, done_fill, done_font),
         (legacy_progress, progress_fill, progress_font),
+        (legacy_review, review_fill, review_font),
         (legacy_todo, todo_fill, todo_font),
     ):
         worksheet.conditional_formatting.add(

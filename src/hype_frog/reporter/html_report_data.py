@@ -135,7 +135,12 @@ def build_report_context(
     ctx.observation_url_count = sev_counts_all.get("Observation", 0)
 
     # ── AEO ───────────────────────────────────────────────────────────────────
-    aeo_vals = [_to_float(r.get("AEO Readiness Score")) for r in extra_rows if r.get("AEO Readiness Score") is not None]
+    aeo_vals = [
+        _to_float(r.get("AEO Readiness Score"))
+        for r in extra_rows
+        if str(r.get("AEO Badge") or "").strip() != "Unmeasured"
+        and r.get("AEO Readiness Score") is not None
+    ]
     ctx.aeo_readiness_mean = round(sum(aeo_vals) / max(len(aeo_vals), 1), 1) if aeo_vals else 0.0
 
     # ── PSI — extra_rows (Technical Diagnostics) carries PSI columns ───────────

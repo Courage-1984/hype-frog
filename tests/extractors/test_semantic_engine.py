@@ -96,17 +96,18 @@ def test_count_citation_paragraph_too_long_is_excluded() -> None:
 
 def test_count_citation_paragraph_in_band_without_trigger_is_excluded() -> None:
     paragraph = (
-        "Answer engine optimization helps brands appear within AI summaries by "
-        "shaping schema markup, headings, and concise factual statements so that "
-        "LLM-driven search experiences such as Perplexity surface them as "
-        "cite-worthy knowledge across question-led research journeys for many "
-        "buyers actively investigating modern enterprise software today daily."
+        "Brands appearing within AI summaries shaped schema markup, headings, "
+        "and concise factual statements while LLM-driven search experiences "
+        "surfaced them across question-led research journeys, with buyers "
+        "actively investigating modern enterprise software while comparing "
+        "vendors, pricing tiers, onboarding timelines, integration catalogues, "
+        "support commitments, and negotiated contract terms during procurement."
     )
     word_count = len(paragraph.split())
     assert CITATION_MIN_WORDS <= word_count <= CITATION_MAX_WORDS, (
         f"setup error: word_count={word_count}"
     )
-    # No " is " / " are " / " refers to " / " means " / " provides " trigger word.
+    # Contains no definition trigger and is not a question-led Q&A block.
     assert count_citation_candidates(body_text=None, paragraphs=[paragraph]) == 0
 
 
@@ -130,9 +131,25 @@ def test_count_citation_aggregates_multiple_paragraphs() -> None:
     )  # 50 words with " is "
     no_too_short = "It is short."
     yes_again = "AEO refers to " + " ".join(["filler"] * 48)
-    no_no_trigger = "AEO helps brands " + " ".join(["filler"] * 47)
-    paragraphs = [yes, no_too_short, yes_again, no_no_trigger]
-    assert count_citation_candidates(body_text=None, paragraphs=paragraphs) == 2
+    yes_helps = "AEO helps brands " + " ".join(["filler"] * 47)  # " helps " trigger
+    paragraphs = [yes, no_too_short, yes_again, yes_helps]
+    assert count_citation_candidates(body_text=None, paragraphs=paragraphs) == 3
+
+
+def test_count_citation_question_led_qa_block_counts() -> None:
+    answer = " ".join(["insight"] * 40)
+    qa_block = f"Why does answer engine optimisation matter? {answer}."
+    word_count = len(qa_block.split())
+    assert CITATION_MIN_WORDS <= word_count <= CITATION_MAX_WORDS
+    assert count_citation_candidates(body_text=None, paragraphs=[qa_block]) == 1
+
+    # A question with a too-thin answer is not citeable.
+    thin_padding = " ".join(["window-padding"] * 30)
+    thin = (
+        f"{thin_padding}. Why does answer engine optimisation matter? It just does."
+    )
+    assert CITATION_MIN_WORDS <= len(thin.split()) <= CITATION_MAX_WORDS
+    assert count_citation_candidates(body_text=None, paragraphs=[thin]) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -184,14 +201,32 @@ def test_compute_aeo_score_negative_inputs_clamped_to_zero() -> None:
     assert _compute_aeo_score(-5.0, -3) == 0.0
 
 
-def test_keyword_fallback_extracts_proper_nouns_and_keywords() -> None:
+def test_keyword_fallback_extracts_proper_nouns_and_acronyms_only() -> None:
     text = (
         "The African Marketing Confederation provides resources for SEO teams. "
         "Marketing teams use analytics across Africa."
     )
     entities = extract_keyword_entities_fallback(text)
     assert any("African Marketing Confederation" in ent for ent in entities)
-    assert any(ent.lower() in {"marketing", "analytics", "resources"} for ent in entities)
+    assert "SEO" in entities
+    # Regression: common lowercase words must NOT be promoted to entities —
+    # the old frequency top-up inflated Entity Density past 100% on short pages.
+    assert "Analytics" not in entities
+    assert "Resources" not in entities
+
+
+def test_entity_density_is_clamped_to_sanity_ceiling() -> None:
+    from hype_frog.extractors.semantic_engine import (
+        _ENTITY_DENSITY_MAX_PCT,
+        _entity_density_pct,
+    )
+
+    # 30 entities over 33 words would be ~91% — extractor noise, not signal.
+    assert _entity_density_pct([f"Entity{i}" for i in range(30)], 33) == (
+        _ENTITY_DENSITY_MAX_PCT
+    )
+    assert _entity_density_pct(["Acme"], 100) == 1.0
+    assert _entity_density_pct([], 0) == 0.0
 
 
 # ---------------------------------------------------------------------------

@@ -346,6 +346,26 @@ def build_pattern_rows(
     }
 
 
+_REVENUE_INTENT_SEARCH_INTENTS = frozenset({"Transactional", "Commercial Investigation"})
+
+
+def _gsc_impressions_top_quartile_threshold(
+    extra_rows: list[dict[str, Any]],
+    value_or_default_fn: Callable[[object, float], float],
+) -> float | None:
+    """75th-percentile GSC Impressions across the crawl, or ``None`` if no data."""
+    impressions = [
+        value_or_default_fn(row.get("GSC Impressions"), 0.0)
+        for row in extra_rows
+        if row.get("GSC Impressions") is not None
+    ]
+    if not impressions:
+        return None
+    ordered = sorted(impressions)
+    index = min(len(ordered) - 1, int(0.75 * len(ordered)))
+    return ordered[index]
+
+
 def build_priority_rows(
     extra_rows: list[dict[str, Any]],
     *,
@@ -354,6 +374,9 @@ def build_priority_rows(
     owner_for_issue_fn: Callable[[str, str], str],
 ) -> list[dict[str, Any]]:
     priority_rows: list[dict[str, Any]] = []
+    impressions_top_quartile = _gsc_impressions_top_quartile_threshold(
+        extra_rows, value_or_default_fn
+    )
     for row in extra_rows:
         badge = str(row.get("Severity Badge") or "").strip()
         seo_raw = row.get("SEO Health Score")
@@ -388,9 +411,19 @@ def build_priority_rows(
             else ""
         )
         url_value = str(row.get("URL") or "")
+        row_impressions = row.get("GSC Impressions")
+        is_top_quartile_traffic = (
+            impressions_top_quartile is not None
+            and row_impressions is not None
+            and value_or_default_fn(row_impressions, 0.0) >= impressions_top_quartile
+        )
         revenue_intent = (
             "High"
-            if any(slug in url_value.lower() for slug in high_value_slugs)
+            if (
+                any(slug in url_value.lower() for slug in high_value_slugs)
+                or str(row.get("Search Intent") or "") in _REVENUE_INTENT_SEARCH_INTENTS
+                or is_top_quartile_traffic
+            )
             else "Standard"
         )
         seo_display = row.get("SEO Health Score")

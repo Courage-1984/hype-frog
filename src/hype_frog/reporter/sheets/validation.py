@@ -6,6 +6,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.reporter.sheets.config import (
+    CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     DISABLE_DATA_VALIDATION,
     DISABLE_TOOLTIPS,
@@ -83,12 +84,13 @@ _CONTENT_AI_READINESS_HELP: dict[str, str] = {
     ),
     "Answer Blocks": format_help_layer(
         description=(
-            "Count of 40–60 word body paragraphs detected under question-oriented headings—"
-            "the primary on-page pattern cited by answer engines."
+            "Count of 40–60 word body paragraphs under question-oriented headings — "
+            "the highest-leverage AEO pattern for answer-engine citation."
         ),
         calculation=(
-            "Equals ``Paragraphs 40-60 Words Count`` from the crawl/HTML pipeline, copied into "
-            "the Content & AI ``Answer Blocks`` column at export (no Excel formula)."
+            "Equals ``Paragraphs 40-60 Words Count`` from the crawl/HTML pipeline. "
+            "When zero, prioritise rewriting H2–H4 as natural questions (Who/What/How) "
+            "and place a concise 40–60 word factual answer directly underneath each."
         ),
     ),
     "Flesch-Kincaid Grade (Est.)": format_help_layer(
@@ -119,9 +121,10 @@ _TECHNICAL_DIAGNOSTICS_HELP: dict[str, str] = {
             "Composite 0–100 technical SEO quality for this URL from matched audit rules."
         ),
         calculation=(
-            "Python ``score_url_health``: start at 100, subtract 25×Critical issue count, "
-            "10×Warning count, and min(10, 3×Observation count); clamp to ≥0. Unmeasured when "
-            "Extraction State is not scorable."
+            "Python ``score_url_health``: start at 100, subtract capped diminishing "
+            "penalties — Critical 20 for the first +10 each extra (cap 50), Warning 8 "
+            "+5 (cap 30), Observation 3 each (cap 10); clamp to ≥0. 0 is reserved for "
+            "non-200/404 pages. Unmeasured when Extraction State is not scorable."
         ),
     ),
     "Desktop PSI Score": format_help_layer(
@@ -233,6 +236,68 @@ _QUICK_WINS_HELP: dict[str, str] = {
     ),
 }
 
+_PRIORITY_URLS_HELP: dict[str, str] = {
+    "Business Risk Score": format_help_layer(
+        description="Relative urgency ranking that sorts this tab (higher = fix sooner).",
+        calculation=(
+            "Critical Issues Count x 30 + Warning Issues Count x 10 + "
+            "(100 - SEO Health Score); computed at export time, not a workbook formula."
+        ),
+    ),
+    "Severity Badge": format_help_layer(
+        description="Worst issue severity found on this URL (Critical > Warning > Observation > Pass).",
+        calculation=(
+            "Presence-based: set to the highest severity tier with at least one matched "
+            "issue rule from score_url_health. Unmeasured when Extraction State is not scorable."
+        ),
+    ),
+    "Revenue Intent": format_help_layer(
+        description="High when this page looks commercially important — worth prioritising fixes here.",
+        calculation=(
+            "High when the URL matches a configured high-value slug, OR Search Intent is "
+            "Transactional/Commercial Investigation, OR GSC Impressions sit in this crawl's "
+            "top quartile; otherwise Standard."
+        ),
+    ),
+    "Why Prioritized": format_help_layer(
+        description="Plain-language reasons this URL made the priority list.",
+        calculation=(
+            "Joined from: has critical issues, broken internal links, cross-canonical, "
+            "noindex — whichever apply; \"Monitor\" when none do."
+        ),
+    ),
+    "Owner": format_help_layer(
+        description="Suggested team to action the top issue on this URL (Dev/Copy Writer/SEO Lead).",
+        calculation="Mapped from the highest-severity matched issue's category.",
+    ),
+    "Status": format_help_layer(
+        description="Editable — track triage here. The tool seeds \"Open\" and never overwrites your edits on re-export of this workbook copy.",
+        calculation="Manual field; not recalculated.",
+    ),
+    "Sprint": format_help_layer(
+        description="Editable — assign a sprint/iteration label. Blank by default.",
+        calculation="Manual field; not recalculated.",
+    ),
+}
+
+_CONTENT_HUB_METRICS_HELP: dict[str, str] = {
+    "Search Intent Source": format_help_layer(
+        description="How Search Intent was determined for this URL.",
+        calculation=(
+            "LLM when a hosted or local OpenAI-compatible model classified it; Heuristic "
+            "when a URL/title/meta keyword rule matched instead (no LLM configured or the "
+            "LLM call returned Unknown); Unknown when neither classified the page."
+        ),
+    ),
+    "Instant Priority": format_help_layer(
+        description="CRITICAL flags a high-traffic page with a specific AEO or performance risk.",
+        calculation=(
+            "CRITICAL when GSC clicks exceed the traffic threshold AND (AEO score is low OR "
+            "field LCP is slow); Standard otherwise."
+        ),
+    ),
+}
+
 _BROKEN_LINK_IMPACT_HELP: dict[str, str] = {
     "Priority Score": format_help_layer(
         description=(
@@ -341,17 +406,30 @@ _SITEMAPQA_HELP: dict[str, str] = {
 _CONTENT_HUB_SEMANTIC_HELP: dict[str, str] = {
     "Entity Density (%)": format_help_layer(
         description=(
-            "The percentage of page content identified as named entities (people, orgs, places)."
+            "The percentage of page content identified as named entities (people, orgs, places). "
+            "Healthy pages usually sit in low single digits; the value is sanity-capped at 50%."
         ),
-        calculation="(Named entities / total words) × 100 from semantic extraction.",
+        calculation=(
+            "(Unique named entities / total words) × 100 from semantic extraction "
+            "(spaCy NER, or proper-noun/acronym fallback). Stored on a 0–100 scale "
+            "and displayed with a literal % suffix."
+        ),
     ),
     "Top Entities": format_help_layer(
         description="The most frequent named entities on the page (semantic relevance signal).",
         calculation="Ranked entity list from the semantic analyser for this URL.",
     ),
     "Citation Candidate Count": format_help_layer(
-        description="Count of 40–60 word snippets suitable for answer-engine citation.",
-        calculation="Snippets starting with answer triggers (e.g. 'is', 'means') from semantic pass.",
+        description=(
+            "Count of 25–90 word blocks suitable for answer-engine citation. "
+            "0 means the page lacks citeable definition/answer blocks — add a "
+            "25–90 word paragraph that defines or directly answers something."
+        ),
+        calculation=(
+            "Blocks containing a definition trigger ('is', 'means', 'provides', "
+            "'how to', …) or opening with a question followed by a ≥15-word "
+            "answer, from the semantic pass."
+        ),
     ),
     "Semantic AEO Score": format_help_layer(
         description="Weighted 0–100 score from entity density and citation readiness.",
@@ -364,6 +442,8 @@ _SHEET_CURATED_HEADER_HELP: dict[str, dict[str, str]] = {
     "Technical Diagnostics": _TECHNICAL_DIAGNOSTICS_HELP,
     "Link Intelligence": _LINK_INTELLIGENCE_HELP,
     CONTENT_OPTIMISATION_HUB_SHEET: _CONTENT_HUB_SEMANTIC_HELP,
+    CONTENT_HUB_METRICS_SHEET: _CONTENT_HUB_METRICS_HELP,
+    "Priority URLs": _PRIORITY_URLS_HELP,
     "FixPlan": _FIXPLAN_HELP,
     "Quick Wins": _QUICK_WINS_HELP,
     "Broken Link Impact": _BROKEN_LINK_IMPACT_HELP,
@@ -507,7 +587,8 @@ def tooltip_for_header(header: str) -> str:
             description="Composite SEO quality score for this URL (higher is better).",
             calculation=(
                 "When labelled ``SEO Health Score``, matches ``score_url_health`` "
-                "(100 − 25×Critical − 10×Warning − min(10,3×Observation), floored at 0). "
+                "(100 − capped diminishing penalties: Critical 20+10/extra cap 50, "
+                "Warning 8+5/extra cap 30, Observation 3 each cap 10; floored at 0). "
                 "Other *Health* columns may use different pipeline blends—see sheet context."
             ),
         )

@@ -171,6 +171,62 @@ def test_build_priority_rows_ties_break_by_discovery_rank() -> None:
     assert "Discovery Rank" not in rows[0]
 
 
+def test_build_priority_rows_revenue_intent_from_search_intent() -> None:
+    """High-intent Search Intent labels mark Revenue Intent High even off-slug."""
+    extra_rows = [
+        {
+            "URL": "https://s/some-page",
+            "Critical Issues Count": 0,
+            "Warning Issues Count": 0,
+            "SEO Health Score": 100.0,
+            "Broken Internal Links Count": 0,
+            "Search Intent": "Transactional",
+        },
+        {
+            "URL": "https://s/other-page",
+            "Critical Issues Count": 0,
+            "Warning Issues Count": 0,
+            "SEO Health Score": 100.0,
+            "Broken Internal Links Count": 0,
+            "Search Intent": "Informational",
+        },
+    ]
+    rows = build_priority_rows(
+        extra_rows,
+        high_value_slugs=[],
+        value_or_default_fn=_value_or_default,
+        owner_for_issue_fn=lambda _issue, _sev: "SEO Lead",
+    )
+    by_url = {row["URL"]: row for row in rows}
+    assert by_url["https://s/some-page"]["Revenue Intent"] == "High"
+    assert by_url["https://s/other-page"]["Revenue Intent"] == "Standard"
+
+
+def test_build_priority_rows_revenue_intent_from_top_quartile_traffic() -> None:
+    """A page whose GSC Impressions sit in the crawl's top quartile is High."""
+    extra_rows = [
+        {
+            "URL": f"https://s/page-{i}",
+            "Critical Issues Count": 0,
+            "Warning Issues Count": 0,
+            "SEO Health Score": 100.0,
+            "Broken Internal Links Count": 0,
+            "GSC Impressions": i * 10,
+        }
+        for i in range(1, 9)
+    ]
+    rows = build_priority_rows(
+        extra_rows,
+        high_value_slugs=[],
+        value_or_default_fn=_value_or_default,
+        owner_for_issue_fn=lambda _issue, _sev: "SEO Lead",
+    )
+    by_url = {row["URL"]: row for row in rows}
+    # Highest-impressions page must be flagged High; a low-traffic page Standard.
+    assert by_url["https://s/page-8"]["Revenue Intent"] == "High"
+    assert by_url["https://s/page-1"]["Revenue Intent"] == "Standard"
+
+
 def test_build_priority_rows_unmeasured_skips_health_penalty() -> None:
     extra_rows = [
         {

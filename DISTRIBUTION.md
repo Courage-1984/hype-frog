@@ -146,7 +146,7 @@ Re-run `hype-frog.exe --gsc-auth` to refresh `token.json`.
 
 ### PSI quota exceeded
 
-The `PSI_API_KEY` has a daily request quota. Lower `--max-psi-urls` or wait until the quota resets (midnight Pacific time).
+The `PSI_API_KEY` has a daily request quota. Answer a lower number at the interactive **PSI limit** prompt (or wait until the quota resets, midnight Pacific time). `--max-psi-urls` is not available on this legacy flag surface — it's a structured-CLI-only flag (`hype-frog.exe crawl --url <url> --max-psi-urls N`), which also works from this `.exe` if you prefer a non-interactive invocation.
 
 ---
 
@@ -173,3 +173,9 @@ uv sync --extra dev --extra semantic --extra render
 uv run python build_exe.py
 # Output: dist/hype-frog.exe
 ```
+
+This builds the standalone PyInstaller executable this guide covers (zero
+runtime dependencies — the right choice for end users without Python/`uv`
+installed). For technical users who already have `uv`, a lighter alternative
+exists: `uv run python scripts/build.py` produces a `uv`-run source bundle
+under `dist/hype-frog-<version>/` instead (see the root [`README.md`](README.md)).

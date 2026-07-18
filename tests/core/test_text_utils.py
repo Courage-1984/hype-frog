@@ -43,6 +43,14 @@ def test_image_extension_recognises_known_types() -> None:
     assert image_extension("https://s.test/no-extension") == "other"
 
 
+def test_image_extension_recognises_ico() -> None:
+    """Regression: ``.ico`` was missing from the recognised list, so
+    ``pipeline/image_inventory.py::_image_category``'s ``ext in {"ico", "svg"}``
+    check could never match a favicon — this function is the only source of
+    ``ext``, so a real, verifiable dead-code bug, not just a design choice."""
+    assert image_extension("https://s.test/favicon.ico") == "ico"
+
+
 def test_looks_generic_image_filename() -> None:
     assert looks_generic_image_filename("https://s.test/img_123.jpg") is True
     assert looks_generic_image_filename("https://s.test/photo1.png") is True

@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 
 from hype_frog.core import get_logger
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
+from hype_frog.core.skipped_row_contract import apply_skipped_row_contract
 from hype_frog.core.text_utils import status_class
 from hype_frog.core.url_normalization import normalize_url_key
 from hype_frog.extractors.robots import resolve_indexability_directive
@@ -310,6 +311,9 @@ def assemble_from_html(
     apply_schema_signals(ctx)
     apply_link_inventory(ctx)
     apply_eeat_and_freshness(ctx)
+    if main_data.values.get("Extraction State") not in {"complete", "partial"}:
+        main_data.values["Extraction State"] = "complete"
+        extra.values["Extraction State"] = "complete"
 
 
 def finalize_row_state(
@@ -348,3 +352,5 @@ def finalize_row_state(
     if main_values.get("Extraction State") not in {"complete", "partial"}:
         main_values["Extraction State"] = "skipped"
     extra_values["Extraction State"] = main_values["Extraction State"]
+    if main_values["Extraction State"] == "skipped":
+        apply_skipped_row_contract(main_values, extra_values)

@@ -24,6 +24,7 @@ from hype_frog.reporter.sheets.workbook_layout import (
     PREFERRED_WORKBOOK_TAB_ORDER,
     SHEETS_EXCLUDED_FROM_TOC,
     TOC_ADVANCED_SECTION_LABEL,
+    TOC_ADVANCED_SECTION_LABEL_SHOWN,
     TOC_PRIMARY_SECTION_LABEL,
     VISIBLE_WORKBOOK_TAB_ORDER,
     apply_workbook_tab_layout,
@@ -117,7 +118,11 @@ def apply_workbook_toc_and_links(
             row_ptr,
             "",
             std_blue_color=std_blue,
-            section_label=TOC_ADVANCED_SECTION_LABEL,
+            section_label=(
+                TOC_ADVANCED_SECTION_LABEL
+                if hide_advanced_tabs
+                else TOC_ADVANCED_SECTION_LABEL_SHOWN
+            ),
         )
         for sheet_name in ADVANCED_WORKBOOK_TAB_ORDER:
             if sheet_name in SHEETS_EXCLUDED_FROM_TOC:
@@ -157,7 +162,11 @@ def apply_workbook_toc_and_links(
         toc_ws[ref].font = Font(color=std_white, bold=True)
     toc_ws.column_dimensions["A"].width = 40
     toc_ws.column_dimensions["B"].width = 12
-    toc_ws.column_dimensions["C"].width = 100
+    # 72 (was 100): the description column already wraps, so a narrower column keeps
+    # the whole TOC inside a laptop viewport without horizontal scroll and lets long
+    # blurbs flow onto a second line instead of stretching off-screen.
+    _toc_desc_width = 72
+    toc_ws.column_dimensions["C"].width = _toc_desc_width
     toc_ws.freeze_panes = "A3"
     _rebuild_toc_body(toc_ws, wb)
     for row_idx in range(3, toc_ws.max_row + 1):
@@ -166,7 +175,7 @@ def apply_workbook_toc_and_links(
             continue
         cell.alignment = Alignment(wrap_text=True, vertical="top", horizontal="left")
         text = str(cell.value or "")
-        wrap_lines = max(1, (len(text) // 100) + 1)
+        wrap_lines = max(1, (len(text) // _toc_desc_width) + 1)
         if wrap_lines > 1:
             toc_ws.row_dimensions[row_idx].height = min(60, 15 * wrap_lines)
 

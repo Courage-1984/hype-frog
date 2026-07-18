@@ -15,10 +15,14 @@ from hype_frog.reporter.sheets.config import (
 )
 from hype_frog.reporter.sheets.navigation import (
     add_return_to_briefing_strip,
-    apply_return_strip_run_metadata,
-    build_run_metadata_subtitle_formula,
+    apply_return_strip_descriptions,
+)
+from hype_frog.reporter.sheets.sheet_descriptions import (
+    SHEET_END_USER_DESCRIPTIONS,
+    sheet_end_user_description,
 )
 from hype_frog.reporter.sheets.validation import apply_workflow_status_dropdown
+from hype_frog.reporter.sheets.workbook_layout import PREFERRED_WORKBOOK_TAB_ORDER
 
 
 def test_auto_filter_sheets_include_actionable_tabs() -> None:
@@ -83,15 +87,21 @@ def test_cf_zebra_banding_on_small_data_sheet() -> None:
     assert zebra_rule.dxf.fill.fgColor.rgb.endswith(ZEBRA_BAND)
 
 
-def test_return_strip_run_metadata_formula() -> None:
-    formula = build_run_metadata_subtitle_formula()
-    assert formula.startswith("=")
-    assert "Target Site" in formula
-    assert "Total URLs" in formula
-    assert "Run Timestamp" in formula
+def test_sheet_end_user_description_lookup() -> None:
+    assert sheet_end_user_description("Main").startswith("Complete URL inventory")
+    # Unknown / self-describing sheets return empty (no banner written).
+    assert sheet_end_user_description("Table of Contents") == ""
+    assert sheet_end_user_description("Not A Real Sheet") == ""
 
 
-def test_return_strip_splits_navigation_and_metadata() -> None:
+def test_return_strip_description_keys_are_canonical_sheet_names() -> None:
+    """Guards the 3-way sheet-name lock: every banner key is a real tab."""
+    canonical = set(PREFERRED_WORKBOOK_TAB_ORDER)
+    unknown = set(SHEET_END_USER_DESCRIPTIONS) - canonical
+    assert not unknown, f"description keys not in tab order: {sorted(unknown)}"
+
+
+def test_return_strip_shows_description_banner() -> None:
     wb = Workbook()
     ws = wb.active
     ws.title = "FixPlan"
@@ -104,17 +114,9 @@ def test_return_strip_splits_navigation_and_metadata() -> None:
 
     assert ws["A1"].value == RETURN_TO_BRIEFING_LABEL
     assert ws["A1"].hyperlink is not None
-    assert ws["C1"].alignment.horizontal == "right"
+    assert ws["C1"].alignment.horizontal == "left"
+    assert ws["C1"].alignment.wrap_text is True
 
-    details = wb.create_sheet("Audit Run Details")
-    details["A1"] = "Key"
-    details["B1"] = "Value"
-    details["A2"] = "Target Site"
-    details["B2"] = "example.com"
-    details["A3"] = "Total URLs"
-    details["B3"] = 42
-    details["A4"] = "Run Timestamp"
-    details["B4"] = "2026-07-01T12:00:00Z"
-
-    apply_return_strip_run_metadata(wb)
-    assert str(ws["C1"].value).startswith("=")
+    apply_return_strip_descriptions(wb)
+    assert ws["C1"].value == sheet_end_user_description("FixPlan")
+    assert not str(ws["C1"].value).startswith("=")

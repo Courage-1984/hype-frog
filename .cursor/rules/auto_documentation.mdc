@@ -26,6 +26,7 @@ When code changes behaviour or contracts, update the **canonical** narrative in 
 | Pipeline, BFS, AEO, intent, ROI, PSI/CrUX, layers | `docs/system_architecture.md` |
 | Row shapes, Pydantic, checkpoints, IssueRule scope, GSC null semantics | `docs/data_contracts.md` |
 | Excel integrity, TOC, hub, view state, merged sheets, Main CF | `docs/excel_reporting_standards.md` |
+| Per-tab audience, content, and end-user descriptions | `docs/workbook_tabs.md` |
 | Structured logging stack, `run_id`, JSONL schema, console/file split | `docs/logging_architecture.md` |
 | Concurrency model, memory profile, event-loop/throughput bottlenecks, benchmark methodology | `docs/performance_benchmarks.md` |
 | CLI commands, flags, and usage examples | `commands.md` |
@@ -44,7 +45,7 @@ Proactively suggest concrete edits under `./docs/` when:
 
 ## How to propose updates
 
-- Keep topic files aligned with the **five** `docs/*.md` files above (no sprawl).
+- Keep topic files aligned with the **six** `docs/*.md` files above (no sprawl).
 - Prefer `./docs/` for narrative “why” and invariants; use code comments for local “what this block does.” Do not replace tests with documentation.
 
 ## Testing invariants

@@ -141,7 +141,7 @@ Per-hop redirect data is captured from aiohttp `response.history` in `crawler/re
 | `Has Mixed Redirect Types` | bool | Both permanent and temporary hops |
 | `Redirect Loop Flag` | bool | Source URL equals final URL with hops |
 
-Full-suite exports add **Redirect Map** (one row per URL with `Redirect Chain Length` > 0) and refresh the **Redirects** tab. Registry rules: `Redirect Chains`, `302 Redirect (Temporary)`, `Mixed 301/302 Chain`, `Redirect Loop`.
+Full-suite exports build one row per URL with `Redirect Chain Length` > 0 via `crawler/redirect_chain.py::build_redirect_map_row()` — the internal function name predates the current tab layout; the exported sheet is named **Redirects** (there is no separate "Redirect Map" tab — see `docs/workbook_tabs.md`). Registry rules: `Redirect Chains`, `302 Redirect (Temporary)`, `Mixed 301/302 Chain`, `Redirect Loop`.
 
 ## Canonical chain tracing (B1 — Main merge + Extra)
 
@@ -228,7 +228,7 @@ The delta system is split across four modules:
 |--------|------|
 | `analysis/delta_engine.py` | Compares current run against prior export; tags URLs as new / changed / removed |
 | `analysis/delta_loader.py` | Loads prior run snapshots from `_delta_summary.json` or legacy xlsx via `load_run_snapshot()`, `load_snapshot_json()`, `load_snapshot_xlsx()` |
-| `analysis/delta_models.py` | Dataclasses and constants: `SNAPSHOT_VERSION = 1`, `DELTA_SUMMARY_SUFFIX`, `METRIC_FIELDS` (SEO Health, AEO Readiness, Mobile PSI, Technical Health), `DELTA_SHEET_COLUMNS` (14 columns: Section, URL, Issue, Severity, Previous/Current Value, Change, Direction, First/Last Seen, Days Open, Trend Runs, Notes), `RunSnapshot` dataclass, utility helpers (`direction_for_change`, `utc_now_iso`, `parse_run_timestamp`) |
+| `analysis/delta_models.py` | Dataclasses and constants: `SNAPSHOT_VERSION = 1`, `DELTA_SUMMARY_SUFFIX`, `METRIC_FIELDS` (SEO Health, AEO Readiness, Mobile PSI, Technical Health), `DELTA_SHEET_COLUMNS` (16 columns: Section, Stable Issue ID, URL, Issue, Severity, Previous/Current Value, Change, Direction, First/Last Seen, Days Open, Trend Run 1–3, Notes), `RunSnapshot` dataclass, utility helpers (`direction_for_change`, `utc_now_iso`, `parse_run_timestamp`) |
 | `analysis/delta_sheet_builder.py` | Builds `DeltaFromPreviousRun` sheet rows via `build_delta_sheet_rows()` (multi-section: Summary, New Issues, Resolved Issues, Health Trend) and `build_health_trend_section()` (three-run trend visualisation) |
 
 URL matching in `delta_engine.py` uses **normalised URL identity** from `core/url_normalization.py` — never raw strings. Delta output is additive-key only for backward reporter compatibility.

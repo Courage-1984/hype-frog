@@ -2,7 +2,19 @@ from __future__ import annotations
 
 import pytest
 
-from hype_frog.crawler.data_assembler import assemble_from_html, finalize_row_state, init_rows
+from hype_frog.crawler.data_assembler import (
+    _append_schema_ld_image_value,
+    _collect_raw_og_image_candidates,
+    _dedupe_preserve_order,
+    _has_truthy_header,
+    _json_ld_walk_collect_images,
+    _normalize_candidate_image_url,
+    assemble_from_html,
+    finalize_row_state,
+    init_rows,
+    readability_flesch,
+    url_depth,
+)
 from hype_frog.core.models import ExtraRowPayload, MainRowPayload
 from hype_frog.pipeline.export import sanitize_rows
 
@@ -60,7 +72,7 @@ def test_assemble_from_html_populates_typed_payload_offline() -> None:
     assert extra["Meta Description Missing"] is False
     assert extra["Internal Links Count"] == 1
     assert extra["Indexability Reason"] == "Indexable"
-    assert main["Extraction State"] == "skipped"
+    assert main["Extraction State"] == "complete"
 
 
 def test_assemble_from_html_og_image_relative_resolves_to_absolute() -> None:
@@ -173,7 +185,7 @@ def test_assemble_from_malformed_html_is_resilient() -> None:
     extra = extra_payload.values
     assert main["Title"] is None or "Broken Title" in str(main["Title"])
     assert extra["H1 Count"] >= 1
-    assert main["Extraction State"] == "skipped"
+    assert main["Extraction State"] == "complete"
 
 
 def test_assemble_with_missing_elements_uses_safe_defaults() -> None:
@@ -196,7 +208,7 @@ def test_assemble_with_missing_elements_uses_safe_defaults() -> None:
     assert extra["Meta Description Missing"] is True
     assert extra["H1 Count"] == 0
     assert extra["Missing H1 Flag"] is True
-    assert main["Extraction State"] == "skipped"
+    assert main["Extraction State"] == "complete"
 
 
 def test_assemble_excludes_sidebar_widget_content_without_main_tag() -> None:
@@ -338,7 +350,7 @@ def test_assemble_with_giant_link_payload_counts_correctly() -> None:
     assert len(extra["Internal Links List"]) == 200
     assert len(extra["Internal Links List Full"]) == 3000
     assert len(extra["Link Details"]) == 3000
-    assert main_payload.values["Extraction State"] == "skipped"
+    assert main_payload.values["Extraction State"] == "complete"
 
 
 def test_assemble_character_encoding_remains_excel_safe_after_sanitize() -> None:
@@ -366,7 +378,7 @@ def test_assemble_character_encoding_remains_excel_safe_after_sanitize() -> None
     assert "日本語" in str(sanitized_main["Title"])
     assert "\x0b" not in str(sanitized_main["Title"])
     assert "Заголовок 😀" in str(sanitized_extra["Current H-Tag Structure"] or "")
-    assert main_payload.values["Extraction State"] == "skipped"
+    assert main_payload.values["Extraction State"] == "complete"
 
 
 def test_init_rows_populates_sitemap_metadata_including_images() -> None:
@@ -438,3 +450,244 @@ def test_finalize_row_state_request_failures_set_not_indexable(
     finalize_row_state(main_payload, extra_payload)
     assert main_payload.values["Indexability"] == "Not Indexable"
     assert extra_payload.values["Indexability Reason"] == expected_reason
+
+
+# ---------------------------------------------------------------------------
+# readability_flesch
+# ---------------------------------------------------------------------------
+
+
+def test_readability_flesch_typical_values_produce_bounded_score() -> None:
+    score = readability_flesch(words=100, sentences=8, syllables=140)
+    assert score is not None
+    assert 0.0 <= score <= 100.0
+
+
+def test_readability_flesch_zero_words_returns_none() -> None:
+    assert readability_flesch(words=0, sentences=5, syllables=10) is None
+
+
+def test_readability_flesch_zero_sentences_returns_none() -> None:
+    assert readability_flesch(words=50, sentences=0, syllables=10) is None
+
+
+def test_readability_flesch_extreme_inputs_clamp_to_bounds() -> None:
+    """Degenerate inputs (very long words/sentences) must clamp to the
+    documented [0, 100] range rather than returning an out-of-range score."""
+    high = readability_flesch(words=10, sentences=10, syllables=10)
+    assert high is not None
+    assert high <= 100.0
+    low = readability_flesch(words=100, sentences=1, syllables=1000)
+    assert low is not None
+    assert low >= 0.0
+
+
+# ---------------------------------------------------------------------------
+# url_depth
+# ---------------------------------------------------------------------------
+
+
+def test_url_depth_root_is_zero() -> None:
+    assert url_depth("https://example.com/") == 0
+    assert url_depth("https://example.com") == 0
+
+
+def test_url_depth_counts_path_segments() -> None:
+    assert url_depth("https://example.com/a/b/c") == 3
+
+
+# ---------------------------------------------------------------------------
+# _has_truthy_header
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, False),
+        (False, False),
+        ("", False),
+        ("   ", False),
+        ("value", True),
+        (0, False),
+        (1, True),
+        ([], False),
+        ([1], True),
+    ],
+)
+def test_has_truthy_header(value: object, expected: bool) -> None:
+    assert _has_truthy_header(value) is expected
+
+
+# ---------------------------------------------------------------------------
+# _normalize_candidate_image_url
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "scheme",
+    ["javascript:alert(1)", "data:image/png;base64,abc", "vbscript:msgbox(1)", "file:///etc/passwd", "about:blank"],
+)
+def test_normalize_candidate_image_url_rejects_dangerous_schemes(scheme: str) -> None:
+    assert _normalize_candidate_image_url(scheme, "https://example.com/") is None
+
+
+def test_normalize_candidate_image_url_blank_returns_none() -> None:
+    assert _normalize_candidate_image_url("", "https://example.com/") is None
+    assert _normalize_candidate_image_url(None, "https://example.com/") is None
+
+
+def test_normalize_candidate_image_url_scheme_relative_gets_https() -> None:
+    result = _normalize_candidate_image_url("//cdn.example.com/img.jpg", "https://example.com/")
+    assert result is not None
+    assert result.startswith("https://cdn.example.com")
+
+
+def test_normalize_candidate_image_url_relative_resolves_against_base() -> None:
+    result = _normalize_candidate_image_url("/img/photo.jpg", "https://example.com/page")
+    assert result == "https://example.com/img/photo.jpg"
+
+
+def test_normalize_candidate_image_url_already_absolute_passthrough() -> None:
+    result = _normalize_candidate_image_url("https://example.com/img.jpg", "https://example.com/")
+    assert result == "https://example.com/img.jpg"
+
+
+# ---------------------------------------------------------------------------
+# _dedupe_preserve_order
+# ---------------------------------------------------------------------------
+
+
+def test_dedupe_preserve_order_removes_duplicates_keeps_first_occurrence_order() -> None:
+    assert _dedupe_preserve_order(["a", "b", "a", "c", "b"]) == ["a", "b", "c"]
+
+
+def test_dedupe_preserve_order_empty_list() -> None:
+    assert _dedupe_preserve_order([]) == []
+
+
+# ---------------------------------------------------------------------------
+# _append_schema_ld_image_value
+# ---------------------------------------------------------------------------
+
+
+def test_append_schema_ld_image_value_string() -> None:
+    bucket: list[str] = []
+    _append_schema_ld_image_value("https://example.com/img.jpg", bucket)
+    assert bucket == ["https://example.com/img.jpg"]
+
+
+def test_append_schema_ld_image_value_dict_with_url_key() -> None:
+    bucket: list[str] = []
+    _append_schema_ld_image_value({"url": "https://example.com/img.jpg"}, bucket)
+    assert bucket == ["https://example.com/img.jpg"]
+
+
+def test_append_schema_ld_image_value_dict_with_content_url_key() -> None:
+    bucket: list[str] = []
+    _append_schema_ld_image_value({"contentUrl": "https://example.com/img.jpg"}, bucket)
+    assert bucket == ["https://example.com/img.jpg"]
+
+
+def test_append_schema_ld_image_value_dict_with_id_key() -> None:
+    bucket: list[str] = []
+    _append_schema_ld_image_value({"@id": "https://example.com/img.jpg"}, bucket)
+    assert bucket == ["https://example.com/img.jpg"]
+
+
+def test_append_schema_ld_image_value_dict_id_key_ignores_non_http() -> None:
+    bucket: list[str] = []
+    _append_schema_ld_image_value({"@id": "#local-fragment"}, bucket)
+    assert bucket == []
+
+
+def test_append_schema_ld_image_value_nested_image_key() -> None:
+    bucket: list[str] = []
+    _append_schema_ld_image_value(
+        {"image": {"url": "https://example.com/nested.jpg"}}, bucket
+    )
+    assert bucket == ["https://example.com/nested.jpg"]
+
+
+def test_append_schema_ld_image_value_list_of_items() -> None:
+    bucket: list[str] = []
+    _append_schema_ld_image_value(
+        ["https://example.com/a.jpg", {"url": "https://example.com/b.jpg"}], bucket
+    )
+    assert bucket == ["https://example.com/a.jpg", "https://example.com/b.jpg"]
+
+
+def test_append_schema_ld_image_value_none_is_noop() -> None:
+    bucket: list[str] = []
+    _append_schema_ld_image_value(None, bucket)
+    assert bucket == []
+
+
+# ---------------------------------------------------------------------------
+# _json_ld_walk_collect_images
+# ---------------------------------------------------------------------------
+
+
+def test_json_ld_walk_collect_images_finds_nested_image_key() -> None:
+    bucket: list[str] = []
+    _json_ld_walk_collect_images(
+        {"@type": "Article", "image": "https://example.com/article.jpg"}, bucket
+    )
+    assert bucket == ["https://example.com/article.jpg"]
+
+
+def test_json_ld_walk_collect_images_depth_limit_stops_recursion() -> None:
+    """A pathologically deep JSON-LD structure must not cause unbounded
+    recursion — the depth cutoff silently stops collecting instead."""
+    bucket: list[str] = []
+    _json_ld_walk_collect_images(
+        {"image": "https://example.com/too-deep.jpg"}, bucket, depth=19
+    )
+    assert bucket == []
+
+
+def test_json_ld_walk_collect_images_walks_list_of_nodes() -> None:
+    bucket: list[str] = []
+    _json_ld_walk_collect_images(
+        [{"image": "https://example.com/a.jpg"}, {"thumbnailUrl": "https://example.com/b.jpg"}],
+        bucket,
+    )
+    assert bucket == ["https://example.com/a.jpg", "https://example.com/b.jpg"]
+
+
+# ---------------------------------------------------------------------------
+# _collect_raw_og_image_candidates — meta/link variants beyond og:image
+# ---------------------------------------------------------------------------
+
+
+def test_collect_raw_og_image_candidates_twitter_image_as_property_attr() -> None:
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(
+        '<html><head><meta property="twitter:image" content="https://example.com/tw.jpg">'
+        "</head><body></body></html>",
+        "lxml",
+    )
+    assert "https://example.com/tw.jpg" in _collect_raw_og_image_candidates(soup)
+
+
+def test_collect_raw_og_image_candidates_itemprop_image() -> None:
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(
+        '<html><head><meta itemprop="image" content="https://example.com/schema.jpg">'
+        "</head><body></body></html>",
+        "lxml",
+    )
+    assert "https://example.com/schema.jpg" in _collect_raw_og_image_candidates(soup)
+
+
+def test_collect_raw_og_image_candidates_link_rel_image_src() -> None:
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(
+        '<html><head><link rel="image_src" href="https://example.com/link.jpg">'
+        "</head><body></body></html>",
+        "lxml",
+    )
+    assert "https://example.com/link.jpg" in _collect_raw_og_image_candidates(soup)

@@ -46,8 +46,10 @@ from hype_frog.crawler.network_engine import (  # noqa: E402
     _coerce_field_metric,
     _compute_is_js_dependent,
     _compute_render_diagnostics,
+    _domain_key,
     _empty_diagnostics,
     _poisson_jitter_seconds,
+    _retry_wait_seconds,
     _strip_html_to_text,
     _word_count,
     fetch_http,
@@ -646,3 +648,386 @@ async def test_fetch_http_200_non_html_does_not_read_body() -> None:
     assert result["html"] is None
     assert result["error_kind"] is None
     response.text.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# _retry_wait_seconds - retry/backoff delay computation
+# ---------------------------------------------------------------------------
+
+
+def test_retry_wait_seconds_honours_numeric_retry_after_on_429() -> None:
+    delay = _retry_wait_seconds(
+        status=429,
+        response_headers={"Retry-After": "5"},
+        attempt=0,
+        retry_base_delay_seconds=1.0,
+        retry_backoff_factor=2.0,
+        retry_max_delay_seconds=60.0,
+        request_jitter_seconds=0.0,
+    )
+    assert delay == 5.0
+
+
+def test_retry_wait_seconds_retry_after_case_insensitive_header() -> None:
+    delay = _retry_wait_seconds(
+        status=429,
+        response_headers={"retry-after": "3"},
+        attempt=0,
+        retry_base_delay_seconds=1.0,
+        retry_backoff_factor=2.0,
+        retry_max_delay_seconds=60.0,
+        request_jitter_seconds=0.0,
+    )
+    assert delay == 3.0
+
+
+def test_retry_wait_seconds_retry_after_capped_at_max_delay() -> None:
+    delay = _retry_wait_seconds(
+        status=429,
+        response_headers={"Retry-After": "999"},
+        attempt=0,
+        retry_base_delay_seconds=1.0,
+        retry_backoff_factor=2.0,
+        retry_max_delay_seconds=30.0,
+        request_jitter_seconds=0.0,
+    )
+    assert delay == 30.0
+
+
+def test_retry_wait_seconds_non_numeric_retry_after_falls_back_to_backoff() -> None:
+    """A non-numeric Retry-After (e.g. an HTTP-date string) must not raise -
+    falls through to the exponential-backoff calculation instead."""
+    delay = _retry_wait_seconds(
+        status=429,
+        response_headers={"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"},
+        attempt=0,
+        retry_base_delay_seconds=1.0,
+        retry_backoff_factor=2.0,
+        retry_max_delay_seconds=60.0,
+        request_jitter_seconds=0.0,
+    )
+    # base(1.0) * factor(2.0)**0 = 1.0, then doubled for 429 = 2.0
+    assert delay == 2.0
+
+
+def test_retry_wait_seconds_exponential_backoff_without_429() -> None:
+    delay = _retry_wait_seconds(
+        status=503,
+        response_headers={},
+        attempt=2,
+        retry_base_delay_seconds=1.0,
+        retry_backoff_factor=2.0,
+        retry_max_delay_seconds=60.0,
+        request_jitter_seconds=0.0,
+    )
+    assert delay == 4.0  # 1.0 * 2.0**2
+
+
+def test_retry_wait_seconds_429_without_retry_after_doubles_backoff() -> None:
+    delay = _retry_wait_seconds(
+        status=429,
+        response_headers={},
+        attempt=1,
+        retry_base_delay_seconds=1.0,
+        retry_backoff_factor=2.0,
+        retry_max_delay_seconds=60.0,
+        request_jitter_seconds=0.0,
+    )
+    # base = 1.0 * 2.0**1 = 2.0, doubled for 429 = 4.0
+    assert delay == 4.0
+
+
+def test_retry_wait_seconds_backoff_capped_at_max_delay() -> None:
+    delay = _retry_wait_seconds(
+        status=503,
+        response_headers={},
+        attempt=10,
+        retry_base_delay_seconds=1.0,
+        retry_backoff_factor=2.0,
+        retry_max_delay_seconds=5.0,
+        request_jitter_seconds=0.0,
+    )
+    assert delay == 5.0
+
+
+def test_retry_wait_seconds_adds_jitter_within_bounds() -> None:
+    random.seed(42)
+    delay = _retry_wait_seconds(
+        status=503,
+        response_headers={},
+        attempt=0,
+        retry_base_delay_seconds=1.0,
+        retry_backoff_factor=2.0,
+        retry_max_delay_seconds=60.0,
+        request_jitter_seconds=2.0,
+    )
+    assert 1.0 <= delay <= 3.0
+
+
+# ---------------------------------------------------------------------------
+# _domain_key
+# ---------------------------------------------------------------------------
+
+
+def test_domain_key_extracts_host_lowercased() -> None:
+    assert _domain_key("https://Example.COM/path") == "example.com"
+
+
+def test_domain_key_includes_port() -> None:
+    assert _domain_key("http://localhost:8080/x") == "localhost:8080"
+
+
+def test_domain_key_empty_url_returns_default_bucket() -> None:
+    assert _domain_key("") == "_default"
+    assert _domain_key(None) == "_default"  # type: ignore[arg-type]
+
+
+def test_domain_key_relative_url_returns_default_bucket() -> None:
+    assert _domain_key("/relative/path") == "_default"
+
+
+# ---------------------------------------------------------------------------
+# PlaywrightSessionManager - dependency-injected browser_factory
+# ---------------------------------------------------------------------------
+
+
+def _make_fake_browser() -> MagicMock:
+    context = MagicMock()
+    context.close = AsyncMock(return_value=None)
+    browser = MagicMock()
+    browser.new_context = AsyncMock(return_value=context)
+    browser.close = AsyncMock(return_value=None)
+    return browser
+
+
+async def test_playwright_session_manager_creates_context_once_per_domain() -> None:
+    browser = _make_fake_browser()
+    factory = MagicMock()
+    factory.launch = AsyncMock(return_value=browser)
+
+    async with PlaywrightSessionManager(browser_factory=factory) as manager:
+        ctx1 = await manager.get_context("https://a.test/page1")
+        ctx2 = await manager.get_context("https://a.test/page2")
+
+    assert ctx1 is ctx2
+    browser.new_context.assert_awaited_once()
+
+
+async def test_playwright_session_manager_separate_contexts_per_domain() -> None:
+    browser = _make_fake_browser()
+    factory = MagicMock()
+    factory.launch = AsyncMock(return_value=browser)
+
+    async with PlaywrightSessionManager(browser_factory=factory) as manager:
+        await manager.get_context("https://a.test/")
+        await manager.get_context("https://b.test/")
+
+    assert browser.new_context.await_count == 2
+
+
+async def test_playwright_session_manager_launch_failure_returns_none_context() -> None:
+    factory = MagicMock()
+    factory.launch = AsyncMock(side_effect=RuntimeError("no chromium binaries"))
+
+    async with PlaywrightSessionManager(browser_factory=factory) as manager:
+        context = await manager.get_context("https://a.test/")
+
+    assert context is None
+
+
+async def test_playwright_session_manager_get_context_after_close_raises() -> None:
+    manager = PlaywrightSessionManager(browser_factory=MagicMock())
+    await manager.aclose()
+
+    raised = False
+    try:
+        await manager.get_context("https://a.test/")
+    except RuntimeError:
+        raised = True
+    assert raised
+
+
+async def test_playwright_session_manager_aclose_is_idempotent() -> None:
+    browser = _make_fake_browser()
+    factory = MagicMock()
+    factory.launch = AsyncMock(return_value=browser)
+
+    manager = PlaywrightSessionManager(browser_factory=factory)
+    await manager.get_context("https://a.test/")
+    await manager.aclose()
+    await manager.aclose()  # must not raise or double-close
+
+    browser.close.assert_awaited_once()
+
+
+async def test_playwright_session_manager_aclose_tolerates_context_close_failure() -> None:
+    context = MagicMock()
+    context.close = AsyncMock(side_effect=RuntimeError("already gone"))
+    browser = MagicMock()
+    browser.new_context = AsyncMock(return_value=context)
+    browser.close = AsyncMock(return_value=None)
+    factory = MagicMock()
+    factory.launch = AsyncMock(return_value=browser)
+
+    manager = PlaywrightSessionManager(browser_factory=factory)
+    await manager.get_context("https://a.test/")
+    await manager.aclose()  # must not raise despite context.close() failing
+
+    browser.close.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# fetch_http - retry loop, timeout/connection-error handling
+# ---------------------------------------------------------------------------
+
+
+def _http_response(
+    status: int,
+    *,
+    headers: dict[str, str] | None = None,
+    body: str | None = None,
+    url: str = "https://example.com/",
+) -> MagicMock:
+    response = MagicMock()
+    response.status = status
+    response.headers = headers or {"Content-Type": "text/html"}
+    response.url = url
+    response.history = []
+    response.text = AsyncMock(return_value=body or "")
+    return response
+
+
+def _session_returning(*responses: MagicMock) -> MagicMock:
+    """A session whose .get() yields each response in sequence across calls."""
+    cms = []
+    for response in responses:
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=response)
+        cm.__aexit__ = AsyncMock(return_value=None)
+        cms.append(cm)
+    session = MagicMock()
+    session.get = MagicMock(side_effect=cms)
+    return session
+
+
+_FETCH_KWARGS = dict(
+    timeout=aiohttp.ClientTimeout(total=30),
+    retryable_status_codes=frozenset({429, 500, 502, 503}),
+    retry_base_delay_seconds=0.0,
+    retry_backoff_factor=1.0,
+    retry_max_delay_seconds=0.0,
+    request_jitter_seconds=0.0,
+)
+
+
+async def test_fetch_http_retries_retryable_status_then_succeeds() -> None:
+    session = _session_returning(_http_response(503), _http_response(200, body="<html>ok</html>"))
+
+    result = await fetch_http(
+        session=session, url="https://example.com/", max_retries=2, **_FETCH_KWARGS
+    )
+
+    assert result["status_code"] == 200
+    assert result["html"] == "<html>ok</html>"
+    assert session.get.call_count == 2
+
+
+async def test_fetch_http_exhausts_retries_on_persistent_retryable_status() -> None:
+    """On the final attempt (``attempt == max_retries``), the retry guard's
+    ``attempt < max_retries`` is false, so the loop does not retry again —
+    the real status code from that last response is returned as-is (unlike
+    the Timeout/ClientError exception paths below, which synthesize
+    "Timeout"/"Connection Error" strings once their own retry budget runs
+    out)."""
+    session = _session_returning(_http_response(503), _http_response(503), _http_response(503))
+
+    result = await fetch_http(
+        session=session, url="https://example.com/", max_retries=2, **_FETCH_KWARGS
+    )
+
+    assert result["status_code"] == 503
+    assert result["error_kind"] is None
+    assert session.get.call_count == 3
+
+
+async def test_fetch_http_non_retryable_status_returns_immediately() -> None:
+    session = _session_returning(_http_response(404))
+
+    result = await fetch_http(
+        session=session, url="https://example.com/missing", max_retries=3, **_FETCH_KWARGS
+    )
+
+    assert result["status_code"] == 404
+    session.get.assert_called_once()
+
+
+async def test_fetch_http_captures_redirect_chain() -> None:
+    hop = MagicMock()
+    hop.url = "https://example.com/old"
+    hop.status = 301
+    response = _http_response(200, body="<html></html>", url="https://example.com/new")
+    response.history = [hop]
+    session = _session_returning(response)
+
+    result = await fetch_http(
+        session=session, url="https://example.com/old", max_retries=0, **_FETCH_KWARGS
+    )
+
+    assert result["redirect_hops"] == ["https://example.com/old"]
+    assert result["redirect_hop_details"] == [{"url": "https://example.com/old", "status": 301}]
+    assert result["final_url"] == "https://example.com/new"
+
+
+async def test_fetch_http_timeout_retries_then_succeeds() -> None:
+    ok_response = _http_response(200, body="<html>ok</html>")
+    ok_cm = MagicMock()
+    ok_cm.__aenter__ = AsyncMock(return_value=ok_response)
+    ok_cm.__aexit__ = AsyncMock(return_value=None)
+    session = MagicMock()
+    session.get = MagicMock(side_effect=[asyncio.TimeoutError(), ok_cm])
+
+    result = await fetch_http(
+        session=session, url="https://example.com/", max_retries=2, **_FETCH_KWARGS
+    )
+
+    assert result["status_code"] == 200
+    assert session.get.call_count == 2
+
+
+async def test_fetch_http_timeout_exhausts_retries() -> None:
+    session = MagicMock()
+    session.get = MagicMock(side_effect=asyncio.TimeoutError())
+
+    result = await fetch_http(
+        session=session, url="https://example.com/", max_retries=1, **_FETCH_KWARGS
+    )
+
+    assert result["status_code"] == "Timeout"
+    assert result["error_kind"] == "timeout"
+    assert session.get.call_count == 2
+
+
+async def test_fetch_http_client_error_exhausts_retries() -> None:
+    session = MagicMock()
+    session.get = MagicMock(side_effect=aiohttp.ClientConnectionError("refused"))
+
+    result = await fetch_http(
+        session=session, url="https://example.com/", max_retries=1, **_FETCH_KWARGS
+    )
+
+    assert result["status_code"] == "Connection Error"
+    assert result["error_kind"] == "connection_error"
+    assert session.get.call_count == 2
+
+
+async def test_fetch_http_unexpected_exception_returns_immediately_no_retry() -> None:
+    session = MagicMock()
+    session.get = MagicMock(side_effect=ValueError("something truly unexpected"))
+
+    result = await fetch_http(
+        session=session, url="https://example.com/", max_retries=3, **_FETCH_KWARGS
+    )
+
+    assert result["error_kind"] == "unexpected_error"
+    assert "something truly unexpected" in result["status_code"]
+    session.get.assert_called_once()  # generic exceptions are NOT retried

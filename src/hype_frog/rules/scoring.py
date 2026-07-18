@@ -39,6 +39,18 @@ def align_extraction_state_from_main(
         extra["Extraction Source"] = main_source
 
 
+def _severity_penalty(count: int, first: int, step: int, cap: int) -> int:
+    """Capped diminishing penalty: ``first`` for the first match, ``step`` per extra.
+
+    Repeated matches of one severity are usually the same systemic/template defect,
+    so extra matches degrade the score without annihilating it. The cap keeps 0
+    reserved for hard-fail statuses (non-200/404) handled before rule scoring.
+    """
+    if count <= 0:
+        return 0
+    return min(cap, first + step * (count - 1))
+
+
 def score_url_health(
     row: dict[str, Any], summary_rules: list[IssueRule]
 ) -> tuple[Any, str, str, dict[str, list[str]]]:
@@ -70,13 +82,12 @@ def score_url_health(
         except Exception as exc:
             logger.warning("Rule %r raised: %s", rule, exc)
             continue
-    observation_penalty = min(10, 3 * len(matched["Observation"]))
     score = max(
         0,
         100
-        - (25 * len(matched["Critical"]))
-        - (10 * len(matched["Warning"]))
-        - observation_penalty,
+        - _severity_penalty(len(matched["Critical"]), first=20, step=10, cap=50)
+        - _severity_penalty(len(matched["Warning"]), first=8, step=5, cap=30)
+        - _severity_penalty(len(matched["Observation"]), first=3, step=3, cap=10),
     )
     if matched["Critical"]:
         badge = "Critical"

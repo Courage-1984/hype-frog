@@ -67,7 +67,11 @@ from hype_frog.reporter.sheets.config import (
     HTTP_STATUS_ERROR_FONT,
     HTTP_STATUS_TIMEOUT_FONT,
 )
-from hype_frog.reporter.sheets.layout import CONTENT_HUB_ROW2_HEADER_COMMENTS
+from hype_frog.reporter.sheets.layout import (
+    CONTENT_HUB_ROW2_HEADER_COMMENTS,
+    PROSE_HEADERS,
+    resolve_content_hub_header_row,
+)
 from hype_frog.reporter.sheets.links import (
     is_safe_hyperlink_target,
     sanitize_excel_url,
@@ -92,24 +96,28 @@ def apply_wrapped_row_heights(worksheet: Worksheet) -> None:
 
     header_row = sheet_data_header_row(worksheet.title)
     if worksheet.title == CONTENT_OPTIMISATION_HUB_SHEET:
-        header_row = 2
+        # Self-correcting, not a hardcoded ``2``: this function runs (via
+        # ``adjust_sheet_format``) before ``apply_content_hub_conditional_rules``
+        # inserts the Hub's row-1 banner, so headers are still physically on row 1
+        # at call time. A hardcoded row 2 silently read the first *data* row as
+        # headers, matched nothing in PROSE_HEADERS, and skipped every Hub row —
+        # the exact bug ``resolve_content_hub_header_row`` exists to prevent (see
+        # ``apply_column_widths``, which already uses it for the same reason).
+        header_row = resolve_content_hub_header_row(worksheet)
     data_start = header_row + 1
     if worksheet.max_row < data_start:
         return
 
+    # Inflate row heights for the same prose columns ``apply_column_widths`` wraps
+    # (PROSE_HEADERS), so long guidance text — Recommended Action, How To Verify,
+    # Priority Reason, etc. — is not clipped when the previously hardcoded subset of
+    # prose columns happens to be short on that row. URL-like columns stay single-line.
     headers = header_index(worksheet, header_row)
-    wrapped_cols: list[int] = []
-    for header_name in (
-        "Affected URLs",
-        "Affected URLs (sample)",
-        "Internal Link Statuses",
-        "How to Fix in AIOSEO",
-        "Why It Matters",
-        "Recommended Fix",
-    ):
-        col_idx = headers.get(header_name)
-        if col_idx:
-            wrapped_cols.append(col_idx)
+    wrapped_cols: list[int] = [
+        col_idx
+        for header_name in PROSE_HEADERS
+        if (col_idx := headers.get(header_name))
+    ]
     if not wrapped_cols:
         return
 
@@ -297,6 +305,11 @@ def apply_generic_sheet_coloring(
     good_fill = PatternFill(start_color=RAG_GREEN, end_color=RAG_GREEN, fill_type="solid")
     todo_fill = PatternFill(
         start_color=STATUS_TODO_FILL, end_color=STATUS_TODO_FILL, fill_type="solid"
+    )
+    review_fill = PatternFill(
+        start_color=SEVERITY_OBSERVATION_FILL,
+        end_color=SEVERITY_OBSERVATION_FILL,
+        fill_type="solid",
     )
     traffic_warn_fill = PatternFill(
         start_color=RAG_AMBER_SOFT, end_color=RAG_AMBER_SOFT, fill_type="solid"
@@ -510,8 +523,10 @@ def apply_generic_sheet_coloring(
                 st = val.strip().lower()
                 if st in {"done", "fixed", "closed", "completed"}:
                     cell.fill = good_fill
-                elif st in {"in progress", "in review", "review"}:
+                elif st == "in progress":
                     cell.fill = warn_fill
+                elif st in {"in review", "review"}:
+                    cell.fill = review_fill
                 elif st in {"to do", "todo", "open"}:
                     cell.fill = todo_fill
             if (
@@ -1779,6 +1794,25 @@ def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
         for col_idx in signoff_col_indices:
             letter = get_column_letter(col_idx)
             dv.add(f"{letter}2:{letter}{last_row}")
+
+    # ── Zebra banding: A2:E{last_row} (identity/copy columns only) ───────────
+    # The sign-off columns (F:S, below) already carry their own RAG fills, so a
+    # second zebra layer there would visually fight that colouring. Columns A-E
+    # (Primary/Secondary/Tertiary/Page link/Copy Doc) have no row-differentiation
+    # otherwise, unlike every other large data sheet in the workbook, which makes
+    # it easy to lose your place scrolling a 255-row workflow list.
+    if not DISABLE_CONDITIONAL_FORMATTING:
+        identity_last_col = get_column_letter(_CONTENT_PLANNER_SIGNOFF_FIRST_COL - 1)
+        data_rows = last_row - 1
+        zebra_fill_color = ZEBRA_FAINT if data_rows > LARGE_SHEET_ROW_THRESHOLD else ZEBRA_BAND
+        worksheet.conditional_formatting.add(
+            f"A2:{identity_last_col}{last_row}",
+            FormulaRule(
+                formula=["MOD(ROW(),2)=0"],
+                stopIfTrue=False,
+                fill=PatternFill("solid", fgColor=zebra_fill_color),
+            ),
+        )
 
     # ── Conditional formatting: RAG for F2:S{last_row} ───────────────────────
     if not DISABLE_CONDITIONAL_FORMATTING:

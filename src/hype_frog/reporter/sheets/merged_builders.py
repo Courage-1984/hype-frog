@@ -327,6 +327,9 @@ def _pair_main_extra_rows(
     return pairs
 
 
+from hype_frog.rules.scoring import scorable_extraction_state
+
+
 def _merged_export_row(
     main: Mapping[str, Any],
     extra: Mapping[str, Any],
@@ -339,19 +342,29 @@ def _merged_export_row(
 
     title = str(m.get("Title") or e.get("OG Title") or "").strip()
     meta = str(m.get("Meta Description") or e.get("OG Description") or "").strip()
-    row["Title Missing"] = not bool(title)
-    row["Meta Description Missing"] = not bool(meta)
+    unmeasured = not scorable_extraction_state(
+        e.get("Extraction State") or m.get("Extraction State")
+    )
+    if unmeasured:
+        row["Title Missing"] = ""
+        row["Meta Description Missing"] = ""
+        row["Word Count"] = ""
+        row["H1 Count"] = ""
+        row["Missing H1 Flag"] = ""
+    else:
+        row["Title Missing"] = not bool(title)
+        row["Meta Description Missing"] = not bool(meta)
 
-    word_count = _to_int(e.get("Word Count"), 0)
-    if word_count <= 0:
-        word_count = _to_int(m.get("Word Count (Body)"), 0)
-    row["Word Count"] = word_count
+        word_count = _to_int(e.get("Word Count"), 0)
+        if word_count <= 0:
+            word_count = _to_int(m.get("Word Count (Body)"), 0)
+        row["Word Count"] = word_count
 
-    h1_count = _to_int(e.get("H1 Count"), 0)
-    if h1_count <= 0 and str(m.get("H1 Content") or e.get("Primary H1 Content") or "").strip():
-        h1_count = 1
-    row["H1 Count"] = h1_count
-    row["Missing H1 Flag"] = h1_count <= 0
+        h1_count = _to_int(e.get("H1 Count"), 0)
+        if h1_count <= 0 and str(m.get("H1 Content") or e.get("Primary H1 Content") or "").strip():
+            h1_count = 1
+        row["H1 Count"] = h1_count
+        row["Missing H1 Flag"] = h1_count <= 0
 
     for field in (
         "Desktop PSI Score",
@@ -546,32 +559,37 @@ def build_content_ai_readiness_rows(
 
         readability = row.get("Readability (Rough Flesch)")
         alt_coverage = row.get("Image Alt Coverage (%)")
+        unmeasured = not scorable_extraction_state(row.get("Extraction State"))
         rows.append(
             {
                 "URL": row.get("URL"),
                 "Content Category": _joined(categories),
-                "Word Count": _to_int(row.get("Word Count"), 0),
+                "Word Count": _export_number(row.get("Word Count")),
                 "Readability (Rough Flesch)": _export_number(readability),
                 "Flesch-Kincaid Grade (Est.)": row.get("Flesch-Kincaid Grade (Est.)"),
-                "Thin Content Flag": _to_bool(row.get("Thin Content Flag")),
-                "H1 Count": _to_int(row.get("H1 Count"), 0),
-                "Missing H1 Flag": _to_bool(row.get("Missing H1 Flag")),
-                "Meta Description Missing": _to_bool(row.get("Meta Description Missing")),
+                "Thin Content Flag": "" if unmeasured else _to_bool(row.get("Thin Content Flag")),
+                "H1 Count": _export_number(row.get("H1 Count")),
+                "Missing H1 Flag": "" if unmeasured else _to_bool(row.get("Missing H1 Flag")),
+                "Meta Description Missing": (
+                    "" if unmeasured else _to_bool(row.get("Meta Description Missing"))
+                ),
                 "AEO Readiness Score": _export_number(row.get("AEO Readiness Score")),
                 "AEO Badge": row.get("AEO Badge"),
-                "Schema Types Count": _to_int(row.get("Schema Types Count"), 0),
+                "Schema Types Count": _export_number(row.get("Schema Types Count")),
                 "Schema Types Found": row.get("Schema Types Found"),
-                "Schema Parse Errors": _to_int(row.get("Schema Parse Errors"), 0),
-                "Question Heading Count": _to_int(row.get("Question Heading Count"), 0),
-                "Answer Blocks": _to_int(row.get("Paragraphs 40-60 Words Count"), 0),
-                "FAQ Section Count": _to_int(row.get("FAQ Section Count"), 0),
-                "Image Count": _to_int(row.get("Image Count"), 0),
-                "Images Missing Alt": _to_int(row.get("Images Missing Alt"), 0),
+                "Schema Parse Errors": _export_number(row.get("Schema Parse Errors")),
+                "Question Heading Count": _export_number(row.get("Question Heading Count")),
+                "Answer Blocks": _export_number(row.get("Paragraphs 40-60 Words Count")),
+                "FAQ Section Count": _export_number(row.get("FAQ Section Count")),
+                "Image Count": _export_number(row.get("Image Count")),
+                "Images Missing Alt": _export_number(row.get("Images Missing Alt")),
                 "Image Alt Coverage (%)": _export_number(alt_coverage),
-                "AEO Extractability Score": _aeo_extractability_numeric(
-                    row.get("AEO Extractability Score")
+                "AEO Extractability Score": (
+                    ""
+                    if unmeasured
+                    else _aeo_extractability_numeric(row.get("AEO Extractability Score"))
                 ),
-                "Title Missing": _to_bool(row.get("Title Missing")),
+                "Title Missing": "" if unmeasured else _to_bool(row.get("Title Missing")),
                 "Media Mixed Content Detected": _to_bool(row.get("Mixed Content Detected")),
                 "Source Legacy Tab": _joined(sources),
             }

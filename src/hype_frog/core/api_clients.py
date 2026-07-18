@@ -19,7 +19,11 @@ from typing import Any
 import aiohttp
 from pydantic import BaseModel, ValidationError
 
-from hype_frog.core.env_vars import get_openai_api_key, get_openai_model
+from hype_frog.core.env_vars import (
+    get_openai_api_key,
+    get_openai_base_url,
+    get_openai_model,
+)
 from hype_frog.core.logger import get_logger
 from hype_frog.core.models import (
     GSCMetricsModel,
@@ -37,6 +41,61 @@ SEARCH_INTENT_LABELS: tuple[str, ...] = (
 )
 
 _OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
+
+# Ordered keyword rules for the zero-config, zero-cost intent fallback. Each
+# entry is (label, substrings) checked against the URL path + title/meta text;
+# first match wins. Used whenever the LLM path returns "Unknown" (no API key
+# or base URL configured, or a live call failed).
+_INTENT_URL_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Transactional",
+        (
+            "buy", "pricing", "price", "quote", "order", "shop", "cart",
+            "checkout", "book", "contact", "hire", "get-started", "signup",
+            "sign-up", "demo",
+        ),
+    ),
+    (
+        "Commercial Investigation",
+        ("best", "vs", "versus", "review", "compare", "comparison", "alternative", "top-"),
+    ),
+    (
+        "Navigational",
+        ("login", "log-in", "sign-in", "about", "account"),
+    ),
+    (
+        "Informational",
+        ("how", "what", "why", "guide", "/blog", "faq", "tips", "learn", "tutorial"),
+    ),
+)
+
+
+def classify_search_intent_heuristic(
+    url: str | None,
+    title: str | None = None,
+    meta_description: str | None = None,
+) -> str:
+    """Zero-config, zero-cost search-intent guess from URL/title/meta keywords.
+
+    Used as the fallback when no LLM (hosted or local) is configured, so
+    ``Search Intent`` need not collapse to "Unknown" on every URL. Ordered
+    rules: first matching label wins; no match returns "Unknown". A bare "/"
+    path (site home) is treated as Navigational.
+    """
+    from urllib.parse import urlsplit
+
+    if not url or not str(url).strip():
+        return "Unknown"
+    path = urlsplit(str(url)).path.lower()
+    haystack = " ".join(
+        part.lower() for part in (path, title or "", meta_description or "") if part
+    )
+    if path in ("", "/"):
+        return "Navigational"
+    for label, keywords in _INTENT_URL_RULES:
+        if any(keyword in haystack for keyword in keywords):
+            return label
+    return "Unknown"
 
 
 def _format_validation_failure(error: ValidationError) -> str:
@@ -196,16 +255,24 @@ async def classify_search_intent_with_llm(
 ) -> str:
     """Classify page search intent with an OpenAI-compatible LLM.
 
-    Graceful fallback contract: missing API key, blank text, HTTP errors,
-    malformed responses, and unexpected labels all return ``"Unknown"``.
-    This keeps crawl workers moving even when LLM enrichment is unavailable.
+    Supports local OpenAI-compatible servers (Ollama, LM Studio, llama.cpp)
+    via ``OPENAI_BASE_URL`` — free, private, zero external cost. When a base
+    URL is set, a missing API key no longer short-circuits (local servers
+    typically ignore the bearer token); a placeholder is sent instead.
+
+    Graceful fallback contract: missing API key/base URL, blank text, HTTP
+    errors, malformed responses, and unexpected labels all return
+    ``"Unknown"``. This keeps crawl workers moving even when LLM enrichment
+    is unavailable.
     """
     snippet = " ".join(str(text or "").split())
     if not snippet:
         return "Unknown"
+    base_url = get_openai_base_url()
     api_key = get_openai_api_key() or ""
-    if not api_key:
+    if not api_key and not base_url:
         return "Unknown"
+    endpoint = f"{base_url}/chat/completions" if base_url else _OPENAI_CHAT_COMPLETIONS_URL
 
     prompt = (
         "Analyze this text and return one word for the search intent. "
@@ -229,7 +296,7 @@ async def classify_search_intent_with_llm(
         "max_tokens": 8,
     }
     headers = {
-        "Authorization": f"Bearer {api_key}",
+        "Authorization": f"Bearer {api_key or 'local'}",
         "Content-Type": "application/json",
     }
 
@@ -237,7 +304,7 @@ async def classify_search_intent_with_llm(
     client = session or aiohttp.ClientSession()
     try:
         async with client.post(
-            _OPENAI_CHAT_COMPLETIONS_URL,
+            endpoint,
             json=payload,
             headers=headers,
             timeout=aiohttp.ClientTimeout(total=timeout_seconds),

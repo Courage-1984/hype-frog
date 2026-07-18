@@ -17,7 +17,11 @@ from typing import Any
 from hype_frog.config import PROJECT_ROOT, load_environment
 from hype_frog.core.logger import console
 from hype_frog.core.api_clients import parse_psi_response
-from hype_frog.core.env_vars import get_anthropic_api_key, get_openai_api_key
+from hype_frog.core.env_vars import (
+    get_anthropic_api_key,
+    get_openai_api_key,
+    get_openai_base_url,
+)
 from hype_frog.crawler.gsc_engine import (
     load_gsc_credentials_readonly,
     probe_gsc_api_access,
@@ -353,6 +357,31 @@ def check_optional_llm_keys() -> list[IntegrationCheck]:
                 status=CheckStatus.PASS,
                 message="Key is set (live probe not run; classifier is validated during crawls).",
                 details={"masked_key": _mask_secret(value)},
+            )
+        )
+
+    base_url = get_openai_base_url()
+    if base_url:
+        checks.append(
+            IntegrationCheck(
+                name="OPENAI_BASE_URL",
+                status=CheckStatus.PASS,
+                message=f"Local OpenAI-compatible endpoint configured: {base_url}",
+                details={"base_url": base_url},
+            )
+        )
+    elif not get_openai_api_key():
+        checks.append(
+            IntegrationCheck(
+                name="Search Intent classifier",
+                status=CheckStatus.WARN,
+                message=(
+                    "No OPENAI_API_KEY and no OPENAI_BASE_URL — Search Intent will "
+                    "use a URL/title/meta keyword heuristic instead of an LLM. "
+                    "Set OPENAI_BASE_URL to a local server (e.g. Ollama) for a "
+                    "free, private LLM-backed classifier."
+                ),
+                details={},
             )
         )
     return checks

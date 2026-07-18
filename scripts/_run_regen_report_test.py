@@ -23,6 +23,7 @@ def _user_config() -> UserConfig:
         selector_wait_ms=1500,
         check_external_link_status=True,
         check_og_images=False,
+        check_content_images=False,
     )
 
 

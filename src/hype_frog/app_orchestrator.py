@@ -26,11 +26,14 @@ from hype_frog.snapshots import (
     load_latest_crawl_snapshot_for_domain,
     save_crawl_snapshot,
 )
+from hype_frog.core.env_vars import get_hf_refetch_skipped
+from hype_frog.crawler.skipped_render_refetch import refetch_skipped_render_urls
 from hype_frog.snapshots.replay import (
     ReplaySnapshotError,
     assert_snapshot_domain_matches,
     build_crawl_replay_snapshot,
     merge_setup_from_snapshot,
+    recompute_composite_scores_for_replay,
     replay_from_snapshot,
     resolve_snapshot_domain,
 )
@@ -107,6 +110,29 @@ async def _run_replay_export(setup: RunSetup) -> tuple[str, int]:
         setup,
         output_filename=output_filename,
     )
+    if get_hf_refetch_skipped():
+        logger.info(
+            "REPLAY RUN: HF_REFETCH_SKIPPED set — re-rendering skipped HTTP-200 URLs."
+        )
+        await refetch_skipped_render_urls(
+            enrichment_result.typed_main_rows,
+            enrichment_result.typed_extra_rows,
+            render_wait_ms=setup.render_wait_ms,
+            selector_wait_ms=setup.selector_wait_ms,
+        )
+        recompute_composite_scores_for_replay(
+            enrichment_result.typed_main_rows,
+            enrichment_result.typed_extra_rows,
+        )
+    elif setup.re_enrich:
+        logger.info(
+            "REPLAY RUN: --re-enrich set, recomputing scores from snapshot signals "
+            "(no network calls)."
+        )
+        recompute_composite_scores_for_replay(
+            enrichment_result.typed_main_rows,
+            enrichment_result.typed_extra_rows,
+        )
     _execute_export_bundle(setup, crawl_result, enrichment_result)
     return output_filename, len(snapshot.main_rows)
 

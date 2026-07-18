@@ -83,6 +83,15 @@ def _add_shared_crawl_flags(parser: argparse.ArgumentParser) -> None:
         help="With --regen-report: replay a specific stored snapshot",
     )
     parser.add_argument(
+        "--re-enrich",
+        action="store_true",
+        help=(
+            "With --regen-report: recompute SEO Health / Technical Health / "
+            "Copy Score / SEO Score from the snapshot's crawl signals instead "
+            "of replaying the frozen enrichment values. No network calls."
+        ),
+    )
+    parser.add_argument(
         "--psi-delay",
         type=float,
         default=None,
@@ -260,6 +269,7 @@ def legacy_namespace_to_cli_overrides(args: argparse.Namespace) -> CliRunOverrid
         streaming=getattr(args, "streaming", False),
         regen_report=getattr(args, "regen_report", False),
         snapshot_id=getattr(args, "snapshot_id", None),
+        re_enrich=getattr(args, "re_enrich", False),
         verbose=getattr(args, "verbose", False),
         quiet=getattr(args, "quiet", False),
         show_all_tabs=getattr(args, "show_all_tabs", False),

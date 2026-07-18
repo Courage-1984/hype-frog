@@ -36,7 +36,7 @@ When `HF_REGEN_REPORT=1` or `--regen-report` is set, `app_orchestrator.main` **s
 4. Assign a fresh output path with `_regen_{snapshot_id_short}_{timestamp}` so the original crawl workbook is never overwritten.
 5. Call the same `execute_export` path as a live run (xlsx first, then optional HTML/PDF).
 
-No HTTP, PSI, GSC, BFS, Playwright, or checkpoint I/O runs on this path. Mutually exclusive with `--quick-test`, `--full-smoke-test`, and `--validate`.
+No HTTP, PSI, GSC, BFS, or checkpoint I/O runs on this path. **Exception:** when `HF_REFETCH_SKIPPED=1` is set, `app_orchestrator.py` calls `refetch_skipped_render_urls()` (`crawler/skipped_render_refetch.py`), which does run live Playwright rendering against skipped HTTP-200 rows before export — the only I/O this replay path performs by design. `HF_REGEN_REENRICH`/`--re-enrich` (see the flag table above) stays network-free; it only recomputes scores from already-stored snapshot signals. Mutually exclusive with `--quick-test`, `--full-smoke-test`, and `--validate`.
 
 ## BFS spider
 
@@ -160,7 +160,7 @@ Strict models in `hype_frog.core.models` also validate HTTP, PSI, and GSC payloa
 
 Implementation: OpenAI-compatible chat completions in `hype_frog.core.api_clients`; short prompt: *Analyze this text and return one word for the search intent.*
 
-If `OPENAI_API_KEY` is absent, or on HTTP errors, malformed output, empty text, or unexpected labels → **`Unknown`**. Mandatory so LLM enrichment never blocks crawls.
+`orchestration/crawl_runner_bfs.py::apply_search_intent()` calls the LLM first; **only when that returns `Unknown`** does it fall back to `classify_search_intent_heuristic()` (`core/api_clients.py`, a URL/title/meta keyword-rule classifier) before finally settling on `Unknown`. This heuristic path also runs directly (no LLM call) when `OPENAI_API_KEY` is absent and no local `OPENAI_BASE_URL` is configured. The resolution method is recorded on the row as **`Search Intent Source`**: `LLM` / `Heuristic` / `Unknown`. On HTTP errors, malformed output, or empty text the LLM call itself still degrades to `Unknown` (then the heuristic runs) — mandatory so LLM enrichment never blocks crawls.
 
 Applied after each crawl result is assembled and before cache persistence, using title, meta description, headings, and page-copy snippet from rendered or raw HTML.
 
@@ -190,11 +190,11 @@ Reporter output stays **openpyxl**-based; do not introduce XlsxWriter on the wor
 
 Tab order and visibility are defined in `reporter/sheets/workbook_layout.py`.
 
-**Primary (visible):** Table of Contents, Executive Briefing, Summary, Priority URLs, FixPlan, Quick Wins, Content Optimisation Hub, Content Planner, Content Hub Metrics, Main, AIOSEO Recommendations, Link Inventory, Broken Link Impact, SitemapQA, Template & Duplication Risks, Playbook.
+**Primary (visible, 15):** Table of Contents, Executive Briefing, Priority URLs, FixPlan, Quick Wins, Content Optimisation Hub, Content Planner, Content Hub Metrics, Main, AIOSEO Recommendations, Link Inventory, Broken Link Impact, SitemapQA, Template & Duplication Risks, Playbook.
 
-**Advanced (hidden by default, linked from Executive Briefing/TOC):** Issue Register (canonical backlog), Technical Diagnostics, Content & AI Readiness, Link Intelligence, CMS Action URLs, Redirects, Redirect Map, Robots.txt Analysis, Crawl Log, Link Equity Map, Anchor Text Audit, Snippet Opportunities, Competitor Benchmarks (when `--competitors` / `HF_COMPETITORS` set), Script Inventory, Image Inventory, ResolvedIssues, DeltaFromPreviousRun, Audit Run Details.
+**Advanced (hidden by default, linked from Executive Briefing/TOC, 16):** Issue Register (canonical backlog), Technical Diagnostics, Content & AI Readiness, Link Intelligence, CMS Action URLs, Redirects, Robots.txt Analysis, Crawl Log, Link Equity Map, Anchor Text Audit, Snippet Opportunities, Competitor Benchmarks (when `--competitors` / `HF_COMPETITORS` set), Script Inventory, Image Inventory, DeltaFromPreviousRun, Audit Run Details.
 
-The legacy **Dashboard** sheet and the legacy **IssueInventory** sheet have both been retired — neither is exported anymore. Executive Briefing is the sole executive landing tab; Issue Register is the sole issue-backlog tab.
+The legacy **Dashboard**, **Summary**, **IssueInventory**, and **ResolvedIssues** sheets have all been retired — none are exported anymore (Summary folded into Issue Register; ResolvedIssues folded into DeltaFromPreviousRun). Executive Briefing is the sole executive landing tab; Issue Register is the sole issue-backlog tab. Full per-tab detail: [`docs/workbook_tabs.md`](workbook_tabs.md).
 
 Legacy standalone Technical/Content/AEO tabs are **not** emitted in full-suite mode; merged **Technical Diagnostics** and **Content & AI Readiness** supersede them.
 
@@ -241,7 +241,7 @@ Non-crawl entrypoints in `core/` provide preflight and regression gates (wired t
 
 Sheet ordering, column registries, and shared row builders for export live in `orchestration/export_registry.py` (`get_sheet_sequence`, `get_standard_sheet_columns`, `get_finalization_steps`, `build_*_rows`), consumed by `orchestration/export_flow.execute_export`.
 
-Full workbook sheet assembly is orchestrated by `orchestration/export_workbook.py` (`build_standard_sheets()`), which integrates the delta engine and drives all 20+ tab builders. AEO, AIOSEO, and pattern sheet rows are built in `orchestration/export_row_builders.py`. Playbook legend/reference rows are constants in `orchestration/export_workbook_constants.py`.
+Full workbook sheet assembly is orchestrated by `orchestration/export_workbook.py` (`write_full_suite_workbook()`), which integrates the delta engine and drives all 20+ tab builders. AEO, AIOSEO, and pattern sheet rows are built in `orchestration/export_row_builders.py`. Playbook legend/reference rows are constants in `orchestration/export_workbook_constants.py`.
 
 ## Out of scope for automation
 

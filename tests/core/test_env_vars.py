@@ -98,6 +98,28 @@ def test_get_hf_output_filename_override(monkeypatch: pytest.MonkeyPatch) -> Non
     assert env_vars.get_hf_output_filename() == "custom.xlsx"
 
 
+def test_set_env_default_if_blank_sets_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HF_MAX_DEPTH", raising=False)
+    env_vars.set_env_default_if_blank("HF_MAX_DEPTH", "5")
+    assert env_vars.get_hf_max_depth() == 5
+
+
+def test_set_env_default_if_blank_sets_when_blank_string(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Blank-aware, unlike ``os.environ.setdefault`` — a present-but-empty value
+    still gets the computed default."""
+    monkeypatch.setenv("HF_OUTPUT_FILENAME", "")
+    env_vars.set_env_default_if_blank("HF_OUTPUT_FILENAME", "computed.xlsx")
+    assert env_vars.get_hf_output_filename() == "computed.xlsx"
+
+
+def test_set_env_default_if_blank_does_not_override_existing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HF_OUTPUT_FILENAME", "user-chosen.xlsx")
+    env_vars.set_env_default_if_blank("HF_OUTPUT_FILENAME", "computed.xlsx")
+    assert env_vars.get_hf_output_filename() == "user-chosen.xlsx"
+
+
 def test_get_hf_test_sitemap_url_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("HF_TEST_SITEMAP_URL", raising=False)
     assert env_vars.get_hf_test_sitemap_url("https://default.example/sitemap.xml") == (

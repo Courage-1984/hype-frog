@@ -29,7 +29,7 @@ def word_count_band(count: int) -> str:
 def image_extension(src_url: str) -> str:
     """Extract the normalised image format from a URL path (e.g. 'webp', 'jpg', 'other')."""
     path = urlparse(src_url).path.lower()
-    for ext in [".webp", ".avif", ".jpg", ".jpeg", ".png", ".gif", ".svg"]:
+    for ext in [".webp", ".avif", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".ico"]:
         if path.endswith(ext):
             return ext.replace(".", "")
     return "other"

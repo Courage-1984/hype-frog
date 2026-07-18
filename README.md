@@ -42,6 +42,7 @@ Runtime execution follows: **`orchestration/` -> `crawler/` + `extractors/` -> `
 | Graph / analysis | `networkx`, `scipy`, `simhash` (near-duplicate detection) |
 | Dates | `python-dateutil` |
 | Config | `python-dotenv`, optional `pyyaml` (`hype_frog.config.yaml`) |
+| Logging / terminal UX | `structlog` (structured JSONL logging), `rich` (console progress bars and formatted output) — see [`docs/logging_architecture.md`](docs/logging_architecture.md) |
 
 See `pyproject.toml` and **`uv.lock`** for pinned dependency versions. Install with `uv sync` so the lockfile resolves reproducible builds.
 
@@ -83,7 +84,12 @@ playwright install chromium
 - **PSI:** set `PSI_API_KEY` in `.env` when you want PageSpeed Insights lab data. The key must belong to a Google Cloud project with the PageSpeed Insights API enabled.
 - **GSC:** the app uses the **OAuth desktop** flow via `secrets/client_secrets.json` and `secrets/token.json` (see `.env.example`). Run `uv run hype-frog --gsc-auth` once per machine to create or refresh `secrets/token.json`. Legacy fallbacks: the same filenames under `src/hype_frog/` or the repo root. The signed-in user needs Search Console access to a property that matches the crawl target; the code requests read-only scope `https://www.googleapis.com/auth/webmasters.readonly`.
 - **Optional flags:** `--check-og-images`, `--check-images`, `--gsc-url-inspection`, `--gsc-url-inspection-full`, `--competitors`, `--benchmarks`, `--previous-run`, `--streaming`, `--max-memory-mb`, `--export-pdf`, `--psi-delay` (see `uv run hype-frog --help`).
-- **Environment:** `HF_COMPETITORS`, `HF_STREAMING`, `HF_MAX_MEMORY_MB`, `GSC_URL_INSPECTION`, `CHECK_CONTENT_IMAGES`, `CHECK_OG_IMAGES`, `HF_EXPORT_PDF`, `HF_EXPORT_HTML`, `HF_OUTPUT_FILENAME`, `HF_MAX_DEPTH`, `HF_FULL_SMOKE_URL_COUNT`, `HF_REPORT_THEME`, `HF_EXCEL_THEME`.
+- **Environment (crawl/export):** `HF_COMPETITORS`, `HF_STREAMING`, `HF_MAX_MEMORY_MB`, `HF_PREVIOUS_AUDIT_PATH`, `GSC_URL_INSPECTION`, `CHECK_CONTENT_IMAGES`, `CHECK_OG_IMAGES`, `HF_EXPORT_PDF`, `HF_EXPORT_HTML`, `HF_OUTPUT_FILENAME`, `HF_MAX_DEPTH`, `HF_TEST_SITEMAP_URL`, `HF_FULL_SMOKE_URL_COUNT`, `HF_REPORT_THEME`, `HF_EXCEL_THEME`.
+- **Environment (crawl replay / `--regen-report`):** `HF_REGEN_REPORT`, `HF_SNAPSHOT_ID`, `HF_REGEN_REENRICH`, `HF_REFETCH_SKIPPED`, `HF_SNAPSHOT_RETENTION_PER_DOMAIN`, `HF_SNAPSHOTS_DB_PATH` — see [`commands.md`](commands.md#report-only-regeneration-crawl-replay).
+- **Environment (workbook rendering toggles, diagnostic — leave unset for full styling):** `HF_DISABLE_CONDITIONAL_FORMATTING`, `HF_DISABLE_DATA_VALIDATION`, `HF_DISABLE_TOOLTIPS`, `HF_DISABLE_EXTERNAL_LINKS_AND_IMAGES`, `HF_DISABLE_NON_CORE_FREEZE_PANES`, `HF_DEBUG_EXCEL_ISOLATION_MODE`.
+- **Environment (logging/observability):** `HF_RUN_ID`, `HF_LOG_LEVEL`, `HF_CONSOLE_LOG_LEVEL` — see [`docs/logging_architecture.md`](docs/logging_architecture.md).
+
+Full reference for every variable above: [`.env.example`](.env.example).
 - **HTML/PDF report branding (optional):** `HF_REPORT_PREPARED_BY`, `HF_REPORT_CLIENT_NAME`, `HF_REPORT_LOGO_PATH`, `HF_REPORT_BRAND_COLOUR`, `HF_REPORT_ACCENT_COLOUR`, `HF_REPORT_THEME` (HTML); `HF_PDF_CLIENT_NAME`, `HF_PDF_PREPARED_BY`, `HF_PDF_LOGO_PATH`, `HF_PDF_BRAND_COLOUR` (PDF). **Catppuccin Mocha:** `HF_REPORT_THEME=mocha` (dark HTML + JetBrains Mono) and/or `HF_EXCEL_THEME=mocha` (workbook RAG palette). See [`docs/excel_reporting_standards.md`](docs/excel_reporting_standards.md) and `.env.example`.
 - Interactive runs prompt for crawl profile, suite mode, checkpoint interval, and optional previous workbook path.
 
@@ -127,6 +133,10 @@ uv run hype-frog --help
 ```
 
 The bundle includes `src/`, `docs/`, `scripts/`, `README.md`, `commands.md`, `pyproject.toml`, `uv.lock`, and `.env.example`.
+
+For end users **without** Python/`uv` installed, a separate zero-dependency
+standalone `.exe` build exists instead (`uv run python build_exe.py`, PyInstaller)
+— see [`DISTRIBUTION.md`](DISTRIBUTION.md).
 
 ### Validate secrets and APIs (no crawl)
 
@@ -251,6 +261,7 @@ Canonical technical manuals (keep in sync with code changes):
 - [`docs/system_architecture.md`](docs/system_architecture.md) — layers, staged pipeline, **BFS spider**, fetch modes, **AEO**, **search intent**, **ROI**, executive dashboard, workbook integrity pointers.
 - [`docs/data_contracts.md`](docs/data_contracts.md) — `main` / `extra` envelopes, Pydantic contracts, additive keys, checkpoints, **crawl replay snapshots**.
 - [`docs/excel_reporting_standards.md`](docs/excel_reporting_standards.md) — reporter module split, sanitization, ghost/nuclear view state, TOC, Content Hub literals.
+- [`docs/workbook_tabs.md`](docs/workbook_tabs.md) — per-tab audience, content, and end-user descriptions for all 31 workbook tabs.
 - [`docs/logging_architecture.md`](docs/logging_architecture.md) — structured logging stack, `run_id`, JSONL schema.
 - [`docs/performance_benchmarks.md`](docs/performance_benchmarks.md) — concurrency model, memory profile, throughput bottlenecks.
 - [`DISTRIBUTION.md`](DISTRIBUTION.md) — standalone `.exe` distribution and first-run setup guide.

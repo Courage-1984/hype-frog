@@ -74,6 +74,7 @@ class CliRunOverrides:
     streaming: bool = False
     regen_report: bool = False
     snapshot_id: str | None = None
+    re_enrich: bool = False
     verbose: bool = False
     quiet: bool = False
     show_all_tabs: bool = False

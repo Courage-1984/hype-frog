@@ -67,6 +67,27 @@ def test_main_return_strip_survives_double_format_pass() -> None:
     )
 
 
+def test_technical_view_jump_link_gets_visible_styling() -> None:
+    """Regression: ``Technical View`` (and other HYPERLINK-formula jump-link
+    columns) rendered as plain black text with no underline, giving the reader
+    no visual cue the cell was clickable, even though the formula worked."""
+    from hype_frog.reporter.sheets.links import style_unstyled_formula_hyperlinks
+    from hype_frog.reporter.sheets.navigation import apply_cross_sheet_links
+
+    writer, wb = _build_main_workbook()
+    ws = wb["Main"]
+    add_return_to_briefing_strip(ws, "Main")
+    header_row = sheet_data_header_row("Main")
+    apply_cross_sheet_links(writer, ws, "Main", header_row=header_row)
+    style_unstyled_formula_hyperlinks(ws, header_row=header_row)
+
+    tech_col = header_index(ws, header_row)["Technical View"]
+    data_start = header_row + 1
+    cell = ws.cell(row=data_start, column=tech_col)
+    assert str(cell.value).startswith("=IFERROR(HYPERLINK")
+    assert cell.font.underline == "single"
+
+
 def test_return_strip_skips_when_already_present() -> None:
     wb = Workbook()
     ws = wb.active
