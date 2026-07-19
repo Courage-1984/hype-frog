@@ -17,8 +17,6 @@ from hype_frog.analysis.delta_engine import (
     snapshot_from_current_run,
 )
 from hype_frog.analysis.link_equity import (
-    ANCHOR_TEXT_AUDIT_COLUMNS,
-    LINK_EQUITY_COLUMNS,
     build_anchor_text_audit_rows,
     build_link_equity_rows,
 )
@@ -70,13 +68,13 @@ from hype_frog.pipeline.image_inventory import (
 from hype_frog.pipeline.link_inventory_stream import populate_link_inventory_cache
 from hype_frog.pipeline.link_inventory import unique_external_health_counts
 from hype_frog.reporter.engine_io import (
+    append_link_detail_rows_streamed,
     apply_link_intelligence_summary_broken_formulas,
     write_dataframe_sheet,
-    write_link_inventory_sheet_streamed,
 )
 from hype_frog.reporter.engine_rows import (
     CONTENT_HUB_EXPORT_COLUMNS,
-    CONTENT_HUB_METRICS_EXPORT_COLUMNS,
+    build_content_hub_metrics_for_all_urls,
 )
 from hype_frog.reporter.excel_engine import (
     build_content_optimisation_hub_rows,
@@ -89,15 +87,12 @@ from hype_frog.orchestration.content_planner import (
 )
 from hype_frog.reporter.sheets.config import (
     AIOSEO_RECOMMENDATIONS_SHEET,
-    ANCHOR_TEXT_AUDIT_SHEET,
     AUDIT_RUN_DETAILS_SHEET,
     COMPETITOR_BENCHMARKS_SHEET,
-    CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     CONTENT_PLANNER_SHEET,
     CRAWL_LOG_SHEET,
     IMAGE_INVENTORY_SHEET,
-    LINK_EQUITY_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
     SCRIPT_INVENTORY_SHEET,
     SNIPPET_OPPORTUNITIES_SHEET,
@@ -124,7 +119,6 @@ from hype_frog.rules.playbook_entries import (
     build_issue_playbook_rows,
     build_playbook_entry_index,
 )
-from hype_frog.core.url_normalization import normalize_url_key
 
 logger = get_logger(__name__)
 
@@ -251,25 +245,6 @@ def write_full_suite_workbook(
         aioseo_rows,
     )
     redirects_rows = build_redirects_sheet_rows(extra_rows)
-    link_rows = []
-    for row in extra_rows:
-        for item in row.get("Link Details", []):
-            raw_code = item.get("Status Code")
-            target_status = status_by_url.get(
-                normalize_url_key(item.get("Target URL", ""))
-            )
-            if raw_code is not None and raw_code != "":
-                target_status = raw_code
-            crawlable = target_status is None or (
-                isinstance(target_status, int) and target_status < 400
-            )
-            link_rows.append(
-                {
-                    **item,
-                    "Target Status (if crawled)": target_status,
-                    "Crawlable": crawlable,
-                }
-            )
     duplicate_rows = build_duplicates_rows(main_rows, extra_rows)
     pattern_rows, template_issue_counts = build_pattern_rows(
         extra_rows,
@@ -301,8 +276,21 @@ def write_full_suite_workbook(
     technical_diagnostics_rows = build_technical_diagnostics_rows(
         extra_rows, main_rows=main_rows
     )
+    # Folded into Content & AI Readiness (formerly standalone "Content Hub Metrics"
+    # and "Anchor Text Audit" sheets) — computed for every URL, then left-joined below.
+    hub_metrics_by_url = {
+        r["URL"]: r
+        for r in build_content_hub_metrics_for_all_urls(typed_main_rows, typed_extra_rows)
+        if r.get("URL")
+    }
+    anchor_audit_by_url = {
+        r["Destination URL"]: r for r in build_anchor_text_audit_rows(extra_rows)
+    }
     content_ai_rows = build_content_ai_readiness_rows(
-        extra_rows, main_rows=main_rows
+        extra_rows,
+        main_rows=main_rows,
+        hub_metrics_by_url=hub_metrics_by_url,
+        anchor_audit_by_url=anchor_audit_by_url,
     )
     issue_register_rows = build_issue_register_rows(
         summary_rows=summary_rows,
@@ -314,11 +302,17 @@ def write_full_suite_workbook(
         main_urls=[str(row.get("URL") or "") for row in main_rows if row.get("URL")],
         extra_rows=extra_rows,
     )
+    # Folded into Link Intelligence's Summary rows (formerly standalone "Link
+    # Equity Map" sheet).
+    graph_metrics = enrichment.graph_metrics or {}
+    link_equity_by_url = {
+        r["URL"]: r for r in build_link_equity_rows(extra_rows, graph_metrics)
+    }
     link_intelligence_rows = build_link_intelligence_rows(
         extra_rows=extra_rows,
-        link_detail_rows=link_rows,
         crawlgraph_rows=graph_rows,
         main_rows=main_rows,
+        link_equity_by_url=link_equity_by_url,
     )
     logger.info("Writing summary and issue sheets...")
     # No standalone "Summary" tab: build_issue_register_rows() (above) already folds
@@ -367,11 +361,15 @@ def write_full_suite_workbook(
     link_inventory_cache = LinkInventoryCache(link_inventory_db)
     try:
         populate_link_inventory_cache(link_inventory_cache, extra_rows)
-        write_link_inventory_sheet_streamed(
+        # Detail rows (deduplicated, streamed anchor-level rows) appended after the
+        # Summary rows already written above — folded in from the former standalone
+        # "Link Inventory" sheet.
+        append_link_detail_rows_streamed(
             writer,
             link_inventory_cache,
-            sheet_name="Link Inventory",
-            columns=list(merged_columns["Link Inventory"]),
+            sheet_name="Link Intelligence",
+            columns=list(merged_columns["Link Intelligence"]),
+            status_by_url=status_by_url,
         )
         broken_link_impact_rows = build_broken_link_impact_rows(
             link_inventory_cache.iter_rows_flat(),
@@ -446,13 +444,10 @@ def write_full_suite_workbook(
     write_dict_rows_sheet(
         writer, CONTENT_OPTIMISATION_HUB_SHEET, content_hub_cols, hub_base_rows
     )
-    _metrics_cols = list(CONTENT_HUB_METRICS_EXPORT_COLUMNS)
-    write_dict_rows_sheet(
-        writer,
-        CONTENT_HUB_METRICS_SHEET,
-        _metrics_cols,
-        hub_metrics_rows,
-    )
+    # No standalone "Content Hub Metrics" tab: its 11 columns are now computed for
+    # every URL (see hub_metrics_by_url above) and folded into Content & AI Readiness.
+    # hub_metrics_rows (the Hub's curated-subset variant) still feeds Executive
+    # Briefing's in-memory ROI KPI below.
     _parsed = urlparse(setup.target_input)
     _root_url = f"{_parsed.scheme}://{_parsed.netloc}/"
     content_planner_rows = build_content_planner_rows(typed_extra_rows, root_url=_root_url)
@@ -724,19 +719,10 @@ def write_full_suite_workbook(
         list(CRAWL_LOG_COLUMNS),
         crawl_log_sheet_rows(enrichment.crawl_log_entries),
     )
-    graph_metrics = enrichment.graph_metrics or {}
-    write_dict_rows_sheet(
-        writer,
-        LINK_EQUITY_MAP_SHEET,
-        list(LINK_EQUITY_COLUMNS),
-        build_link_equity_rows(extra_rows, graph_metrics),
-    )
-    write_dict_rows_sheet(
-        writer,
-        ANCHOR_TEXT_AUDIT_SHEET,
-        list(ANCHOR_TEXT_AUDIT_COLUMNS),
-        build_anchor_text_audit_rows(extra_rows),
-    )
+    # No standalone "Link Equity Map" tab: its rows (computed once, above, as
+    # link_equity_by_url) are now folded into Link Intelligence's Summary rows.
+    # No standalone "Anchor Text Audit" tab: its rows (computed once, above, as
+    # anchor_audit_by_url) are now folded into Content & AI Readiness.
     write_dict_rows_sheet(
         writer,
         SNIPPET_OPPORTUNITIES_SHEET,

@@ -2,6 +2,6 @@
 
 Inherits root [`CLAUDE.md`](../../../CLAUDE.md).
 
-**Source of truth:** [`.cursor/rules/rules_engine.mdc`](../../../.cursor/rules/rules_engine.mdc).
+**Rule:** [`.claude/rules/rules-engine.md`](../../../.claude/rules/rules-engine.md).
 
-Read it before editing this layer: `IssueRule` definitions in `registry.py` (`severity`, `name`, `fn`, `scope`), stable snake_case identifiers that are **never renamed**, frozen severity levels, pure scoring functions returning 0–100 or `None`. Follow the new-rule checklist before adding one.
+IssueRule registry, playbook, pure scoring. Stable IDs — never rename without migration. Skill: `.claude/skills/rules/add-issue-rule/`.

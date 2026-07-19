@@ -37,7 +37,9 @@ def _nav_link(target: str, anchor: str = "Link", location: str = "nav") -> dict:
 # ---------------------------------------------------------------------------
 
 def test_column_tuple_length() -> None:
-    assert len(CONTENT_PLANNER_COLUMNS) == 19
+    # 19 original + "Priority for MVP" (inserted after Copy Doc) + "Plugin Audit"
+    # (appended at the end) = 21.
+    assert len(CONTENT_PLANNER_COLUMNS) == 21
 
 
 def test_column_tuple_starts_with_hierarchy_then_link() -> None:
@@ -49,7 +51,8 @@ def test_copy_doc_is_not_a_signoff_column() -> None:
 
 
 def test_signoff_columns_count() -> None:
-    assert len(CONTENT_PLANNER_SIGNOFF_COLUMNS) == 14
+    # 14 original + "Priority for MVP" + "Plugin Audit" = 16.
+    assert len(CONTENT_PLANNER_SIGNOFF_COLUMNS) == 16
 
 
 def test_all_signoff_columns_present_in_main_tuple() -> None:

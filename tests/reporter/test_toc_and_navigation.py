@@ -20,8 +20,6 @@ from hype_frog.reporter.sheets.workbook_layout import (
 )
 
 _INVENTORY_SHEETS = [
-    "Link Equity Map",
-    "Anchor Text Audit",
     "Snippet Opportunities",
     "Script Inventory",
     "Image Inventory",
@@ -76,7 +74,7 @@ def test_curated_help_registered_for_phase2_sheets() -> None:
     assert resolve_curated_help_body("FixPlan", "Priority Score") is not None
     assert resolve_curated_help_body("Quick Wins", "Effort (hrs)") is not None
     assert resolve_curated_help_body("Broken Link Impact", "Inbound Link Count") is not None
-    assert resolve_curated_help_body("Link Inventory", "Generic Anchor") is not None
+    assert resolve_curated_help_body("Link Intelligence", "Generic Anchor") is not None
     assert resolve_curated_help_body("SitemapQA", "Found via Crawl") is not None
     # Unknown pairs still defer to the generic tooltip path.
     assert resolve_curated_help_body("FixPlan", "Nonexistent Column") is None

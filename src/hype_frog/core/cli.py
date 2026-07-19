@@ -21,6 +21,7 @@ class UserConfig:
     check_external_link_status: bool
     check_og_images: bool
     check_content_images: bool
+    quick_wins_max_results: int | None = None
 
 
 def _resolve_crawl_engine(raw: str) -> str:
@@ -63,9 +64,13 @@ def get_user_config() -> UserConfig:
         "Verify content images (status + dimensions)? [y/N, blank skip]: "
     ).strip().lower()
     check_content_images = content_image_checks_raw in {"y", "yes"}
+    quick_wins_raw = input(
+        "Quick Wins to list [default 30]: "
+    ).strip()
 
     max_urls: int | None = None
     max_psi_urls: int | None = None
+    quick_wins_max_results: int | None = None
     high_value_slugs: list[str] = []
     crawl_mode = _resolve_crawl_engine(crawl_mode_raw)
     render_wait_ms = 4000
@@ -109,6 +114,15 @@ def get_user_config() -> UserConfig:
                 "Invalid selector wait '%s'. Using default 3000ms.",
                 selector_wait_raw,
             )
+    if quick_wins_raw:
+        try:
+            parsed_quick_wins = int(quick_wins_raw)
+            if parsed_quick_wins > 0:
+                quick_wins_max_results = parsed_quick_wins
+        except ValueError:
+            logger.warning(
+                "Invalid Quick Wins count '%s'. Using default 30.", quick_wins_raw
+            )
 
     return UserConfig(
         target_input=target_input,
@@ -121,4 +135,5 @@ def get_user_config() -> UserConfig:
         check_external_link_status=check_external_link_status,
         check_og_images=check_og_images,
         check_content_images=check_content_images,
+        quick_wins_max_results=quick_wins_max_results,
     )

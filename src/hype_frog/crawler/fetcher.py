@@ -143,6 +143,7 @@ async def _populate_robots_cache(
     aeo_engine_bot_coverage: float | None = None
     robots_text: str | None = None
     robots_status: int | None = None
+    robots_text_read_error = False
     try:
         async with session.get(f"{domain_key}/llms.txt", timeout=timeout) as llms_resp:
             llms_present = llms_resp.status == 200
@@ -153,11 +154,22 @@ async def _populate_robots_cache(
         async with session.get(f"{domain_key}/robots.txt", timeout=timeout) as robots_resp:
             robots_status = robots_resp.status
             if robots_resp.status == 200:
-                robots_text = await robots_resp.text()
-                robots_lower = robots_text.lower()
-                ai_allowed = all(bot in robots_lower for bot in _LEGACY_AI_BOTS)
-                hits = sum(1 for bot in _AEO_ENGINE_BOTS if bot in robots_lower)
-                aeo_engine_bot_coverage = hits / float(len(_AEO_ENGINE_BOTS))
+                try:
+                    robots_text = await robots_resp.text()
+                except Exception as text_exc:
+                    # Status was a real 200 — the body just failed to decode. Keep
+                    # robots_status=200 and flag this distinctly so callers don't
+                    # conflate it with "robots.txt doesn't exist" (prepare_robots_domain_entry
+                    # would otherwise report "Unavailable" for a file that's actually there).
+                    logger.debug(
+                        "robots.txt body decode failed for %s: %s", domain_key, text_exc
+                    )
+                    robots_text_read_error = True
+                if robots_text is not None:
+                    robots_lower = robots_text.lower()
+                    ai_allowed = all(bot in robots_lower for bot in _LEGACY_AI_BOTS)
+                    hits = sum(1 for bot in _AEO_ENGINE_BOTS if bot in robots_lower)
+                    aeo_engine_bot_coverage = hits / float(len(_AEO_ENGINE_BOTS))
     except Exception as exc:
         logger.debug("robots.txt probe failed for %s: %s", domain_key, exc)
         ai_allowed = None
@@ -165,6 +177,7 @@ async def _populate_robots_cache(
     robots_cache[domain_key] = prepare_robots_domain_entry(
         robots_text=robots_text,
         robots_status=robots_status,
+        robots_text_read_error=robots_text_read_error,
         llms_present=llms_present,
         ai_allowed=ai_allowed,
         aeo_engine_bot_coverage=aeo_engine_bot_coverage,

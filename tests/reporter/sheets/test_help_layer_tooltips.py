@@ -4,16 +4,12 @@ from __future__ import annotations
 
 from openpyxl.comments import Comment
 
-from hype_frog.analysis.link_equity import ANCHOR_TEXT_AUDIT_COLUMNS, LINK_EQUITY_COLUMNS
+from hype_frog.analysis.link_equity import LINK_EQUITY_COLUMNS
 from hype_frog.core.models import MAIN_ROW_DEFAULTS
-from hype_frog.reporter.engine_rows import (
-    CONTENT_HUB_EXPORT_COLUMNS,
-    CONTENT_HUB_METRICS_EXPORT_COLUMNS,
-)
-from hype_frog.reporter.sheets.config import (
-    CONTENT_HUB_METRICS_SHEET,
-    CONTENT_OPTIMISATION_HUB_SHEET,
-)
+from hype_frog.crawler.robots_mapping import ROBOTS_ANALYSIS_COLUMNS
+from hype_frog.orchestration.content_planner import CONTENT_PLANNER_COLUMNS
+from hype_frog.reporter.engine_rows import CONTENT_HUB_EXPORT_COLUMNS
+from hype_frog.reporter.sheets.config import CONTENT_OPTIMISATION_HUB_SHEET
 from hype_frog.reporter.sheets.dashboard_config import (
     DASHBOARD_KPI_ROW_COMMENTS,
     DASHBOARD_TOOLTIPS,
@@ -25,7 +21,6 @@ from hype_frog.reporter.sheets.merged_builders import (
     CONTENT_AI_READINESS_COLUMNS,
     LINK_INTELLIGENCE_COLUMNS,
     LINK_INVENTORY_COLUMNS,
-    QUICK_WINS_COLUMNS,
     TECHNICAL_DIAGNOSTICS_COLUMNS,
 )
 from hype_frog.reporter.sheets.validation import (
@@ -71,16 +66,17 @@ def test_curated_headers_remain_subset_of_export_column_contracts() -> None:
         "Content & AI Readiness": CONTENT_AI_READINESS_COLUMNS,
         "Link Intelligence": LINK_INTELLIGENCE_COLUMNS,
         "FixPlan": tuple(_PREFERRED_COLUMN_ORDERS["FixPlan"]),
-        "Quick Wins": QUICK_WINS_COLUMNS,
+        "Quick Wins": tuple(_PREFERRED_COLUMN_ORDERS["Quick Wins"]),
         "Broken Link Impact": BROKEN_LINK_IMPACT_COLUMNS,
         "Link Inventory": LINK_INVENTORY_COLUMNS,
         "SitemapQA": sitemapqa_columns,
         CONTENT_OPTIMISATION_HUB_SHEET: CONTENT_HUB_EXPORT_COLUMNS,
-        CONTENT_HUB_METRICS_SHEET: CONTENT_HUB_METRICS_EXPORT_COLUMNS,
         "Priority URLs": tuple(_PREFERRED_COLUMN_ORDERS["Priority URLs"]),
         "Main": tuple(MAIN_ROW_DEFAULTS.keys()),
         "Link Equity Map": LINK_EQUITY_COLUMNS,
-        "Anchor Text Audit": ANCHOR_TEXT_AUDIT_COLUMNS,
+        "Playbook": ("Section", "Item", "Guideline", "Why It Matters"),
+        "Content Planner": CONTENT_PLANNER_COLUMNS,
+        "Robots.txt Analysis": ROBOTS_ANALYSIS_COLUMNS,
     }
     for sheet, keys in curated_help_keys_by_sheet().items():
         allowed = contracts[sheet]

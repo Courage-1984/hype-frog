@@ -13,15 +13,12 @@ from __future__ import annotations
 
 from hype_frog.reporter.sheets.config import (
     AIOSEO_RECOMMENDATIONS_SHEET,
-    ANCHOR_TEXT_AUDIT_SHEET,
     AUDIT_RUN_DETAILS_SHEET,
     COMPETITOR_BENCHMARKS_SHEET,
-    CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     CONTENT_PLANNER_SHEET,
     CRAWL_LOG_SHEET,
     IMAGE_INVENTORY_SHEET,
-    LINK_EQUITY_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
     SCRIPT_INVENTORY_SHEET,
     SNIPPET_OPPORTUNITIES_SHEET,
@@ -56,11 +53,6 @@ SHEET_END_USER_DESCRIPTIONS: dict[str, str] = {
         "Production checklist for every page in the site tree. Use the sign-off "
         "columns to track copy, design, and client approval through to go-live."
     ),
-    CONTENT_HUB_METRICS_SHEET: (
-        "Supporting evidence for Hub decisions: intent, estimated ROI, JS "
-        "dependence, word counts, field Core Web Vitals, and anchor diversity — "
-        "without cluttering the editorial Hub."
-    ),
     "Main": (
         "Complete URL inventory from the crawl. Use the left-hand triage columns "
         "for filtering; expand column groups or open Technical Diagnostics when "
@@ -70,11 +62,6 @@ SHEET_END_USER_DESCRIPTIONS: dict[str, str] = {
         "Actionable recommendations mapped to All in One SEO panels, with direct "
         "edit links and current vs target values. Use when the site is managed "
         "in WordPress with AIOSEO."
-    ),
-    "Link Inventory": (
-        "Every distinct outbound link instance from the crawl — where it came "
-        "from, where it goes, how it is labelled, and whether the destination "
-        "responded successfully."
     ),
     "Broken Link Impact": (
         "Broken links ordered by how many pages point to them and how much "
@@ -108,7 +95,8 @@ SHEET_END_USER_DESCRIPTIONS: dict[str, str] = {
     ),
     "Content & AI Readiness": (
         "How ready each page is for search and answer engines: content depth, "
-        "structure, schema, media alt coverage, and AEO extractability scores."
+        "structure, schema, media alt coverage, and AEO extractability scores, "
+        "plus intent/ROI signals and inbound anchor-text quality."
     ),
     "Link Intelligence": (
         "Link health at page level: inlinks and outlinks, orphans, click depth, "
@@ -133,15 +121,6 @@ SHEET_END_USER_DESCRIPTIONS: dict[str, str] = {
         "Operational diary of fetch, render, PSI, and GSC problems during this "
         "audit — useful when results look incomplete or a URL failed "
         "unexpectedly."
-    ),
-    LINK_EQUITY_MAP_SHEET: (
-        "Where internal link equity concentrates: which pages are under-linked, "
-        "how deep they sit from the homepage, and what to strengthen."
-    ),
-    ANCHOR_TEXT_AUDIT_SHEET: (
-        "Whether inbound anchors are descriptive or generic (\"click here\"). "
-        "High generic share weakens relevance signals — rewrite anchors on the "
-        "source pages."
     ),
     SNIPPET_OPPORTUNITIES_SHEET: (
         "Pages with the best chance of featured snippets or AI-style answers, "

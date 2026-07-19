@@ -7,6 +7,7 @@ from typing import Any
 
 from hype_frog.checkpoint.link_inventory_cache import LinkInventoryCache
 from hype_frog.core.memory_guard import memory_circuit_breaker
+from hype_frog.core.url_normalization import normalize_url_key
 from hype_frog.reporter.sheets.merged_builders import LINK_INVENTORY_COLUMNS
 
 
@@ -83,9 +84,56 @@ def build_link_inventory_rows_list(
         cache.close()
 
 
+def _decorate_anchor_row(
+    row: dict[str, Any], status_by_url: dict[str, Any]
+) -> dict[str, Any]:
+    """Add Link Intelligence's Detail-row decoration to one cached anchor row.
+
+    Remaps ``Source URL`` -> ``URL`` (Link Intelligence's row-key column name) and
+    resolves ``Target Status (if crawled)``/``Crawlable`` exactly as the export
+    pipeline's now-removed inline decoration block did.
+    """
+    own_status = row.get("Status Code")
+    if own_status is not None and own_status != "":
+        target_status = own_status
+    else:
+        target_status = status_by_url.get(normalize_url_key(row.get("Target URL", "")))
+    crawlable = target_status is None or (
+        isinstance(target_status, (int, float)) and target_status < 400
+    )
+    return {
+        "URL": row.get("Source URL"),
+        "Target URL": row.get("Target URL"),
+        "Anchor Text": row.get("Anchor Text"),
+        "Rel Attribute": row.get("Rel Attribute"),
+        "Link Type": row.get("Link Type"),
+        "Status Code": row.get("Status Code"),
+        "Generic Anchor": row.get("Generic Anchor"),
+        "Target Status (if crawled)": target_status,
+        "Crawlable": crawlable,
+    }
+
+
+def iter_rows_decorated(
+    cache: LinkInventoryCache,
+    status_by_url: dict[str, Any],
+    *,
+    chunk_size: int = 500,
+) -> Iterator[list[dict[str, Any]]]:
+    """Wrap the cache's chunked anchor-row iterator for Link Intelligence's Detail block.
+
+    Each row is decorated with ``Target Status (if crawled)``/``Crawlable`` and its
+    ``Source URL`` key is remapped to ``URL`` — folded in from the former standalone
+    "Link Inventory" sheet, whose raw rows use ``Source URL`` as the key instead.
+    """
+    for chunk in cache.iter_rows(chunk_size=chunk_size):
+        yield [_decorate_anchor_row(row, status_by_url) for row in chunk]
+
+
 __all__ = [
     "anchor_row_from_link_item",
     "build_link_inventory_rows_list",
     "iter_anchor_rows_from_extra_rows",
+    "iter_rows_decorated",
     "populate_link_inventory_cache",
 ]

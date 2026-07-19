@@ -29,20 +29,16 @@ from hype_frog.orchestration.crawl_runner import (
 )
 from hype_frog.reporter.sheets.config import (
     AIOSEO_RECOMMENDATIONS_SHEET,
-    ANCHOR_TEXT_AUDIT_SHEET,
     AUDIT_RUN_DETAILS_SHEET,
-    CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     CONTENT_PLANNER_SHEET,
     COMPETITOR_BENCHMARKS_SHEET,
     CRAWL_LOG_SHEET,
     IMAGE_INVENTORY_SHEET,
-    LINK_EQUITY_MAP_SHEET,
     ROBOTS_ANALYSIS_SHEET,
     SCRIPT_INVENTORY_SHEET,
     SNIPPET_OPPORTUNITIES_SHEET,
 )
-from hype_frog.analysis.link_equity import ANCHOR_TEXT_AUDIT_COLUMNS, LINK_EQUITY_COLUMNS
 from hype_frog.analysis.snippet_opportunities import SNIPPET_OPPORTUNITY_COLUMNS
 from hype_frog.analysis.third_party_scripts import SCRIPT_INVENTORY_COLUMNS
 from hype_frog.pipeline.image_inventory import IMAGE_INVENTORY_COLUMNS
@@ -53,7 +49,6 @@ from hype_frog.reporter.sheets.merged_builders import (
     CONTENT_AI_READINESS_COLUMNS,
     ISSUE_REGISTER_COLUMNS,
     LINK_INTELLIGENCE_COLUMNS,
-    LINK_INVENTORY_COLUMNS,
     QUICK_WINS_COLUMNS,
     TECHNICAL_DIAGNOSTICS_COLUMNS,
     TEMPLATE_DUPLICATION_RISKS_COLUMNS,
@@ -119,10 +114,8 @@ _FULL_SUITE_FORMAT_SHEETS: list[str] = [
     "Quick Wins",
     CONTENT_OPTIMISATION_HUB_SHEET,
     CONTENT_PLANNER_SHEET,
-    CONTENT_HUB_METRICS_SHEET,
     "Main",
     AIOSEO_RECOMMENDATIONS_SHEET,
-    "Link Inventory",
     "Broken Link Impact",
     "SitemapQA",
     "Template & Duplication Risks",
@@ -135,8 +128,6 @@ _FULL_SUITE_FORMAT_SHEETS: list[str] = [
     "Redirects",
     ROBOTS_ANALYSIS_SHEET,
     CRAWL_LOG_SHEET,
-    LINK_EQUITY_MAP_SHEET,
-    ANCHOR_TEXT_AUDIT_SHEET,
     SNIPPET_OPPORTUNITIES_SHEET,
     SCRIPT_INVENTORY_SHEET,
     IMAGE_INVENTORY_SHEET,
@@ -164,14 +155,11 @@ def get_merged_sheet_columns() -> dict[str, list[str]]:
         "Technical Diagnostics": list(TECHNICAL_DIAGNOSTICS_COLUMNS),
         "Content & AI Readiness": list(CONTENT_AI_READINESS_COLUMNS),
         "Link Intelligence": list(LINK_INTELLIGENCE_COLUMNS),
-        "Link Inventory": list(LINK_INVENTORY_COLUMNS),
         "Quick Wins": list(QUICK_WINS_COLUMNS),
         "Broken Link Impact": list(BROKEN_LINK_IMPACT_COLUMNS),
         "Template & Duplication Risks": list(TEMPLATE_DUPLICATION_RISKS_COLUMNS),
         ROBOTS_ANALYSIS_SHEET: list(ROBOTS_ANALYSIS_COLUMNS),
         CRAWL_LOG_SHEET: list(CRAWL_LOG_COLUMNS),
-        LINK_EQUITY_MAP_SHEET: list(LINK_EQUITY_COLUMNS),
-        ANCHOR_TEXT_AUDIT_SHEET: list(ANCHOR_TEXT_AUDIT_COLUMNS),
         SNIPPET_OPPORTUNITIES_SHEET: list(SNIPPET_OPPORTUNITY_COLUMNS),
         SCRIPT_INVENTORY_SHEET: list(SCRIPT_INVENTORY_COLUMNS),
         IMAGE_INVENTORY_SHEET: list(IMAGE_INVENTORY_COLUMNS),
@@ -458,7 +446,6 @@ def build_priority_rows(
                 "Owner": owner_for_issue_fn(
                     owner_seed_issue, str(row.get("Severity Badge") or "")
                 ),
-                "Sprint": "",
                 "Status": "Open",
             }
         )

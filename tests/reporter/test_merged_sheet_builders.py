@@ -151,15 +151,71 @@ def test_content_ai_readiness_backfills_word_count_and_title() -> None:
     assert "AEO" in str(row["Content Category"])
 
 
-def test_link_intelligence_summary_and_detail_rows() -> None:
+def test_content_ai_readiness_merges_hub_metrics_and_anchor_audit() -> None:
+    """Content Hub Metrics + Anchor Text Audit columns fold in via left-join dicts."""
     main_rows, extra_rows = _sample_main_extra()
-    link_detail_rows = [
-        {
-            **extra_rows[0]["Link Details"][0],
-            "Target Status (if crawled)": 404,
-            "Crawlable": False,
+    url = "https://example.com/about"
+    hub_metrics_by_url = {
+        url: {
+            "URL": url,
+            "Search Intent": "Informational",
+            "Search Intent Source": "Heuristic",
+            "Instant Priority": "CRITICAL",
+            "Potential Traffic Lift": 42,
+            "AEO Visibility Gain": 7.5,
+            "JS Dependent": False,
+            "Raw Words": 400,
+            "Rendered Words": 420,
+            "Field LCP (ms)": 2500.0,
+            "Field CLS": 0.05,
+            "Anchor Text Diversity": "High",
         }
-    ]
+    }
+    anchor_audit_by_url = {
+        url: {
+            "Destination URL": url,
+            "Inbound Link Count": 6,
+            "Generic Anchor Count": 4,
+            "Generic Anchor %": 66.7,
+            "Top Anchor Texts": "click here | read more",
+            "Generic Anchor Dominance": True,
+            "Recommended Action": (
+                "Rewrite generic anchors ('click here', 'read more') with descriptive text."
+            ),
+        }
+    }
+    rows = build_content_ai_readiness_rows(
+        extra_rows,
+        main_rows=main_rows,
+        hub_metrics_by_url=hub_metrics_by_url,
+        anchor_audit_by_url=anchor_audit_by_url,
+    )
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["Search Intent"] == "Informational"
+    assert row["Instant Priority"] == "CRITICAL"
+    assert row["Potential Traffic Lift"] == 42
+    assert row["Inbound Link Count"] == 6
+    assert row["Generic Anchor Dominance"] is True
+    assert row["Recommended Action"].startswith("Rewrite generic anchors")
+
+
+def test_content_ai_readiness_defaults_when_no_hub_metrics_or_anchor_audit() -> None:
+    """Left-join defaults kick in for URLs with no inbound anchors/hub metrics — no error."""
+    main_rows, extra_rows = _sample_main_extra()
+    rows = build_content_ai_readiness_rows(extra_rows, main_rows=main_rows)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["Search Intent"] == ""
+    assert row["Inbound Link Count"] == 0
+    assert row["Generic Anchor Dominance"] is False
+
+
+def test_link_intelligence_summary_rows() -> None:
+    """Summary rows only — Detail rows are streamed separately (see
+    test_link_intelligence_detail_rows_stream_from_cache) since the merge with the
+    former standalone "Link Inventory" sheet."""
+    main_rows, extra_rows = _sample_main_extra()
     graph_rows = [
         {
             "URL": "https://example.com/about",
@@ -172,17 +228,107 @@ def test_link_intelligence_summary_and_detail_rows() -> None:
     ]
     rows = build_link_intelligence_rows(
         extra_rows=extra_rows,
-        link_detail_rows=link_detail_rows,
         crawlgraph_rows=graph_rows,
         main_rows=main_rows,
     )
-    summaries = [r for r in rows if r["Record Type"] == "Summary"]
-    details = [r for r in rows if r["Record Type"] == "Detail"]
-    assert len(summaries) == 1
-    assert summaries[0]["Broken Internal Links Count"] == 1
-    assert summaries[0]["Inlinks Count"] == 3
-    assert len(details) == 1
-    assert details[0]["Target URL"] == "https://example.com/missing"
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["Record Type"] == "Summary"
+    assert row["Broken Internal Links Count"] == 1
+    assert row["Inlinks Count"] == 3
+    # No Link Equity Map data supplied -> defaults, not an error.
+    assert row["Inbound Link Count"] == 0
+    assert row["Equity Tier"] == ""
+
+
+def test_link_intelligence_summary_rows_merge_link_equity_map_columns() -> None:
+    """Link Equity Map's columns fold into Summary rows via link_equity_by_url."""
+    main_rows, extra_rows = _sample_main_extra()
+    url = "https://example.com/about"
+    link_equity_by_url = {
+        url: {
+            "URL": url,
+            "Inbound Link Count": 12,
+            "Unique Source Pages": 5,
+            "Anchor Texts (top 5)": "about us | our team",
+            "PageRank Percentile": 82.5,
+            "Equity Tier": "High",
+            "Recommended Action": "Maintain equity; ensure key CTAs are not buried below the fold.",
+        }
+    }
+    rows = build_link_intelligence_rows(
+        extra_rows=extra_rows,
+        crawlgraph_rows=[],
+        main_rows=main_rows,
+        link_equity_by_url=link_equity_by_url,
+    )
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["Inbound Link Count"] == 12
+    assert row["Unique Source Pages"] == 5
+    assert row["Equity Tier"] == "High"
+    assert row["Recommended Action"].startswith("Maintain equity")
+
+
+def test_link_intelligence_detail_rows_stream_from_cache() -> None:
+    """Detail rows (deduplicated, decorated) stream from the Link Inventory SQLite
+    cache and append after Summary rows already written to the same sheet — folded
+    in from the former standalone "Link Inventory" sheet."""
+    from openpyxl import Workbook
+
+    from hype_frog.checkpoint.link_inventory_cache import LinkInventoryCache
+    from hype_frog.pipeline.link_inventory_stream import populate_link_inventory_cache
+    from hype_frog.reporter.engine_io import (
+        append_link_detail_rows_streamed,
+        write_dict_rows_sheet,
+    )
+    from hype_frog.reporter.sheets.merged_builders import LINK_INTELLIGENCE_COLUMNS
+
+    main_rows, extra_rows = _sample_main_extra()
+    # Duplicate anchor instance to prove dedup on (URL, Target URL, Anchor Text).
+    extra_rows[0]["Link Details"].append(dict(extra_rows[0]["Link Details"][0]))
+    summary_rows = build_link_intelligence_rows(
+        extra_rows=extra_rows,
+        crawlgraph_rows=[],
+        main_rows=main_rows,
+    )
+
+    class _Writer:
+        def __init__(self, wb: Workbook) -> None:
+            self.book = wb
+            self.sheets: dict[str, object] = {}
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    writer = _Writer(wb)
+    columns = list(LINK_INTELLIGENCE_COLUMNS)
+    write_dict_rows_sheet(writer, "Link Intelligence", columns, summary_rows)
+
+    cache = LinkInventoryCache(":memory:")
+    try:
+        populate_link_inventory_cache(cache, extra_rows)
+        assert cache.row_count() == 1  # dedup collapsed the duplicate anchor
+        append_link_detail_rows_streamed(
+            writer,
+            cache,
+            sheet_name="Link Intelligence",
+            columns=columns,
+            status_by_url={},
+        )
+    finally:
+        cache.close()
+
+    ws = writer.book["Link Intelligence"]
+    header = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
+    body_rows = [
+        {header[c - 1]: ws.cell(r, c).value for c in range(1, ws.max_column + 1)}
+        for r in range(2, ws.max_row + 1)
+    ]
+    record_types = [r["Record Type"] for r in body_rows]
+    assert record_types == ["Summary", "Detail"]
+    detail_row = body_rows[1]
+    assert detail_row["URL"] == "https://example.com/about"
+    assert detail_row["Target URL"] == "https://example.com/missing"
 
 
 def test_issue_register_includes_summary_and_inventory() -> None:

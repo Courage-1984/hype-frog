@@ -65,6 +65,7 @@ class RunSetup:
     regen_report: bool = False
     snapshot_id: str | None = None
     re_enrich: bool = False
+    quick_wins_max_results: int | None = None
 
 
 def resolve_run_setup(
@@ -107,6 +108,7 @@ def resolve_run_setup(
             regen_report=False,
             snapshot_id=None,
             re_enrich=False,
+            quick_wins_max_results=run.quick_wins_max_results,
         )
 
     user = get_user_config()
@@ -182,6 +184,7 @@ def resolve_run_setup(
         regen_report=regen_report,
         snapshot_id=snapshot_id,
         re_enrich=re_enrich,
+        quick_wins_max_results=user.quick_wins_max_results,
     )
 
 

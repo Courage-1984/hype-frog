@@ -2,6 +2,6 @@
 
 Inherits root [`CLAUDE.md`](../../../CLAUDE.md).
 
-**Source of truth:** [`.cursor/rules/orchestration.mdc`](../../../.cursor/rules/orchestration.mdc) and [`.claude/rules/orchestration.md`](../../../.claude/rules/orchestration.md).
+**Rule:** [`.claude/rules/orchestration.md`](../../../.claude/rules/orchestration.md).
 
-Read those before editing this layer. Verify entry-point names against actual exports (names have drifted before).
+Coordinates crawl/enrichment/export only — no domain logic. No `print()`. Export order: xlsx → HTML → PDF.

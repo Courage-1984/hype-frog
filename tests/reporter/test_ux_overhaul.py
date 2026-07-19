@@ -312,17 +312,21 @@ def test_narrow_banner_sheet_has_no_phantom_column_4() -> None:
     assert ws.max_column == 3
 
 
-def test_executive_briefing_chart_bands_do_not_overlap() -> None:
-    bands = [
-        ed._ROW_CH_HEALTH,
-        ed._ROW_CH_ISSUES,
-        ed._ROW_CH_ACTIONS,
-        ed._ROW_CH_TOP_ISSUES,
-    ]
-    # Each chart is ~8.4 cm tall (~16-17 rows); require a clear gap between bands.
-    for upper, lower in zip(bands, bands[1:]):
-        assert lower - upper >= 17
-    # The triage matrix sits below the final chart band, and the chart source
-    # tables sit below the triage matrix.
-    assert ed._BRIEFING_TRIAGE_START_ROW >= bands[-1] + 17
+def test_executive_briefing_chart_sections_do_not_overlap_columns() -> None:
+    """2.5 UX overhaul: chart sections sit side by side in columns (not stacked
+    in rows) — each of the 6 section column spans must be non-overlapping and
+    start exactly where the stats zone (A-H) ends."""
+    starts = ed._chart_section_start_cols()
+    assert len(starts) == len(ed._CHART_SECTION_COLUMN_SPANS) == 6
+    # Chart zone starts immediately after the frozen A-H stats band, no gap/overlap.
+    assert ed._CHART_ZONE_START_COL == ed._STATS_ZONE_LAST_COL + 1
+    assert starts[0] == ed._CHART_ZONE_START_COL
+    for (start, span), next_start in zip(
+        zip(starts, ed._CHART_SECTION_COLUMN_SPANS), starts[1:]
+    ):
+        assert start + span == next_start, "section spans must be contiguous, non-overlapping"
+    # The owner/nav triage table lives in the stats zone (A-H), not the chart
+    # zone, so it can start at/around the same row as the chart band without
+    # colliding — they occupy disjoint columns.
+    assert ed._BRIEFING_TRIAGE_START_ROW >= 1
     assert ed.CHART_SOURCE_FIRST_ROW > ed._BRIEFING_TRIAGE_START_ROW

@@ -74,7 +74,10 @@ def test_assemble_uses_link_details_anchor_count() -> None:
 
 
 def test_dashboard_formula_uses_sumproduct_on_inventory() -> None:
+    """Reads Link Intelligence's own Detail rows (folded in from the former
+    standalone "Link Inventory" sheet), filtered by an explicit Record Type term."""
     formula = link_inventory_broken_internal_total_formula()
     assert "SUMPRODUCT" in formula
-    assert "Link Inventory" in formula
+    assert "Link Intelligence" in formula
+    assert '="Detail"' in formula
     assert ">=400" in formula

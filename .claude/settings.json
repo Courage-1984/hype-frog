@@ -1,8 +1,13 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "env": {
     "CLAUDE_CODE_USE_POWERSHELL_TOOL": "1"
   },
   "defaultShell": "powershell",
+  "teammateDefaultModel": "sonnet",
+  "companyAnnouncements": [
+    "hype-frog surfaces work in Plan and acceptEdits/auto: rules path-load; invoke skills via Skill tool or /name; delegate to agents explore-layer, reporter-reviewer, rules-auditor, contract-guardian, test-triager, doc-drift-checker; workflows /layer-boundary-audit and /reporter-sheet-lock-audit. Plan mode = research only (no edits). acceptEdits/auto = edit with git still denied."
+  ],
   "permissions": {
     "allow": [
       "Read",
@@ -10,12 +15,25 @@
       "Write",
       "Grep",
       "Glob",
+      "Skill",
+      "Agent(explore-layer)",
+      "Agent(reporter-reviewer)",
+      "Agent(rules-auditor)",
+      "Agent(contract-guardian)",
+      "Agent(test-triager)",
+      "Agent(doc-drift-checker)",
+      "Agent(Explore)",
+      "Agent(Plan)",
       "PowerShell(uv run *)",
       "PowerShell(uv sync *)",
       "PowerShell(uv add *)",
+      "PowerShell(uv run pytest *)",
+      "PowerShell(uv run hype-frog *)",
       "Bash(uv run *)",
       "Bash(uv sync *)",
       "Bash(uv add *)",
+      "Bash(uv run pytest *)",
+      "Bash(uv run hype-frog *)",
       "Bash(pytest *)",
       "Bash(python *)",
       "Bash(ls *)",
@@ -25,7 +43,9 @@
       "PowerShell(git rev-parse *)",
       "PowerShell(git status *)",
       "PowerShell(git diff *)",
-      "PowerShell(git branch *)"
+      "PowerShell(git branch *)",
+      "mcp__playwright__*",
+      "mcp__context7__*"
     ],
     "deny": [
       "Bash(git commit*)",
@@ -41,7 +61,13 @@
       "PowerShell(git rebase*)",
       "PowerShell(git reset*)",
       "PowerShell(git checkout -- *)",
-      "PowerShell(git restore *)"
+      "PowerShell(git restore *)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Read(./archive/**)",
+      "Read(./archive_legacy/**)",
+      "Read(./.old/**)"
     ]
   },
   "hooks": {

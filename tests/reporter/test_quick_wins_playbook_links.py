@@ -85,26 +85,27 @@ def test_quick_wins_gets_what_it_is_and_both_jump_links_fixed() -> None:
 
 
 def test_quick_wins_columns_follow_narrative_stage_order() -> None:
-    """Regression: columns must read identity -> why-it's-a-quick-win -> what-to-do
-    -> ownership -> navigation, top to bottom, not the old interleaved order."""
+    """Regression: columns must read identity -> why-it's-a-quick-win -> owner
+    (frozen pane boundary) -> what-to-do -> navigation, top to bottom. "Sprint"
+    was removed entirely (it duplicated FixPlan's Aging/Priority bucket)."""
     assert QUICK_WINS_COLUMNS == (
         "URL",
         "Issue",
         "Severity",
         "Priority Score",
-        "Business Risk Score",
-        "GSC Clicks (30d)",
         "Effort (hrs)",
+        "GSC Clicks (30d)",
+        "Owner",
         "What It Is",
         "Why It Matters",
         "Recommended Fix",
         "How To Verify",
-        "Owner",
-        "Sprint",
+        "Business Risk Score",
         "Revenue Risk",
         "Jump to FixPlan",
         "Jump to Playbook",
     )
+    assert "Sprint" not in QUICK_WINS_COLUMNS
 
 
 def test_quick_wins_business_risk_score_comes_from_risk_score_by_url_map() -> None:

@@ -31,6 +31,7 @@ def test_get_user_config_parses_prompts(monkeypatch: pytest.MonkeyPatch) -> None
             "yes",
             "y",
             "y",
+            "50",
         ]
     )
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
@@ -48,6 +49,7 @@ def test_get_user_config_parses_prompts(monkeypatch: pytest.MonkeyPatch) -> None
     assert config.check_external_link_status is True
     assert config.check_og_images is True
     assert config.check_content_images is True
+    assert config.quick_wins_max_results == 50
 
 
 def test_get_user_config_ignores_invalid_limits(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -63,6 +65,7 @@ def test_get_user_config_ignores_invalid_limits(monkeypatch: pytest.MonkeyPatch)
             "",
             "",
             "",
+            "not-a-number-either",
         ]
     )
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
@@ -75,6 +78,7 @@ def test_get_user_config_ignores_invalid_limits(monkeypatch: pytest.MonkeyPatch)
     assert config.render_wait_ms == 4000
     assert config.selector_wait_ms == 3000
     assert config.check_content_images is False
+    assert config.quick_wins_max_results is None
 
 
 def test_parse_args_verbose_and_quiet_flags() -> None:

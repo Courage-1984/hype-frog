@@ -17,7 +17,7 @@ This document captures **measured constraints and code-path profiles** for the h
 | `orchestration/crawl_runner_bfs.py` | BFS scheduler, worker pool, SQLite cache |
 | `checkpoint/cache.py` | `AuditCache` — SQLite spill for crawl rows |
 | `core/memory_guard.py` | RSS estimation and hard caps |
-| `pipeline/link_inventory.py` / `reporter/sheets/merged_builders.py` | Link Inventory materialisation |
+| `pipeline/link_inventory.py` / `reporter/sheets/merged_builders.py` | Link Intelligence Detail-row (anchor) materialisation — formerly the standalone "Link Inventory" sheet |
 
 ---
 
@@ -117,7 +117,11 @@ Pre-crawl warning only; hard abort when `--max-memory-mb` exceeded.
 | Enrichment | `extra_work` list — duplicate of all extra rows |
 | Export | `build_link_inventory_rows(extra_rows)` — **flatten** all `Link Details` anchors |
 
-### Link Inventory scaling (primary RAM hotspot)
+### Link Intelligence Detail-row scaling (primary RAM hotspot)
+
+(Formerly documented as "Link Inventory scaling" before that sheet was folded into
+Link Intelligence's Detail rows — the SQLite-streamed anchor-flattening mechanism
+below is unchanged, only the write target moved.)
 
 Each crawled page stores `Link Details` (anchor list) on the extra row (`data_assembler_phases.py`). At export:
 

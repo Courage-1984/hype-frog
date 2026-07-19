@@ -110,7 +110,8 @@ MAIN_TRIAGE_VISIBLE_HEADERS: tuple[str, ...] = (
 MAIN_TRIAGE_COLUMN_COUNT: int = len(MAIN_TRIAGE_VISIBLE_HEADERS)
 CONTENT_OPTIMISATION_HUB_SHEET: str = "Content Optimisation Hub"
 CONTENT_PLANNER_SHEET: str = "Content Planner"
-# Companion sheet: per-URL crawl metrics and executive ROI fields split from the Hub.
+# Retired standalone sheet — folded into "Content & AI Readiness". Constant kept only
+# because the still-dead-code legacy ``reporter/sheets/dashboard.py`` references it.
 CONTENT_HUB_METRICS_SHEET: str = "Content Hub Metrics"
 AIOSEO_RECOMMENDATIONS_SHEET: str = "AIOSEO Recommendations"
 AUDIT_RUN_DETAILS_SHEET: str = "Audit Run Details"
@@ -118,21 +119,22 @@ ROBOTS_ANALYSIS_SHEET: str = "Robots.txt Analysis"
 CRAWL_LOG_SHEET: str = "Crawl Log"
 SCRIPT_INVENTORY_SHEET: str = "Script Inventory"
 IMAGE_INVENTORY_SHEET: str = "Image Inventory"
-LINK_EQUITY_MAP_SHEET: str = "Link Equity Map"
-ANCHOR_TEXT_AUDIT_SHEET: str = "Anchor Text Audit"
 SNIPPET_OPPORTUNITIES_SHEET: str = "Snippet Opportunities"
 COMPETITOR_BENCHMARKS_SHEET: str = "Competitor Benchmarks"
 EXECUTIVE_BRIEFING_SHEET: str = "Executive Briefing"
-# Freeze just the title + KPI (both rows) + key-insights band (rows 1–11) so the
-# KPI summary stays visible while scrolling through the taller, non-overlapping
-# chart grid.
-EXECUTIVE_BRIEFING_FREEZE_PANES: str = "A12"
+# 2.5 UX overhaul — column split, not a row split: columns A-H (title, KPI
+# cards, key insights, owner/nav triage) are frozen; the 6 chart sections sit
+# side by side from column I, reached by scrolling right. Column-only freeze
+# (no row component) since the A-H content is compact enough to need no
+# vertical scroll of its own.
+EXECUTIVE_BRIEFING_FREEZE_PANES: str = "I1"
 LEGACY_DASHBOARD_SHEET: str = "Dashboard"
 # Deprecated alias — Executive Dashboard tab removed in Phase 2.
 EXECUTIVE_DASHBOARD_SHEET: str = "Executive Dashboard"
 CHART_DATA_SHEET: str = "Chart Data"
-# Freeze through Assigned Owner + URL Slug Normalization; URL scrolls from column I.
-CONTENT_HUB_FREEZE_PANES: str = "I3"
+# Freeze through the 10 lead columns (Action Required..Semantic AEO Score, the
+# headline-scores block); "Proposed URL Slug" onward scrolls from column K.
+CONTENT_HUB_FREEZE_PANES: str = "K3"
 
 # Sheets that benefit from a reduced zoom level so dense card/triage layouts fit on
 # screen without horizontal scrolling (applied once, late, in workbook finalisation).
@@ -148,9 +150,7 @@ SHEET_ZOOM_OVERRIDES: dict[str, int] = {
     "Quick Wins": 90,
     CONTENT_OPTIMISATION_HUB_SHEET: 90,
     CONTENT_PLANNER_SHEET: 90,
-    CONTENT_HUB_METRICS_SHEET: 90,
     AIOSEO_RECOMMENDATIONS_SHEET: 90,
-    "Link Inventory": 90,
     "Broken Link Impact": 90,
     "SitemapQA": 90,
     "Template & Duplication Risks": 90,
@@ -163,8 +163,6 @@ SHEET_ZOOM_OVERRIDES: dict[str, int] = {
     "Redirects": 90,
     ROBOTS_ANALYSIS_SHEET: 90,
     CRAWL_LOG_SHEET: 90,
-    LINK_EQUITY_MAP_SHEET: 90,
-    ANCHOR_TEXT_AUDIT_SHEET: 90,
     SNIPPET_OPPORTUNITIES_SHEET: 90,
     COMPETITOR_BENCHMARKS_SHEET: 90,
     SCRIPT_INVENTORY_SHEET: 90,
@@ -182,7 +180,6 @@ AUTO_FILTER_SHEETS: frozenset[str] = frozenset(
         "Quick Wins",
         AIOSEO_RECOMMENDATIONS_SHEET,
         "Technical Diagnostics",
-        CONTENT_HUB_METRICS_SHEET,
         "Broken Link Impact",
         "Issue Register",
         "Content & AI Readiness",
@@ -199,7 +196,6 @@ DATA_HEAVY_TABS: set[str] = {
     "Summary",
     "Schema & Metadata",
     CONTENT_OPTIMISATION_HUB_SHEET,
-    CONTENT_HUB_METRICS_SHEET,
 }
 
 
@@ -299,8 +295,6 @@ __all__ = [
     "CRAWL_LOG_SHEET",
     "SCRIPT_INVENTORY_SHEET",
     "IMAGE_INVENTORY_SHEET",
-    "LINK_EQUITY_MAP_SHEET",
-    "ANCHOR_TEXT_AUDIT_SHEET",
     "SNIPPET_OPPORTUNITIES_SHEET",
     "COMPETITOR_BENCHMARKS_SHEET",
     "EXECUTIVE_BRIEFING_SHEET",

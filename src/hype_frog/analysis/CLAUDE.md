@@ -2,6 +2,6 @@
 
 Inherits root [`CLAUDE.md`](../../../CLAUDE.md).
 
-**Source of truth:** [`.cursor/rules/analysis.mdc`](../../../.cursor/rules/analysis.mdc).
+**Rule:** [`.claude/rules/analysis.md`](../../../.claude/rules/analysis.md).
 
-Read it before editing this layer: post-crawl-only passes (no HTTP, no workbook writes) that mutate row dicts in place — canonical/hreflang chains, link equity, third-party scripts, snippet opportunities, topical authority, content similarity, competitor benchmarks, the delta engine. Additive keys only.
+Post-crawl additive enrichment. No network. Delta store ≠ checkpoint ≠ crawl-replay snapshots.

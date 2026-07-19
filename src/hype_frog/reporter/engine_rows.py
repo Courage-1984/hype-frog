@@ -229,6 +229,18 @@ def _fallback_keyword(url: str, h1_text: str) -> str:
     return ""
 
 
+_EXCEL_CELL_CHAR_LIMIT = 32767
+_AFFECTED_URLS_TRUNCATION_MARKER = "\n… (truncated at Excel's cell character limit)"
+
+
+def _clip_affected_urls_text(joined_urls: str) -> str:
+    """Truncate only if the joined text would exceed Excel's per-cell limit."""
+    if len(joined_urls) <= _EXCEL_CELL_CHAR_LIMIT:
+        return joined_urls
+    keep = _EXCEL_CELL_CHAR_LIMIT - len(_AFFECTED_URLS_TRUNCATION_MARKER)
+    return joined_urls[:keep] + _AFFECTED_URLS_TRUNCATION_MARKER
+
+
 def build_fixplan_rows(
     summary_rules: list[IssueRule],
     extra_rows: list[ExtraRowPayload],
@@ -322,20 +334,15 @@ def build_fixplan_rows(
             "Likely Root Cause": root_cause,
             "Recommended Fix": recommended_fix,
             "Owner": owner_for_issue(issue_name, severity),
-            "Agency Owner": {
-                "Dev": "Agency Dev",
-                "Copy Writer": "Agency SEO",
-                "Server/Host": "Agency Dev",
-            }.get(owner_for_issue(issue_name, severity), "Agency Dev"),
             "URL": affected[0].values.get("URL") if affected else "",
             "Discovery Rank": (
                 affected[0].values.get("Discovery Rank") if affected else 10**9
             ),
-            "Affected URLs": (
-                f"SEE DETAILS IN {reference_tab}"
-                if len(affected_urls) > 10
-                else "\n".join(affected_urls[:50])
-            ),
+            # Always list every affected URL (no display cap) — the column is
+            # clipped, not wrapped, so this doesn't inflate row height. Excel's
+            # per-cell hard limit is ~32,767 chars; only truncate if the joined
+            # text would exceed that (extremely wide fan-out issues only).
+            "Affected URLs": _clip_affected_urls_text("\n".join(affected_urls)),
             "Detail Reference Tab": reference_tab,
             "Resolution Type": resolution_type,
             "Effort": effort,
@@ -349,7 +356,7 @@ def build_fixplan_rows(
                 if severity == "Critical" and workflow["Priority Score"] >= 100
                 else "Medium Risk" if severity == "Warning" else "Monitor"
             ),
-            "Jump to Details": "Open in Main Tab",
+            "Jump to Details": reference_tab,
             "Est. Sprint Points": workflow["Est. Sprint Points"],
             "Est. Hours": workflow["Est. Hours"],
             "Priority Score": workflow["Priority Score"],
@@ -539,6 +546,68 @@ def _content_hub_open_in_main_formula(url_col_letter: str, row: int) -> str:
     )
 
 
+def compute_content_hub_metrics_row(
+    raw_url: str, m: dict[str, Any], e: dict[str, Any]
+) -> dict[str, Any]:
+    """Per-URL Content Hub Metrics dict — pure function of (url, main, extra) rows.
+
+    Extracted from :func:`build_content_optimisation_hub_rows` so the same metrics
+    can be computed for every crawled URL (Content & AI Readiness), not just the
+    Hub's curated subset.
+    """
+    hub_metrics = resolve_content_hub_metrics(m, e)
+    field_lcp_raw = hub_metrics.field_lcp_ms
+    clicks_raw = e.get("GSC Clicks") or m.get("GSC Clicks")
+    roi = calculate_executive_roi(
+        clicks=clicks_raw,
+        aeo_score=e.get("Semantic AEO Score"),
+        lcp_ms=field_lcp_raw,
+    )
+    return {
+        "URL": str(raw_url or "").strip(),
+        "JS Dependent": hub_metrics.js_dependent,
+        "Raw Words": hub_metrics.raw_words,
+        "Rendered Words": hub_metrics.rendered_words,
+        "Field LCP (ms)": _round2(hub_metrics.field_lcp_ms, default=0.0),
+        "Field CLS": _round4(hub_metrics.field_cls, default=0.0),
+        "Anchor Text Diversity": _hub_display_text(str(e.get("Anchor Text Diversity") or "")),
+        "Potential Traffic Lift": int(round(roi["potential_traffic_lift"])),
+        "AEO Visibility Gain": _round2(roi["aeo_visibility_gain"]),
+        "Instant Priority": str(roi["instant_priority"]),
+        "Search Intent": _hub_display_text(str(e.get("Search Intent") or "Unknown"))
+        or "Unknown",
+        "Search Intent Source": _hub_display_text(
+            str(e.get("Search Intent Source") or "Unknown")
+        )
+        or "Unknown",
+    }
+
+
+def build_content_hub_metrics_for_all_urls(
+    main_rows: list[MainRowPayload], extra_rows: list[ExtraRowPayload]
+) -> list[dict[str, Any]]:
+    """Content Hub Metrics computed for every crawled URL (feeds Content & AI Readiness).
+
+    Uses the same pairing/merge helpers ``build_content_ai_readiness_rows`` itself
+    uses, so the URL join key matches exactly.
+    """
+    from hype_frog.reporter.sheets.merged_builders import (
+        merged_export_row,
+        pair_main_extra_rows,
+    )
+
+    main_dicts = [r.values for r in main_rows]
+    extra_dicts = [r.values for r in extra_rows]
+    rows: list[dict[str, Any]] = []
+    for main, extra in pair_main_extra_rows(main_dicts, extra_dicts):
+        merged = merged_export_row(main, extra)
+        raw_url = str(merged.get("URL") or "").strip()
+        if not raw_url:
+            continue
+        rows.append(compute_content_hub_metrics_row(raw_url, main, extra))
+    return rows
+
+
 def build_content_optimisation_hub_rows(
     main_rows: list[MainRowPayload],
     extra_rows: list[ExtraRowPayload],
@@ -628,14 +697,6 @@ def build_content_optimisation_hub_rows(
         extra_payload = extra_by_url.get(url)
         m = main_payload.values if main_payload else {}
         e = extra_payload.values if extra_payload else {}
-        hub_metrics = resolve_content_hub_metrics(m, e)
-        field_lcp_raw = hub_metrics.field_lcp_ms
-        clicks_raw = e.get("GSC Clicks") or m.get("GSC Clicks")
-        roi = calculate_executive_roi(
-            clicks=clicks_raw,
-            aeo_score=e.get("Semantic AEO Score"),
-            lcp_ms=field_lcp_raw,
-        )
         raw_url = ""
         if main_payload:
             raw_url = str(main_payload.values.get("URL") or "").strip()
@@ -735,31 +796,7 @@ def build_content_optimisation_hub_rows(
         action_required = determine_action_required(e)
         open_main_formula = _content_hub_open_in_main_formula(f_l, excel_row)
 
-        metrics_rows.append(
-            {
-                "URL": str(raw_url or "").strip(),
-                "JS Dependent": hub_metrics.js_dependent,
-                "Raw Words": hub_metrics.raw_words,
-                "Rendered Words": hub_metrics.rendered_words,
-                "Field LCP (ms)": _round2(
-                    hub_metrics.field_lcp_ms,
-                    default=0.0,
-                ),
-                "Field CLS": _round4(hub_metrics.field_cls, default=0.0),
-                "Anchor Text Diversity": _hub_display_text(
-                    str(e.get("Anchor Text Diversity") or "")
-                ),
-                "Potential Traffic Lift": int(round(roi["potential_traffic_lift"])),
-                "AEO Visibility Gain": _round2(roi["aeo_visibility_gain"]),
-                "Instant Priority": str(roi["instant_priority"]),
-                "Search Intent": _hub_display_text(str(e.get("Search Intent") or "Unknown"))
-                or "Unknown",
-                "Search Intent Source": _hub_display_text(
-                    str(e.get("Search Intent Source") or "Unknown")
-                )
-                or "Unknown",
-            }
-        )
+        metrics_rows.append(compute_content_hub_metrics_row(raw_url, m, e))
         rows.append(
             {
                 "SEO Score": _hub_score_value(e.get("SEO Score")),

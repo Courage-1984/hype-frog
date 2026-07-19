@@ -2,6 +2,6 @@
 
 Inherits root [`CLAUDE.md`](../../../CLAUDE.md).
 
-**Source of truth:** [`.cursor/rules/crawler_engine.mdc`](../../../.cursor/rules/crawler_engine.mdc) — shared across `crawler/`, `extractors/`, `pipeline/`, `core/`, `orchestration/`.
+**Rule:** [`.claude/rules/extractors.md`](../../../.claude/rules/extractors.md).
 
-Read it before editing this layer: parsing-only, **no workbook I/O** — output feeds the `Extraction State`/`Extraction Source` contract that `crawler/` and `pipeline/` rely on. New extractor outcomes must map cleanly into `complete`/`partial`/`skipped` with an explicit reason where applicable.
+Parse-only. No workbook I/O, no live PSI/GSC.

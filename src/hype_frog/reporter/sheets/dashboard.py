@@ -1162,19 +1162,21 @@ def apply_executive_briefing_triage(
     data_start = row_start + 2
     adv_row = row_start + 10
 
-    worksheet[f"G{title_row}"] = "OWNER ISSUE SUMMARY"
-    worksheet[f"G{header_row}"] = "Owner"
-    worksheet[f"H{header_row}"] = "Issue Rows"
-    worksheet[f"I{header_row}"] = "Affected URLs"
-    worksheet[f"J{header_row}"] = "Critical"
-    worksheet[f"K{header_row}"] = "Warning"
-    worksheet[f"G{title_row}"].fill = light_header_fill
-    worksheet[f"G{title_row}"].font = Font(color="000000", bold=True, size=12)
-    worksheet[f"G{title_row}"].alignment = Alignment(
+    # 2.5 UX overhaul: shifted from G-K to A-E so this table lands inside the
+    # frozen A-H stats band instead of the scrollable chart zone.
+    worksheet[f"A{title_row}"] = "OWNER ISSUE SUMMARY"
+    worksheet[f"A{header_row}"] = "Owner"
+    worksheet[f"B{header_row}"] = "Issue Rows"
+    worksheet[f"C{header_row}"] = "Affected URLs"
+    worksheet[f"D{header_row}"] = "Critical"
+    worksheet[f"E{header_row}"] = "Warning"
+    worksheet[f"A{title_row}"].fill = light_header_fill
+    worksheet[f"A{title_row}"].font = Font(color="000000", bold=True, size=12)
+    worksheet[f"A{title_row}"].alignment = Alignment(
         horizontal="center", vertical="center", wrap_text=True
     )
-    worksheet.merge_cells(f"G{title_row}:K{title_row}")
-    for ref in (f"G{header_row}", f"H{header_row}", f"I{header_row}", f"J{header_row}", f"K{header_row}"):
+    worksheet.merge_cells(f"A{title_row}:E{title_row}")
+    for ref in (f"A{header_row}", f"B{header_row}", f"C{header_row}", f"D{header_row}", f"E{header_row}"):
         worksheet[ref].fill = owner_header_fill
         worksheet[ref].font = Font(color="000000", bold=True, size=11)
         worksheet[ref].alignment = Alignment(
@@ -1198,28 +1200,28 @@ def apply_executive_briefing_triage(
         owner_rows_sorted[:8], start=data_start
     ):
         owner_lit = _safe_excel_string_literal(owner_name)
-        worksheet[f"G{idx}"] = f'=HYPERLINK("#\'FixPlan\'!A1","{owner_lit}")'
-        worksheet[f"H{idx}"] = f'=COUNTIF({_fp_owner},"{owner_lit}")'
-        worksheet[f"I{idx}"] = f'=SUMIF({_fp_owner},"{owner_lit}",{_fp_affected})'
-        worksheet[f"J{idx}"] = f'=COUNTIFS({_fp_owner},"{owner_lit}",{_fp_severity},"Critical")'
-        worksheet[f"K{idx}"] = (
+        worksheet[f"A{idx}"] = f'=HYPERLINK("#\'FixPlan\'!A1","{owner_lit}")'
+        worksheet[f"B{idx}"] = f'=COUNTIF({_fp_owner},"{owner_lit}")'
+        worksheet[f"C{idx}"] = f'=SUMIF({_fp_owner},"{owner_lit}",{_fp_affected})'
+        worksheet[f"D{idx}"] = f'=COUNTIFS({_fp_owner},"{owner_lit}",{_fp_severity},"Critical")'
+        worksheet[f"E{idx}"] = (
             f'=COUNTIFS({_fp_owner},"{owner_lit}",{_fp_severity},"Warning")'
             f'+COUNTIFS({_fp_owner},"{owner_lit}",{_fp_severity},"Needs Work")'
         )
-        for col in ("G", "H", "I", "J", "K"):
+        for col in ("A", "B", "C", "D", "E"):
             worksheet[f"{col}{idx}"].fill = panel_fill
             worksheet[f"{col}{idx}"].alignment = Alignment(
                 horizontal="center", vertical="center"
             )
     if not owner_rows_sorted:
-        worksheet[f"G{data_start}"] = "No owner data"
-        worksheet[f"G{data_start}"].fill = panel_fill
-        worksheet[f"G{data_start}"].alignment = Alignment(
+        worksheet[f"A{data_start}"] = "No owner data"
+        worksheet[f"A{data_start}"].fill = panel_fill
+        worksheet[f"A{data_start}"].alignment = Alignment(
             horizontal="center", vertical="center"
         )
 
-    nav_col = "M"
-    open_col = "N"
+    nav_col = "G"
+    open_col = "H"
     worksheet[f"{nav_col}{title_row}"] = "Quick Navigation"
     worksheet[f"{open_col}{title_row}"] = "Open"
     for ref in (f"{nav_col}{title_row}", f"{open_col}{title_row}"):
@@ -1288,8 +1290,10 @@ def apply_executive_briefing_triage(
         )
         link_row += 1
 
-    for col, width in {"G": 25, "H": 14, "I": 16, "J": 12, "K": 12, "M": 28, "N": 10}.items():
-        worksheet.column_dimensions[col].width = width
+    # No per-column width override here (2.5 UX overhaul): columns A-H are shared
+    # with the KPI card grid above, which assumes uniform width (see
+    # _apply_executive_column_grid) — a bespoke width here would misalign those
+    # cards. Header cells already wrap_text, so narrower columns just wrap.
 
 
 __all__ = ["DASHBOARD_BRAND_A1", "apply_executive_briefing_triage", "style_dashboard"]

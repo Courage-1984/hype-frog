@@ -2,6 +2,6 @@
 
 Inherits root [`CLAUDE.md`](../../../CLAUDE.md).
 
-**Source of truth:** [`.cursor/rules/excel_engine.mdc`](../../../.cursor/rules/excel_engine.mdc) and [`.claude/rules/excel-integrity.md`](../../../.claude/rules/excel-integrity.md).
+**Rule:** [`.claude/rules/excel-integrity.md`](../../../.claude/rules/excel-integrity.md). Docs: `docs/excel_reporting_standards.md`, `docs/workbook_tabs.md`.
 
-Read those before editing this layer (3-way sheet lock, sanitization, Hub Action Required literals).
+3-way sheet lock, sanitization, Hub Action Required literals. Read-only row dicts. Skill: `.claude/skills/reporter/`.

@@ -13,7 +13,7 @@ from hype_frog.reporter.sheets.toc import PREFERRED_WORKBOOK_TAB_ORDER
 def test_preferred_workbook_tab_order_starts_with_toc_and_briefing() -> None:
     assert PREFERRED_WORKBOOK_TAB_ORDER[0] == "Table of Contents"
     assert PREFERRED_WORKBOOK_TAB_ORDER[1] == "Executive Briefing"
-    assert PREFERRED_WORKBOOK_TAB_ORDER[2] == "Priority URLs"
+    assert PREFERRED_WORKBOOK_TAB_ORDER[2] == "Playbook"
     assert CONTENT_OPTIMISATION_HUB_SHEET in PREFERRED_WORKBOOK_TAB_ORDER
 
 

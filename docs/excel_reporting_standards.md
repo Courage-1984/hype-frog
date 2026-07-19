@@ -15,7 +15,7 @@ Excel reporting no longer relies on a single monolithic engine file. Responsibil
 
 Full workbook assembly and delta integration are coordinated from the orchestration layer (not the reporter layer) via:
 
-- `src/hype_frog/orchestration/export_workbook.py` — `write_full_suite_workbook()` drives all 20+ tab builders (Main, Priority URLs, FixPlan, Quick Wins, Content Optimisation Hub, Link Equity Map, Anchor Text Audit, Script Inventory, Image Inventory, Crawl Log, DeltaFromPreviousRun, etc. — full inventory: `docs/workbook_tabs.md`) and integrates `snapshot_from_current_run()` / `build_delta_workbook_output()` from the analysis layer.
+- `src/hype_frog/orchestration/export_workbook.py` — `write_full_suite_workbook()` drives all 20+ tab builders (Main, Priority URLs, FixPlan, Quick Wins, Content Optimisation Hub, Link Intelligence, Script Inventory, Image Inventory, Crawl Log, DeltaFromPreviousRun, etc. — full inventory: `docs/workbook_tabs.md`) and integrates `snapshot_from_current_run()` / `build_delta_workbook_output()` from the analysis layer.
 - `src/hype_frog/orchestration/export_row_builders.py` — Sheet-specific row builders: `build_aeo_rows()`, `build_aioseo_rows()`, pattern rows, template risk rows.
 - `src/hype_frog/orchestration/export_workbook_constants.py` — `PLAYBOOK_LEGEND_ROWS` and `PLAYBOOK_QUICK_REFERENCE_ROWS` constant tables.
 
@@ -111,8 +111,6 @@ backlog (Summary roll-ups plus per-URL rows); the legacy **IssueInventory** tab 
 - **Executive Briefing** Owner Issue Summary, status/severity side panels, sprint
   roll-ups, and Top Issues blocks use live `COUNTIF`/`SUMIF`/`INDEX`/`MATCH`
   against FixPlan header-resolved ranges so figures stay current when FixPlan rows change.
-- **Link Inventory** table headers use the shared navy mock-table style (`STD_NAVY`) for visual
-  parity with other inventory sheets.
 
 ## Content hub — freeze and slug column
 
@@ -193,9 +191,10 @@ the plain `Severity` column (FixPlan/issue sheets), plus `Action Needed` (Yes/No
 (workflow), and numeric score bands — all via RAG constants.
 
 **Tab colours.** Every ordered tab (except the TOC) carries a group tab colour in
-`workbook_layout._SHEET_TAB_COLORS`; the advanced inventory/opportunity sheets (Link Equity Map,
-Anchor Text Audit, Snippet Opportunities, Competitor Benchmarks, Script Inventory, Image
-Inventory) use `TAB_COLOR_ADVANCED`.
+`workbook_layout._SHEET_TAB_COLORS`; the remaining hidden-by-default advanced sheets (Issue
+Register, CMS Action URLs, Redirects, Competitor Benchmarks) use `TAB_COLOR_ADVANCED` —
+Snippet Opportunities, Script Inventory, and Image Inventory were promoted to the visible
+primary workflow and now carry their persona colour instead.
 
 ### Catppuccin Mocha theme (`HF_EXCEL_THEME=mocha`)
 
@@ -284,19 +283,25 @@ Canonical tab order and default visibility: `reporter/sheets/workbook_layout.py`
 | Sheet | Builder | Purpose |
 |-------|---------|---------|
 | Technical Diagnostics | `merged_builders.build_technical_diagnostics_rows` | Technical, indexability, redirect, security, PSI/CrUX, GSC columns |
-| Content & AI Readiness | `merged_builders.build_content_ai_readiness_rows` | Content, schema, AEO, media signals |
+| Content & AI Readiness | `merged_builders.build_content_ai_readiness_rows` | Content, schema, AEO, media signals, plus intent/ROI (folded in from the retired "Content Hub Metrics") and inbound anchor-text quality (folded in from the retired "Anchor Text Audit") |
 | Issue Register | `merged_builders.build_issue_register_rows` | Unified issue list with history fields |
-| Link Inventory | `merged_builders.build_link_inventory_rows` | Internal links with status |
+| Link Intelligence | `merged_builders.build_link_intelligence_rows` (Summary) + `reporter.engine_io.append_link_detail_rows_streamed` (Detail) | Per-URL link summary + PageRank equity (folded in from the retired "Link Equity Map") plus deduplicated, anchor-level link detail (folded in from the retired "Link Inventory") |
 | Broken Link Impact | `merged_builders.build_broken_link_impact_rows` | Broken internal link instances |
 | Quick Wins | `merged_builders.build_quick_wins_rows` | Actionable low-effort fixes |
 
 ### Inventory and opportunity sheets
 
-**Script Inventory**, **Image Inventory**, **Snippet Opportunities**, **Link Equity Map**, **Anchor Text Audit**, **Redirects**, **Robots.txt Analysis**, **Crawl Log**, **Competitor Benchmarks** (optional), **CMS Action URLs**, **Template & Duplication Risks**, **Playbook**.
+**Script Inventory**, **Image Inventory**, **Snippet Opportunities**, **Redirects**, **Robots.txt Analysis**, **Crawl Log**, **Competitor Benchmarks** (optional), **CMS Action URLs**, **Template & Duplication Risks**, **Playbook**.
 
-## Link Inventory deduplication
+## Link Intelligence Detail-row deduplication
 
-`build_link_inventory_rows` deduplicates rows on **`(Source URL, Target URL, Anchor Text)`** before write so repeated anchor edges from multi-page discovery do not inflate the sheet.
+Link Intelligence's `Record Type = "Detail"` rows are streamed from a SQLite cache
+(`checkpoint.link_inventory_cache.LinkInventoryCache`, populated by
+`pipeline.link_inventory_stream.populate_link_inventory_cache`) deduplicated on
+**`(Source URL, Target URL, Anchor Text)`** before write, so repeated anchor edges
+from multi-page discovery do not inflate the sheet. This is the same cache/dedup
+mechanism the former standalone "Link Inventory" sheet used — only the write target
+changed (appended to Link Intelligence instead of its own sheet).
 
 ## Return navigation (Phase 3)
 
@@ -350,9 +355,6 @@ resolved (not caller-supplied) header row — see *Content Hub header-row timing
 - **Empty-state messaging:** FixPlan and Quick Wins with no data rows show a single
   merged, muted italic **"No items to report for this run."** message under the
   headers instead of a bare grid (`tables_impl._write_empty_state_message`).
-- **Content Hub Metrics headers stay intact:** the former write-time `A2:…2` merge
-  clobbered the metrics header/first-data row (B–K); it has been removed so all
-  metric headers and data survive the formatting pass.
 
 ## Quick Wins / FixPlan — linked issue descriptions and Playbook jump links
 
@@ -387,8 +389,8 @@ single-line hyperlink-style cell rather than wrapping.
 
 Actionable workflow sheets in ``AUTO_FILTER_SHEETS`` (``config.py``) always receive
 header autofilter during final formatting — including sparse FixPlan / Quick Wins
-exports with only a handful of rows. Link Inventory and Content Planner retain
-their existing bespoke filter rules.
+exports with only a handful of rows (Link Intelligence is one of them). Content
+Planner retains its own bespoke filter rules.
 
 ## Empty-state messaging
 

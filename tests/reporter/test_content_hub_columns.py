@@ -14,14 +14,20 @@ def test_content_hub_ordered_headers_matches_reorder_semantics() -> None:
 
 
 def test_content_hub_workflow_and_nav_columns_lead_the_sheet() -> None:
-    """Most-actionable-first: workflow + nav before scores before evidence."""
+    """Most-actionable-first: workflow + nav, then every headline score together
+    (2.5 UX overhaul), before editorial evidence/detail columns."""
     ordered = content_optimisation_hub_ordered_headers(_CONTENT_HUB_FIELDS_PRE_REORDER)
-    assert ordered[:5] == (
+    assert ordered[:10] == (
         "Action Required",
         "Status",
         "Assigned Owner",
         "URL",
-        "Open in Main",
+        "URL Slug Normalization",
+        "Copy Score",
+        "SEO Score",
+        "On-Page Optimization Score",
+        "Technical Health",
+        "Semantic AEO Score",
     )
 
 
@@ -42,31 +48,46 @@ def test_priority_urls_action_columns_lead_the_sheet() -> None:
     from hype_frog.reporter.sheets.layout import _PREFERRED_COLUMN_ORDERS
 
     order = _PREFERRED_COLUMN_ORDERS["Priority URLs"]
-    assert order[:3] == ["URL", "Action Needed", "Why Prioritized"]
-    # Editable triage fields stay last.
-    assert order[-3:] == ["Owner", "Status", "Sprint"]
+    assert order[:7] == [
+        "URL",
+        "Severity Badge",
+        "Business Risk Score",
+        "SEO Health Score",
+        "Owner",
+        "Action Needed",
+        "Status",
+    ]
+    # "Sprint" was removed entirely (a blank editable field with no distinct
+    # purpose from Status); jump links stay last.
+    assert "Sprint" not in order
+    assert order[-2:] == ["Open in Main", "Open in Technical"]
 
 
 def test_content_hub_operational_prefix_and_formula_letters() -> None:
-    # Column order (2.4 UX overhaul): Action Required, Status, Assigned Owner,
-    # URL, Open in Main, scores, then editorial slug/title/meta/heading fields.
+    # Column order (2.5 UX overhaul): Action Required, Status, Assigned Owner,
+    # URL, then every headline score together (URL Slug Normalization, Copy
+    # Score, SEO Score, On-Page Optimization Score, Technical Health, Semantic
+    # AEO Score — freeze boundary here), then nav/editorial detail columns.
     assert content_hub_column_letter("Action Required") == "A"
     assert content_hub_column_letter("Status") == "B"
     assert content_hub_column_letter("Assigned Owner") == "C"
     assert content_hub_column_letter("URL") == "D"
-    assert content_hub_column_letter("Open in Main") == "E"
-    assert content_hub_column_letter("On-Page Optimization Score") == "F"
+    assert content_hub_column_letter("URL Slug Normalization") == "E"
+    assert content_hub_column_letter("Copy Score") == "F"
     assert content_hub_column_letter("SEO Score") == "G"
-    assert content_hub_column_letter("Technical Health") == "H"
-    assert content_hub_column_letter("Copy Score") == "I"
-    assert content_hub_column_letter("URL Slug Normalization") == "J"
-    assert content_hub_column_letter("Current Title") == "L"
-    assert content_hub_column_letter("Title Health") == "M"
-    assert content_hub_column_letter("OG Image Health") == "AD"
-    assert content_hub_column_letter("Recommended Action") == "AF"
+    assert content_hub_column_letter("On-Page Optimization Score") == "H"
+    assert content_hub_column_letter("Technical Health") == "I"
+    assert content_hub_column_letter("Semantic AEO Score") == "J"
+    assert content_hub_column_letter("Proposed URL Slug") == "K"
+    assert content_hub_column_letter("Elementor Builder Link") == "L"
+    assert content_hub_column_letter("Open in Main") == "M"
+    assert content_hub_column_letter("Current Title") == "N"
+    assert content_hub_column_letter("Title Health") == "O"
+    assert content_hub_column_letter("OG Image Health") == "AF"
     assert content_hub_column_letter("Priority Reason") == "AG"
-    assert content_hub_column_letter("Entity Density (%)") == "AH"
-    assert content_hub_column_letter("Semantic AEO Score") == "AK"
+    assert content_hub_column_letter("Recommended Action") == "AH"
+    assert content_hub_column_letter("Entity Density (%)") == "AI"
+    assert content_hub_column_letter("Citation Candidate Count") == "AK"
 
 
 def test_hub_score_link_formula_uses_data_row_and_main_header_row() -> None:

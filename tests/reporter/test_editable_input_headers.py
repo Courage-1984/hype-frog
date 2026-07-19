@@ -23,10 +23,12 @@ def _sheet_with_headers(title: str, headers: list[str]) -> Workbook:
     return wb
 
 
-def test_priority_urls_status_and_sprint_headers_get_editable_fill() -> None:
+def test_priority_urls_status_header_gets_editable_fill() -> None:
+    # "Sprint" was removed from Priority URLs entirely — only "Status" remains
+    # a manual editable-workflow-input field on this sheet.
     wb = _sheet_with_headers(
         "Priority URLs",
-        ["URL", "Business Risk Score", "Status", "Sprint", "Owner"],
+        ["URL", "Business Risk Score", "Status", "Owner"],
     )
     ws = wb.active
     _mark_editable_input_headers(ws, header_row=1)
@@ -34,12 +36,10 @@ def test_priority_urls_status_and_sprint_headers_get_editable_fill() -> None:
     assert ws.cell(row=1, column=3).fill.fgColor.rgb.endswith(
         EDITABLE_INPUT_HEADER_FILL
     )
-    assert ws.cell(row=1, column=4).fill.fgColor.rgb.endswith(
-        EDITABLE_INPUT_HEADER_FILL
-    )
-    # Non-editable computed column must be untouched.
+    # Non-editable computed columns must be untouched.
     assert ws.cell(row=1, column=1).fill.patternType is None
     assert ws.cell(row=1, column=2).fill.patternType is None
+    assert ws.cell(row=1, column=4).fill.patternType is None
 
 
 def test_hub_status_and_assigned_owner_headers_get_editable_fill() -> None:

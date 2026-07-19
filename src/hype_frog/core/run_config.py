@@ -57,6 +57,7 @@ class RunConfig:
     output_filename: str | None = None
     export_pdf: bool = False
     hide_advanced_tabs: bool = True
+    quick_wins_max_results: int | None = None
 
 
 @dataclass(frozen=True)

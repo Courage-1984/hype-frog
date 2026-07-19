@@ -10,7 +10,6 @@ from openpyxl.worksheet.worksheet import Worksheet
 from hype_frog.reporter.sheets.config import (
     AUDIT_RUN_DETAILS_SHEET,
     CONTENT_HUB_FREEZE_PANES,
-    CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     CONTENT_PLANNER_SHEET,
     CRAWL_LOG_SHEET,
@@ -46,18 +45,13 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
         "Diagnostic command center: live title, meta, and H1–H6 health plus on-page score."
     ),
     CONTENT_PLANNER_SHEET: (
-        "Page-level workflow tracker: nav/footer site structure with "
-        "copywriting, design, and client sign-off status columns."
-    ),
-    CONTENT_HUB_METRICS_SHEET: (
-        "Per-URL crawl metrics (JS/rendered words, field CWV), anchor diversity, "
-        "and executive ROI estimates aligned with the Content Hub URL set."
+        "Page-level workflow tracker: copywriting, design, and client sign-off status."
     ),
     "FixPlan": (
         "Prioritized list of technical and content fixes with estimated effort."
     ),
     "Quick Wins": (
-        "Top 15 high-impact, low-effort fixes ranked by traffic and business risk."
+        "Highest-impact, low-effort fixes ranked by traffic and risk (count set at run start)."
     ),
     "Technical": (
         "Deep-dive diagnostic data for every crawled URL (Status, Load Time, etc.)."
@@ -72,9 +66,6 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "Content": "Content depth, readability, headings, and thin-content flags per URL.",
     "Links": "Internal and external link counts and anchor-text quality per URL.",
     "LinksDetail": "Row-level outbound internal links with crawl resolution status.",
-    "Link Inventory": (
-        "Every anchor-level outbound link with type, rel attributes, status codes, and generic-anchor flags."
-    ),
     "Broken Link Impact": (
         "Broken destinations ranked by inbound link count and source-page GSC clicks."
     ),
@@ -87,8 +78,7 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "PSI Performance": "Lab PageSpeed scores and mobile CWV-related proxies.",
     "Indexability": "Robots directives, canonicals, and indexability classification.",
     "Redirects": (
-        "Redirect chains with hop-by-hop URL/status breakdown, HTTPS upgrades, "
-        "302 flags, loop detection, and SEO risk notes."
+        "Redirect chains: hop-by-hop URL/status, HTTPS upgrades, 302 flags, loop detection."
     ),
     ROBOTS_ANALYSIS_SHEET: (
         "Parsed robots.txt content, user-agent rules, blocked URLs, and sitemap conflicts."
@@ -96,19 +86,11 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     CRAWL_LOG_SHEET: (
         "Errors and warnings from fetch, render, PSI, and GSC phases for this audit run."
     ),
-    "Link Equity Map": (
-        "Internal PageRank distribution: inlink/outlink counts and equity flow per URL."
-    ),
-    "Anchor Text Audit": (
-        "Anchor-text profile per destination: distribution, generic-anchor share, and diversity."
-    ),
     "Snippet Opportunities": (
         "Pages with answer-block potential for featured snippets and AI answer extraction."
     ),
     "Script Inventory": (
-        "Known third-party tracker/tag detections per URL (a fixed allowlist of ~19 common "
-        "analytics/ads/tag-manager domains via PSI's network-requests audit) — not a full "
-        "inventory of every script on the site."
+        "Known third-party tracker/tag detections per URL (fixed allowlist; not every script)."
     ),
     "Image Inventory": (
         "Every image with alt-text coverage, filename quality, dimensions, and mixed-content flags."
@@ -123,35 +105,30 @@ _TOC_FRIENDLY_DESCRIPTIONS: dict[str, str] = {
     "Glossary & Legend": "Definitions for metrics, badges, and workbook conventions.",
     "Audit Run Details": "Run configuration, timestamps, and environment notes.",
     "Playbook": (
-        "Client education reference: editorial standards plus per-issue playbooks "
-        "with what/why/fix/verify guidance."
+        "Client education reference: editorial standards and per-issue what/why/fix/verify guidance."
     ),
     "Competitor Benchmarks": (
         "Optional client-vs-competitor comparison on sampled pages when "
         "--competitors is configured."
     ),
     "DeltaFromPreviousRun": (
-        "New, resolved, and persistent issues compared to a prior audit workbook or delta JSON. "
-        "Sections: summary counts, new issues, resolved issues, metric changes, and SEO health trend. "
-        "First runs show a baseline note when no previous export was supplied."
+        "New, resolved, and persistent issues vs. a prior audit — counts, metric changes, health trend."
     ),
     "CrawlGraph": "Derived link graph metrics (click depth, inlinks, PageRank proxy).",
     "Issue Register": (
-        "Tracked issue backlog with first-seen dates, days open, assignment fields, "
-        "and client notes. Unified rollups from Summary plus per-URL issue rows."
+        "Tracked issue backlog: first-seen dates, days open, assignment, and client notes."
     ),
     "Technical Diagnostics": (
         "Per-URL technical, indexability, redirect, security, PSI, and Search Console signals."
     ),
     "Content & AI Readiness": (
-        "Per-URL content depth, schema, media, and answer-engine readiness metrics."
+        "Per-URL content depth, schema, media, AEO readiness, intent/ROI, and anchor-text quality."
     ),
     "Link Intelligence": (
-        "Per-URL internal link summary rows plus anchor-level detail for broken-link triage."
+        "Internal link summary with PageRank equity, plus anchor-level detail for broken-link triage."
     ),
     "CMS Action URLs": (
-        "WooCommerce and other CMS action-parameter URLs discovered during the crawl "
-        "(for example add-to-cart) that were withheld from the crawl queue."
+        "WooCommerce/CMS action-parameter URLs (e.g. add-to-cart) withheld from the crawl queue."
     ),
     "Template & Duplication Risks": (
         "Duplicate titles/meta, draft/copy pages, and folder-level template pattern risks."
@@ -425,6 +402,15 @@ FREEZE_C2_EXEMPT_SHEETS: frozenset[str] = frozenset(
         # in :func:`apply_bespoke_freeze_panes` instead.
         AUDIT_RUN_DETAILS_SHEET,
         "Playbook",
+        # FixPlan freezes after "Affected URLs" (column F), not the generic
+        # 2-column "C3" — see apply_bespoke_freeze_panes.
+        "FixPlan",
+        # Quick Wins freezes after "Owner" (column G) — see apply_bespoke_freeze_panes.
+        "Quick Wins",
+        # Priority URLs freezes after "Status" (column G) — see apply_bespoke_freeze_panes.
+        "Priority URLs",
+        # Broken Link Impact freezes after "Broken URL" (column E) — see apply_bespoke_freeze_panes.
+        "Broken Link Impact",
     }
 )
 
@@ -460,6 +446,27 @@ def apply_bespoke_freeze_panes(wb: Workbook) -> None:
         # the freeze must span rows 1–2 to keep the column headers on screen while
         # scrolling. ``E2`` froze only the banner, letting the headers scroll away.
         set_freeze_panes_safe(wb[CONTENT_PLANNER_SHEET], "E3")
+    if "FixPlan" in wb.sheetnames:
+        # "G3": freeze rows 1–2 (banner + header) and columns A–F, i.e. up to and
+        # including "Affected URLs" (Issue Type, Severity, Priority Score,
+        # Affected Count, URL, Affected URLs) — those columns stay visible while
+        # scrolling through the wider recommendation/workflow columns.
+        set_freeze_panes_safe(wb["FixPlan"], "G3")
+    if "Quick Wins" in wb.sheetnames:
+        # "H3": freeze rows 1–2 (banner + header) and columns A–G, i.e. up to and
+        # including "Owner" (URL, Issue, Severity, Priority Score, Effort (hrs),
+        # GSC Clicks (30d), Owner).
+        set_freeze_panes_safe(wb["Quick Wins"], "H3")
+    if "Priority URLs" in wb.sheetnames:
+        # "H3": freeze rows 1–2 (banner + header) and columns A–G, i.e. up to and
+        # including "Status" (URL, Severity Badge, Business Risk Score,
+        # SEO Health Score, Owner, Action Needed, Status).
+        set_freeze_panes_safe(wb["Priority URLs"], "H3")
+    if "Broken Link Impact" in wb.sheetnames:
+        # "F3": freeze rows 1–2 (banner + header) and columns A–E, i.e. up to and
+        # including "Broken URL" (Priority Score, Status Code, Inbound Link Count,
+        # Source Page Clicks Total, Broken URL).
+        set_freeze_panes_safe(wb["Broken Link Impact"], "F3")
     # Row-only freeze for narrow / key-value sheets: keep the banner + header rows
     # (1–2) pinned without locking columns that have nothing to scroll past them.
     for _row_only_freeze_sheet in (AUDIT_RUN_DETAILS_SHEET, "Playbook"):

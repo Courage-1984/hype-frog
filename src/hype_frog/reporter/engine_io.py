@@ -73,13 +73,17 @@ def _row_to_mapping(
 
 
 def apply_link_intelligence_summary_broken_formulas(workbook: Any) -> None:
-    """Set Broken Internal Links Count and Actionable Fixes on Summary rows from Link Inventory."""
+    """Set Broken Internal Links Count and Actionable Fixes on Summary rows.
+
+    Reads Link Intelligence's own Detail rows (folded in from the former standalone
+    "Link Inventory" sheet — same sheet now, not a cross-sheet reference).
+    """
     try:
         names = list(workbook.sheetnames)
     except Exception as exc:
         logger.debug("Could not read workbook sheet names: %s", exc)
         return
-    if "Link Intelligence" not in names or "Link Inventory" not in names:
+    if "Link Intelligence" not in names:
         return
     ws = workbook["Link Intelligence"]
     headers: dict[str, int] = {}
@@ -108,7 +112,7 @@ def apply_link_intelligence_summary_broken_formulas(workbook: Any) -> None:
                 column=act_col,
                 value=(
                     f'=IF({brk_letter}{row}>0,"Fix "&{brk_letter}{row}&'
-                    f'" broken links (See Link Inventory tab for details).","")'
+                    f'" broken links (see Detail rows below).","")'
                 ),
             )
 
@@ -315,6 +319,45 @@ def write_link_inventory_sheet_streamed(
     for chunk in cache.iter_rows(chunk_size=chunk_size):
         for row in chunk:
             ws.append([_sanitize_excel_value(row.get(col)) for col in columns])
+            rows_written += 1
+        chunk.clear()
+        memory_circuit_breaker()
+        if aggressive_gc:
+            gc.collect()
+    return rows_written
+
+
+def append_link_detail_rows_streamed(
+    writer: Any,
+    cache: Any,
+    *,
+    sheet_name: str,
+    columns: list[str],
+    status_by_url: dict[str, Any],
+    chunk_size: int = 500,
+) -> int:
+    """Append deduped, streamed Detail rows to an already-written Link Intelligence sheet.
+
+    Folded in from the former standalone "Link Inventory" sheet: same batching /
+    ``memory_circuit_breaker()`` / ``gc.collect()`` memory-safety characteristics as
+    :func:`write_link_inventory_sheet_streamed`, but targets a sheet whose Summary
+    rows (and header) were already written by :func:`write_dict_rows_sheet` — so no
+    header row is written here, only data rows. Columns not present on a decorated
+    anchor row (the Summary-only columns, e.g. ``Click Depth``) are written blank via
+    the same ``row.get(col)`` pattern used elsewhere.
+    """
+    from hype_frog.core.memory_guard import memory_circuit_breaker
+    from hype_frog.pipeline.link_inventory_stream import iter_rows_decorated
+
+    ws = _get_or_create_sheet(writer, sheet_name)
+    record_type_idx = columns.index("Record Type")
+    rows_written = 0
+    aggressive_gc = chunk_size >= _GC_COLLECT_CHUNK_THRESHOLD
+    for chunk in iter_rows_decorated(cache, status_by_url, chunk_size=chunk_size):
+        for row in chunk:
+            values = [_sanitize_excel_value(row.get(col)) for col in columns]
+            values[record_type_idx] = "Detail"
+            ws.append(values)
             rows_written += 1
         chunk.clear()
         memory_circuit_breaker()

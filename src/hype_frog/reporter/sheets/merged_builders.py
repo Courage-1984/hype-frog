@@ -128,6 +128,27 @@ CONTENT_AI_READINESS_COLUMNS: tuple[str, ...] = (
     "AEO Extractability Score",
     "Title Missing",
     "Media Mixed Content Detected",
+    # Folded in from "Content Hub Metrics" (computed for every URL here, not just
+    # that sheet's curated subset) — see engine_rows.build_content_hub_metrics_for_all_urls.
+    "Search Intent",
+    "Search Intent Source",
+    "Instant Priority",
+    "Potential Traffic Lift",
+    "AEO Visibility Gain",
+    "JS Dependent",
+    "Raw Words",
+    "Rendered Words",
+    "Field LCP (ms)",
+    "Field CLS",
+    "Anchor Text Diversity",
+    # Folded in from "Anchor Text Audit" (left-joined on normalized URL —
+    # see analysis.link_equity.build_anchor_text_audit_rows).
+    "Inbound Link Count",
+    "Generic Anchor Count",
+    "Generic Anchor %",
+    "Top Anchor Texts",
+    "Generic Anchor Dominance",
+    "Recommended Action",
     "Source Legacy Tab",
 )
 
@@ -156,10 +177,16 @@ LINK_INTELLIGENCE_COLUMNS: tuple[str, ...] = (
     "Record Type",  # B
     "Target URL",
     "Anchor Text",
+    # Folded in from the former standalone "Link Inventory" sheet — populated on
+    # Detail rows only (the deduplicated, streamed per-link-edge rows).
+    "Rel Attribute",
+    "Link Type",
+    "Status Code",
+    "Generic Anchor",
     "Target Status (if crawled)",
     "Crawlable",
     "Internal Links Count",
-    "Broken Internal Links Count",  # H
+    "Broken Internal Links Count",
     "Unresolved Internal Links Count",
     "External Links Count",
     "Inlinks Count",
@@ -171,6 +198,15 @@ LINK_INTELLIGENCE_COLUMNS: tuple[str, ...] = (
     "Nofollow External Links Count",
     "Internal Link Statuses",
     "Actionable Fixes",
+    # Folded in from the former standalone "Link Equity Map" sheet — populated on
+    # Summary rows only. "PageRank Score" is deliberately omitted: it duplicates
+    # "Internal PageRank" above (same underlying value).
+    "Inbound Link Count",
+    "Unique Source Pages",
+    "Anchor Texts (top 5)",
+    "PageRank Percentile",
+    "Equity Tier",
+    "Recommended Action",
     "Source Legacy Tab",
     "Broken Links (computed)",
 )
@@ -266,7 +302,7 @@ def _cap_link_statuses(text: str) -> str:
     return cap_pipe_list(
         text,
         max_items=_LINK_STATUSES_MAX_ITEMS,
-        pointer="see Link Inventory tab for the full list",
+        pointer="see Detail rows below for the full list",
     )
 
 
@@ -301,7 +337,7 @@ def _technical_diagnostics_lighthouse_fields(row: Mapping[str, Any]) -> dict[str
     return out
 
 
-def _pair_main_extra_rows(
+def pair_main_extra_rows(
     main_rows: list[dict[str, Any]] | None,
     extra_rows: list[dict[str, Any]],
 ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
@@ -327,10 +363,13 @@ def _pair_main_extra_rows(
     return pairs
 
 
+_pair_main_extra_rows = pair_main_extra_rows  # backward-compatible alias
+
+
 from hype_frog.rules.scoring import scorable_extraction_state
 
 
-def _merged_export_row(
+def merged_export_row(
     main: Mapping[str, Any],
     extra: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -388,6 +427,9 @@ def _merged_export_row(
             row[field] = m.get(field)
 
     return row
+
+
+_merged_export_row = merged_export_row  # backward-compatible alias
 
 
 def build_technical_diagnostics_rows(
@@ -520,12 +562,23 @@ def build_content_ai_readiness_rows(
     extra_rows: list[dict[str, Any]],
     *,
     main_rows: list[dict[str, Any]] | None = None,
+    hub_metrics_by_url: dict[str, dict[str, Any]] | None = None,
+    anchor_audit_by_url: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Build merged rows for the 'Content & AI Readiness' worksheet.
 
     ``AEO Readiness Score`` is produced upstream by
     ``hype_frog.pipeline.assemble.compute_aeo_readiness_score`` (weighted 0–100 model).
+
+    ``hub_metrics_by_url`` (keyed by exact ``URL``) and ``anchor_audit_by_url`` (keyed
+    by ``normalize_url(URL)``) are left-joined onto each row — folded in from the
+    former "Content Hub Metrics" and "Anchor Text Audit" sheets. Absent for a given
+    URL (e.g. no inbound internal links) means blank/0 defaults, not an error.
     """
+    from hype_frog.core.url_normalization import normalize_url
+
+    hub_metrics_by_url = hub_metrics_by_url or {}
+    anchor_audit_by_url = anchor_audit_by_url or {}
     rows: list[dict[str, Any]] = []
     for main, extra in _pair_main_extra_rows(main_rows, extra_rows):
         row = _merged_export_row(main, extra)
@@ -560,6 +613,9 @@ def build_content_ai_readiness_rows(
         readability = row.get("Readability (Rough Flesch)")
         alt_coverage = row.get("Image Alt Coverage (%)")
         unmeasured = not scorable_extraction_state(row.get("Extraction State"))
+        url = str(row.get("URL") or "")
+        hub_metrics = hub_metrics_by_url.get(url, {})
+        anchor_audit = anchor_audit_by_url.get(normalize_url(url), {})
         rows.append(
             {
                 "URL": row.get("URL"),
@@ -591,6 +647,23 @@ def build_content_ai_readiness_rows(
                 ),
                 "Title Missing": "" if unmeasured else _to_bool(row.get("Title Missing")),
                 "Media Mixed Content Detected": _to_bool(row.get("Mixed Content Detected")),
+                "Search Intent": hub_metrics.get("Search Intent", ""),
+                "Search Intent Source": hub_metrics.get("Search Intent Source", ""),
+                "Instant Priority": hub_metrics.get("Instant Priority", ""),
+                "Potential Traffic Lift": hub_metrics.get("Potential Traffic Lift", 0),
+                "AEO Visibility Gain": hub_metrics.get("AEO Visibility Gain", 0.0),
+                "JS Dependent": hub_metrics.get("JS Dependent", ""),
+                "Raw Words": hub_metrics.get("Raw Words", 0),
+                "Rendered Words": hub_metrics.get("Rendered Words", 0),
+                "Field LCP (ms)": hub_metrics.get("Field LCP (ms)", 0.0),
+                "Field CLS": hub_metrics.get("Field CLS", 0.0),
+                "Anchor Text Diversity": hub_metrics.get("Anchor Text Diversity", ""),
+                "Inbound Link Count": anchor_audit.get("Inbound Link Count", 0),
+                "Generic Anchor Count": anchor_audit.get("Generic Anchor Count", 0),
+                "Generic Anchor %": anchor_audit.get("Generic Anchor %", 0.0),
+                "Top Anchor Texts": anchor_audit.get("Top Anchor Texts", ""),
+                "Generic Anchor Dominance": anchor_audit.get("Generic Anchor Dominance", False),
+                "Recommended Action": anchor_audit.get("Recommended Action", ""),
                 "Source Legacy Tab": _joined(sources),
             }
         )
@@ -716,20 +789,30 @@ def build_issue_register_rows(
 def build_link_intelligence_rows(
     *,
     extra_rows: list[dict[str, Any]],
-    link_detail_rows: list[dict[str, Any]],
     crawlgraph_rows: list[dict[str, Any]],
     main_rows: list[dict[str, Any]] | None = None,
+    link_equity_by_url: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Build merged rows for the 'Link Intelligence' worksheet."""
+    """Build Summary rows for the 'Link Intelligence' worksheet.
+
+    Detail rows (one per outbound link edge, deduplicated on (URL, Target URL,
+    Anchor Text)) are no longer built in-memory here — they're streamed directly
+    from the Link Inventory SQLite cache and appended to this same worksheet by
+    ``reporter.engine_io.append_link_detail_rows_streamed`` (folded in from the
+    former standalone "Link Inventory" sheet).
+    """
     rows: list[dict[str, Any]] = []
     graph_by_url = {
         _to_str(row.get("URL")): row for row in crawlgraph_rows if row.get("URL")
     }
+    link_equity_by_url = link_equity_by_url or {}
 
     for main, extra in _pair_main_extra_rows(main_rows, extra_rows):
         row = _merged_export_row(main, extra)
         url = _to_str(row.get("URL"))
         graph = graph_by_url.get(url, {})
+        # Folded in from the former standalone "Link Equity Map" sheet.
+        equity = link_equity_by_url.get(url, {})
         inlinks_urls = _to_str(graph.get("Inlinks URLs"))
         link_statuses = _to_str(row.get("Internal Link Statuses"))
         if inlinks_urls and not link_statuses:
@@ -746,6 +829,10 @@ def build_link_intelligence_rows(
                 "Record Type": "Summary",
                 "Target URL": "",
                 "Anchor Text": "",
+                "Rel Attribute": "",
+                "Link Type": "",
+                "Status Code": "",
+                "Generic Anchor": "",
                 "Target Status (if crawled)": "",
                 "Crawlable": "",
                 "Internal Links Count": _to_int(row.get("Internal Links Count"), 0),
@@ -777,40 +864,18 @@ def build_link_intelligence_rows(
                 ),
                 "Internal Link Statuses": link_statuses,
                 "Actionable Fixes": (
-                    f"Fix {broken_ct} broken links (See Link Inventory tab for details)."
+                    f"Fix {broken_ct} broken links (see Detail rows below)."
                     if broken_ct > 0
                     else ""
                 ),
+                "Inbound Link Count": _to_int(equity.get("Inbound Link Count"), 0),
+                "Unique Source Pages": _to_int(equity.get("Unique Source Pages"), 0),
+                "Anchor Texts (top 5)": _to_str(equity.get("Anchor Texts (top 5)")),
+                "PageRank Percentile": _to_float(equity.get("PageRank Percentile"), 0.0),
+                "Equity Tier": _to_str(equity.get("Equity Tier")),
+                "Recommended Action": _to_str(equity.get("Recommended Action")),
                 "Source Legacy Tab": "Links",
                 "Broken Links (computed)": broken_ct,
-            }
-        )
-
-    for row in link_detail_rows:
-        rows.append(
-            {
-                "URL": _to_str(row.get("Source URL") or row.get("URL")),
-                "Record Type": "Detail",
-                "Target URL": _to_str(row.get("Target URL")),
-                "Anchor Text": _to_str(row.get("Anchor Text")),
-                "Target Status (if crawled)": _to_int(
-                    row.get("Target Status (if crawled)"), 0
-                ),
-                "Crawlable": _to_bool(row.get("Crawlable")),
-                "Internal Links Count": 0,
-                "Broken Internal Links Count": 0,
-                "Unresolved Internal Links Count": 0,
-                "External Links Count": 0,
-                "Inlinks Count": 0,
-                "Orphan Candidate": False,
-                "Click Depth": 0,
-                "Internal PageRank": 0.0,
-                "Generic Anchor Text Count": 0,
-                "Nofollow Internal Links Count": 0,
-                "Nofollow External Links Count": 0,
-                "Internal Link Statuses": "",
-                "Actionable Fixes": "",
-                "Source Legacy Tab": "LinksDetail",
             }
         )
 
@@ -952,23 +1017,21 @@ def build_template_duplication_risks_rows(
 
 
 QUICK_WINS_COLUMNS: tuple[str, ...] = (
-    # Identity — what and where.
+    # Identity, severity, and the numbers that justify prioritising this row.
     "URL",
     "Issue",
     "Severity",
-    # Why it's a quick win — the numbers that justify prioritising this row.
     "Priority Score",
-    "Business Risk Score",
-    "GSC Clicks (30d)",
     "Effort (hrs)",
+    "GSC Clicks (30d)",
+    "Owner",
+    # --- freeze boundary (after "Owner") ---
     # What to do — the narrative columns, kept together to reduce row-height variance.
     "What It Is",
     "Why It Matters",
     "Recommended Fix",
     "How To Verify",
-    # Ownership / planning.
-    "Owner",
-    "Sprint",
+    "Business Risk Score",
     "Revenue Risk",
     # Navigation.
     "Jump to FixPlan",
@@ -1080,7 +1143,6 @@ def build_quick_wins_rows(
                         else ""
                     ),
                     "Recommended Fix": fp.get("Recommended Fix", ""),
-                    "Sprint": fp.get("Aging/Priority", ""),
                     "Revenue Risk": fp.get("Revenue Risk", ""),
                     "Jump to FixPlan": (
                         "=IFERROR(HYPERLINK(\"#'FixPlan'!A\"&MATCH(\""
@@ -1280,5 +1342,7 @@ __all__ = [
     "build_quick_wins_rows",
     "build_broken_link_impact_rows",
     "build_redirects_sheet_rows",
+    "merged_export_row",
+    "pair_main_extra_rows",
 ]
 

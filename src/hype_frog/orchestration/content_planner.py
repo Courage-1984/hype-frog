@@ -13,6 +13,7 @@ CONTENT_PLANNER_COLUMNS: tuple[str, ...] = (
     "Tertiary",
     "Page link",
     "Copy Doc",
+    "Priority for MVP",
     "Copywriter Sign off",
     "Copy First Check",
     "2nd Revisions",
@@ -27,8 +28,13 @@ CONTENT_PLANNER_COLUMNS: tuple[str, ...] = (
     "Mobile",
     "SEO",
     "Performance",
+    "Plugin Audit",
 )
 
+# Manual editable dropdown columns (seeded "Not signed off", 3-state RAG CF —
+# see apply_content_planner_signoff_rules): "Priority for MVP" and "Plugin Audit"
+# are additive new fields following the exact same pattern as the sign-off
+# workflow columns, not a bespoke value set.
 CONTENT_PLANNER_SIGNOFF_COLUMNS: frozenset[str] = frozenset(
     CONTENT_PLANNER_COLUMNS[5:]
 )

@@ -62,6 +62,7 @@ _UNMEASURED_PRESERVE_KEYS: frozenset[str] = frozenset(
         "Robots.txt: GPTBot",
         "Robots.txt: ClaudeBot",
         "Robots.txt: PerplexityBot",
+        "Robots.txt: CCBot",
         "Crawl-Delay Applies",
         "AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)",
         "llms.txt Present",

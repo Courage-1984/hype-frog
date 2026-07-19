@@ -9,7 +9,6 @@ from openpyxl.worksheet.worksheet import Worksheet
 from hype_frog.reporter.sheets.conditional import apply_cf_zebra_banding
 from hype_frog.reporter.sheets.config import (
     CHART_DATA_SHEET,
-    CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     CONTENT_PLANNER_SHEET,
     DISABLE_CONDITIONAL_FORMATTING,
@@ -25,7 +24,6 @@ _EXEMPT_LARGE_SHEET_PRESENTATION: frozenset[str] = frozenset(
         "Table of Contents",
         CONTENT_OPTIMISATION_HUB_SHEET,
         CONTENT_PLANNER_SHEET,
-        CONTENT_HUB_METRICS_SHEET,
         CHART_DATA_SHEET,
     }
 )

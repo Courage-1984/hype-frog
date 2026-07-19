@@ -56,7 +56,7 @@ def test_sheet_column_registries_return_independent_copies() -> None:
 
     merged = get_merged_sheet_columns()
     assert "Issue Register" in merged
-    assert "Link Inventory" in merged
+    assert "Link Intelligence" in merged
 
 
 def test_build_duplicates_rows_detects_shared_titles() -> None:

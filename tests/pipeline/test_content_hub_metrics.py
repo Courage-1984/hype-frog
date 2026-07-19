@@ -6,7 +6,10 @@ from hype_frog.pipeline.content_hub_metrics import (
     compute_js_dependent_flag,
     resolve_content_hub_metrics,
 )
-from hype_frog.reporter.engine_rows import build_content_optimisation_hub_rows
+from hype_frog.reporter.engine_rows import (
+    build_content_hub_metrics_for_all_urls,
+    build_content_optimisation_hub_rows,
+)
 
 
 def test_word_count_fallback_when_render_metrics_missing() -> None:
@@ -100,3 +103,26 @@ def test_hub_metrics_sheet_uses_resolver_not_stale_zeros() -> None:
     assert row["Field LCP (ms)"] == 2100.0
     assert row["Field CLS"] == 0.05
     assert row["Search Intent"] == "Informational"
+
+
+def test_build_content_hub_metrics_for_all_urls_covers_every_url_not_just_curated() -> None:
+    """Content & AI Readiness needs metrics for every URL, computed unconditionally —
+    unlike build_content_optimisation_hub_rows, which only computes metrics for its
+    curated "manual content" subset (see its manual_content_urls selection logic)."""
+    main = MainRowPayload.model_validate(
+        {"URL": "https://example.com/clean", "Word Count (Body)": 900, "GSC Clicks": 5}
+    )
+    extra = ExtraRowPayload.model_validate(
+        {
+            "URL": "https://example.com/clean",
+            "Word Count": 900,
+            "SEO Health Score": 98.0,
+            "Matched Issues": "",
+            "Search Intent": "Transactional",
+        }
+    )
+    all_rows = build_content_hub_metrics_for_all_urls([main], [extra])
+    assert len(all_rows) == 1
+    assert all_rows[0]["URL"] == "https://example.com/clean"
+    assert all_rows[0]["Raw Words"] == 900
+    assert all_rows[0]["Search Intent"] == "Transactional"

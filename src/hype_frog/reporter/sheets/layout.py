@@ -104,29 +104,63 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "Severity",
         "Priority Score",
         "Affected Count",
-        "Affected Link Instances",
-        "Affected URLs",
-        "Detail Reference Tab",
-        "Resolution Type",
         "URL",
-        "Recommended Fix",
+        "Affected URLs",
+        # --- freeze boundary (set via FREEZE_C2_EXEMPT_SHEETS + apply_bespoke_freeze_panes) ---
         "What It Is",
+        "Recommended Fix",
+        "Resolution Type",
         "Likely Root Cause",
         "Owner",
-        "Agency Owner",
         "Effort",
         "Est. Hours",
-        "Est. Sprint Points",
-        "Aging/Priority",
         "Status",
-        "Verified By",
-        "Date Resolved",
-        "Revenue Risk",
         "Action Needed",
+        "Hub Status (Content Hub)",
+        "Revenue Risk",
+        "Category",
+        "Discovery Rank",
+        # --- remaining columns (no specific order requested) ---
+        "Affected Link Instances",
+        "Detail Reference Tab",
         "Jump to Details",
         "Jump to Playbook",
-        "View Details",
+        "Verified By",
+        "Date Resolved",
+        "Est. Sprint Points",
+        "Aging/Priority",
         "Sprint",
+        "Open in Main",
+    ],
+    "Quick Wins": [
+        "URL",
+        "Issue",
+        "Severity",
+        "Priority Score",
+        "Effort (hrs)",
+        "GSC Clicks (30d)",
+        "Owner",
+        # --- freeze boundary (set via FREEZE_C2_EXEMPT_SHEETS + apply_bespoke_freeze_panes) ---
+        "What It Is",
+        "Why It Matters",
+        "Recommended Fix",
+        "How To Verify",
+        "Business Risk Score",
+        "Revenue Risk",
+        "Jump to FixPlan",
+        "Jump to Playbook",
+        "Open in Main",
+    ],
+    "Broken Link Impact": [
+        "Priority Score",
+        "Status Code",
+        "Inbound Link Count",
+        "Source Page Clicks Total",
+        "Broken URL",
+        # --- freeze boundary (set via FREEZE_C2_EXEMPT_SHEETS + apply_bespoke_freeze_panes) ---
+        "Source Pages (first 5)",
+        "Anchor Texts Used",
+        "Recommended Action",
     ],
     "Summary": [
         "Section",
@@ -137,24 +171,28 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "Affected URLs (sample)",
     ],
     "Priority URLs": [
-        # Most-actionable-first: what to do, then risk/scores, then supporting
-        # GSC evidence, editable triage fields last.
         "URL",
-        "Action Needed",
-        "Why Prioritized",
-        "Business Risk Score",
         "Severity Badge",
+        "Business Risk Score",
         "SEO Health Score",
+        "Owner",
+        "Action Needed",
+        "Status",
+        # --- freeze boundary (set via FREEZE_C2_EXEMPT_SHEETS + apply_bespoke_freeze_panes) ---
+        "Why Prioritized",
         "Critical Issues Count",
         "Warning Issues Count",
         "GSC Impressions",
         "GSC CTR",
+        "Revenue Intent",
+        "Indexability Reason",
+        "Broken Internal Links Count",
+        "Canonical Type",
+        # --- remaining columns (no specific order requested) ---
         "GSC Data Freshness",
         "GSC Coverage Note",
-        "Revenue Intent",
-        "Owner",
-        "Status",
-        "Sprint",
+        "Open in Main",
+        "Open in Technical",
     ],
     "AIOSEO Recommendations": [
         "URL",
@@ -176,19 +214,22 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "Stable Issue ID",
     ],
     CONTENT_OPTIMISATION_HUB_SHEET: [
-        # Workflow + nav first, scores next, editorial evidence after —
-        # matches the most-actionable-first pattern used across the workbook.
+        # Workflow + nav first, then all headline scores together — matches
+        # the most-actionable-first pattern used across the workbook.
         "Action Required",
         "Status",
         "Assigned Owner",
         "URL",
-        "Open in Main",
-        "On-Page Optimization Score",
-        "SEO Score",
-        "Technical Health",
-        "Copy Score",
         "URL Slug Normalization",
+        "Copy Score",
+        "SEO Score",
+        "On-Page Optimization Score",
+        "Technical Health",
+        "Semantic AEO Score",
+        # --- freeze boundary (this sheet sets its own bespoke freeze pane) ---
         "Proposed URL Slug",
+        "Elementor Builder Link",
+        "Open in Main",
         "Current Title",
         "Title Health",
         "Current Meta Desc",
@@ -205,10 +246,15 @@ _PREFERRED_COLUMN_ORDERS: dict[str, list[str]] = {
         "H5 Health",
         "H6",
         "H6 Health",
-        "Elementor Builder Link",
         "Current OG-Image URL",
-        "OG Image Health",
         "OG Image Preview",
+        "OG Image Health",
+        "Priority Reason",
+        "Recommended Action",
+        # --- remaining columns (no specific order requested) ---
+        "Entity Density (%)",
+        "Top Entities",
+        "Citation Candidate Count",
     ],
 }
 
@@ -320,13 +366,6 @@ def sheet_data_column_range(
         f"OFFSET('{sheet_name}'!$A$1,{row_offset},"
         f'MATCH("{header}",{header_row_ref},0)-1,{span},1)'
     )
-
-
-def link_inventory_column_letter(header: str) -> str:
-    """Column letter on Link Inventory from the strict seven-column export contract."""
-    from hype_frog.reporter.sheets.merged_builders import LINK_INVENTORY_COLUMNS
-
-    return get_column_letter(LINK_INVENTORY_COLUMNS.index(header) + 1)
 
 
 def link_intelligence_column_letter(header: str) -> str:
@@ -492,6 +531,7 @@ MAIN_COLUMN_GROUP_DEFINITIONS: dict[str, list[str]] = {
         "Robots.txt: GPTBot",
         "Robots.txt: ClaudeBot",
         "Robots.txt: PerplexityBot",
+        "Robots.txt: CCBot",
         "Crawl-Delay Applies",
         "Robots.txt Accessible",
     ],
@@ -648,18 +688,23 @@ def content_optimisation_hub_ordered_headers(
     return tuple(ordered)
 
 
-def reorder_columns(worksheet: Worksheet, sheet_name: str) -> None:
+def reorder_columns(
+    worksheet: Worksheet, sheet_name: str, *, header_row: int = 1
+) -> None:
     """Reorder sheet columns according to preferred operational layouts.
 
     Args:
         worksheet: Worksheet to mutate.
         sheet_name: Canonical sheet name used to pick a preferred ordering.
+        header_row: Row containing column headers (1 on first call, before the
+            return-strip banner is inserted; 2 on a later re-run once trailing
+            appended columns like "Open in Main" exist and need repositioning).
     """
     preferred = _PREFERRED_COLUMN_ORDERS.get(sheet_name)
-    if not preferred or worksheet.max_row < 1:
+    if not preferred or worksheet.max_row < header_row:
         return
     current_headers = [
-        worksheet.cell(row=1, column=i).value
+        worksheet.cell(row=header_row, column=i).value
         for i in range(1, worksheet.max_column + 1)
     ]
     if not any(h in current_headers for h in preferred):
@@ -844,7 +889,10 @@ URL_LIKE_HEADERS: frozenset[str] = frozenset(
 # Long narrative / policy columns that keep wrap at a generous width.
 PROSE_HEADERS: frozenset[str] = frozenset(
     {
-        "Affected URLs",
+        # NOTE: FixPlan's own "Affected URLs" is deliberately NOT here — it's
+        # given a fixed clipped (no-wrap) width instead so listing every
+        # affected URL doesn't blow out row height. See apply_column_widths's
+        # FixPlan-specific clip override.
         "Affected URLs (sample)",
         "How to Fix in AIOSEO",
         "Why It Matters",
@@ -911,6 +959,13 @@ def _apply_wrap_to_column(worksheet: Worksheet, col_idx: int, *, start_row: int)
             indent=current.indent,
         )
 
+
+PLAYBOOK_COLUMN_WIDTH_OVERRIDES: dict[str, float] = {
+    "Section": 34.0,
+    "Item": 32.0,
+    "Guideline": 68.0,
+    "Why It Matters": 60.0,
+}
 
 CONTENT_HUB_DENSITY_OVERRIDES: dict[str, float] = {
     "Action Required": 17.43,
@@ -984,6 +1039,18 @@ def apply_column_widths(worksheet: Worksheet) -> None:
     for col_idx in range(1, worksheet.max_column + 1):
         letter = get_column_letter(col_idx)
         header_name = header_by_col.get(col_idx, "")
+        if worksheet.title == "FixPlan" and header_name == "Affected URLs":
+            # Fixed, clipped width — every affected URL is listed (no 10-item
+            # cap), so wrapping would blow out row height. Overrides the
+            # wrap_text=True that apply_generic_sheet_coloring's generic
+            # "url" in header-name check sets for this column.
+            worksheet.column_dimensions[letter].width = _URL_COL_WIDTH
+            for row_idx in range(data_start, worksheet.max_row + 1):
+                cell = worksheet.cell(row=row_idx, column=col_idx)
+                if isinstance(cell, MergedCell):
+                    continue
+                cell.alignment = Alignment(wrap_text=False, vertical="top")
+            continue
         if header_name in URL_LIKE_HEADERS:
             worksheet.column_dimensions[letter].width = _URL_COL_WIDTH
             continue
@@ -1003,6 +1070,12 @@ def apply_column_widths(worksheet: Worksheet) -> None:
         col_idx = headers.get(header_name)
         if col_idx:
             worksheet.column_dimensions[get_column_letter(col_idx)].width = width
+
+    if worksheet.title == "Playbook":
+        for header_name, width in PLAYBOOK_COLUMN_WIDTH_OVERRIDES.items():
+            col_idx = headers.get(header_name)
+            if col_idx:
+                worksheet.column_dimensions[get_column_letter(col_idx)].width = width
 
 
 def apply_content_hub_heading_group(worksheet: Worksheet) -> None:

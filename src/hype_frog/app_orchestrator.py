@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from hype_frog.core.path_utils import path_exists
 
+from hype_frog.config_defaults import apply_runtime_override
 from hype_frog.core import get_logger
 from hype_frog.core.console import log_completion_panel
 from hype_frog.core.file_utils import build_regen_output_filename
@@ -143,6 +144,8 @@ async def main(
 ) -> None:
     _start = time.perf_counter()
     setup = resolve_run_setup(run, cli_overrides=cli_overrides)
+    if setup.quick_wins_max_results is not None:
+        apply_runtime_override("QUICK_WINS_MAX_RESULTS", setup.quick_wins_max_results)
 
     if setup.regen_report:
         try:

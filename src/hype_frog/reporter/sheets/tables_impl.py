@@ -25,8 +25,10 @@ from hype_frog.reporter.sheets.conditional import (
     apply_content_hub_conditional_rules,
     apply_content_planner_signoff_rules,
     apply_generic_sheet_coloring,
+    apply_main_group_conditional_formatting,
     apply_main_sheet_heatmaps,
     apply_merged_tabs_conditional_formatting,
+    apply_playbook_section_colors,
     apply_psi_conditional_rules,
     apply_sheet_text_wrap_columns,
     apply_wrapped_row_heights,
@@ -37,7 +39,6 @@ from hype_frog.reporter.sheets.config import (
     CONTENT_HUB_DATA_START_ROW,
     EXECUTIVE_BRIEFING_FREEZE_PANES,
     EXECUTIVE_BRIEFING_SHEET,
-    CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     CONTENT_PLANNER_SHEET,
     DATA_HEAVY_TABS,
@@ -204,26 +205,6 @@ def _apply_diagnostic_header_tooltips(
             cell.comment = Comment(tooltip, "hype-frog")
 
 
-def _apply_link_inventory_client_polish(worksheet: Worksheet) -> None:
-    """Navy header row and readable widths aligned with other data sheets."""
-    header_fill = PatternFill(
-        start_color=STD_NAVY,
-        end_color=STD_NAVY,
-        fill_type="solid",
-    )
-    header_font = Font(color=STD_WHITE, bold=True)
-    for col_idx in range(1, 8):
-        cell = worksheet.cell(row=1, column=col_idx)
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(
-            horizontal="center", vertical="center", wrap_text=True
-        )
-    worksheet.column_dimensions["A"].width = 50.0
-    worksheet.column_dimensions["B"].width = 50.0
-    worksheet.column_dimensions["C"].width = 30.0
-
-
 _COPY_HUB_WIDE_HEADERS: frozenset[str] = frozenset(
     {
         "Current Title",
@@ -386,7 +367,7 @@ def _write_empty_state_message(worksheet: Worksheet, header_row: int) -> None:
 # but never overwrites operator edits on re-export. Marked with a distinct
 # header fill so they read as "yours to fill in", not computed output.
 _EDITABLE_INPUT_HEADERS_BY_SHEET: dict[str, tuple[str, ...]] = {
-    "Priority URLs": ("Status", "Sprint"),
+    "Priority URLs": ("Status",),
     CONTENT_OPTIMISATION_HUB_SHEET: ("Status", "Assigned Owner"),
 }
 _EDITABLE_INPUT_FILL = PatternFill(
@@ -434,12 +415,15 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
     }:
         apply_intelligent_sorting(worksheet, sheet_name)
     apply_generic_sheet_coloring(worksheet, sheet_name, header_row=header_row)
+    if sheet_name == "Playbook":
+        apply_playbook_section_colors(worksheet, header_row=header_row)
     if sheet_name == "Priority URLs":
         _mark_editable_input_headers(worksheet, header_row)
     apply_column_widths(worksheet)
     if sheet_name == "Main":
         _link_main_technical_health_to_diagnostics(worksheet)
         apply_main_sheet_heatmaps(worksheet, header_row=header_row)
+        apply_main_group_conditional_formatting(worksheet, header_row=header_row)
     apply_wrapped_row_heights(worksheet)
     if sheet_name == "FixPlan":
         apply_fixplan_workflow_formatting(worksheet)
@@ -450,6 +434,12 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
     )
     add_url_navigation_links(writer, worksheet, sheet_name, header_row=header_row)
     apply_cross_sheet_links(writer, worksheet, sheet_name, header_row=header_row)
+    if sheet_name == "FixPlan":
+        # "Open in Main" and "Hub Status (Content Hub)" are appended by the two
+        # calls above, after the first reorder_columns pass already ran — re-run
+        # it now (real header row 2, past the return-strip banner) so both land
+        # at their requested positions instead of trailing at the far right.
+        reorder_columns(worksheet, sheet_name, header_row=header_row)
     if sheet_name in {AIOSEO_RECOMMENDATIONS_SHEET, "FixPlan", "Issue Register"}:
         status_col = header_index(worksheet, header_row).get("Status")
         if status_col:
@@ -464,19 +454,18 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
         apply_content_hub_conditional_rules(worksheet, writer)
         _link_hub_scores_from_main(worksheet)
         # Semantic AEO heatmap on the Hub (Instant Priority moved to Content
-        # Hub Metrics). Runs AFTER the Hub conditional pipeline so the banner
+        # & AI Readiness). Runs AFTER the Hub conditional pipeline so the banner
         # row insert in ``apply_content_hub_conditional_rules`` has already pushed
         # headers to row 2 / data to row 3.
         apply_executive_priority_formatting(worksheet, header_row=2)
         _mark_editable_input_headers(worksheet, header_row=2)
-    elif sheet_name == CONTENT_HUB_METRICS_SHEET:
-        # Content Hub Metrics carries a row-1 return banner, so the real
-        # headers (incl. "Instant Priority") live on row 2.
+    elif sheet_name == "Content & AI Readiness":
+        # "Instant Priority" folded in from the former "Content Hub Metrics" sheet;
+        # row-1 return banner pushes the real header to row 2.
         apply_executive_priority_formatting(worksheet, header_row=2)
     apply_sheet_text_wrap_columns(worksheet, sheet_name)
     if sheet_name in {
         CONTENT_OPTIMISATION_HUB_SHEET,
-        CONTENT_HUB_METRICS_SHEET,
         AIOSEO_RECOMMENDATIONS_SHEET,
     }:
         apply_editor_url_column_hyperlinks(
@@ -531,10 +520,8 @@ def adjust_sheet_format(writer: Any, sheet_name: str) -> None:
         # Security: HSTS / Security: CSP / Hreflang Signals). The helper is
         # name-keyed so it skips any header it doesn't recognise.
         _apply_diagnostic_header_tooltips(worksheet, header_row=header_row)
-    if sheet_name == "Link Inventory":
-        _apply_link_inventory_client_polish(worksheet)
     if sheet_name == CONTENT_PLANNER_SHEET:
-        apply_content_planner_signoff_rules(worksheet)
+        apply_content_planner_signoff_rules(worksheet, header_row=header_row)
     if sheet_name == CONTENT_OPTIMISATION_HUB_SHEET:
         finalize_content_hub_after_normalized_headers(worksheet)
         apply_display_header_aliases(worksheet, header_row=2)

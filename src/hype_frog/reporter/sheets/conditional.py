@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from openpyxl.cell.cell import MergedCell
 from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -24,7 +25,6 @@ from hype_frog.reporter.sheets.config import (
     CHART_DATA_SHEET,
     CONTENT_HUB_DATA_START_ROW,
     CONTENT_HUB_FREEZE_PANES,
-    CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     CONTENT_PLANNER_SHEET,
     DATA_BAR_BLUE,
@@ -140,12 +140,15 @@ def apply_wrapped_row_heights(worksheet: Worksheet) -> None:
 _SHEET_WRAP_TARGETS: dict[str, tuple[int, tuple[str, ...]]] = {
     "Technical": (1, ("Redirect Hops", "X-Robots-Tag", "Content-Security-Policy")),
     "AEO": (1, ("Why It Matters", "Snippet Preview Mockup")),
-    CONTENT_HUB_METRICS_SHEET: (1, ("Anchor Text Diversity", "Search Intent")),
+    # Folded in from the former standalone "Content Hub Metrics" sheet; header row 2
+    # (not 1) since this is an ordinary data sheet with a row-1 return-to-briefing strip.
+    "Content & AI Readiness": (2, ("Anchor Text Diversity", "Search Intent")),
     "Issue Register": (2, ("Affected URLs Sample",)),
     "Broken Link Impact": (
         2,
         ("Source Pages (first 5)", "Anchor Texts Used", "Recommended Action"),
     ),
+    "Robots.txt Analysis": (2, ("Detail", "Explanation")),
 }
 
 
@@ -230,6 +233,8 @@ _CF_OWNED_COLUMNS_BY_SHEET: dict[str, frozenset[str]] = {
     "Template & Duplication Risks": frozenset({"Severity"}),
     "Quick Wins": frozenset({"Severity"}),
     "Broken Link Impact": frozenset({"Status Code"}),
+    "FixPlan": frozenset({"Severity", "Status"}),
+    "Priority URLs": frozenset({"Severity Badge", "Status", "Indexability Reason"}),
 }
 
 
@@ -244,8 +249,62 @@ _CF_ZEBRA_EXEMPT_SHEETS: frozenset[str] = frozenset(
         CONTENT_OPTIMISATION_HUB_SHEET,
         CONTENT_PLANNER_SHEET,
         CHART_DATA_SHEET,
+        # Playbook gets its own per-section static colour instead (see
+        # ``apply_playbook_section_colors``) — zebra striping would fight that.
+        "Playbook",
     }
 )
+
+# Light, distinct fills for Playbook's "Section" groupings — rotated in first-seen
+# order so each block (quick-reference topic, Issue Playbook, Glossary & Legend)
+# reads as visually separate while scrolling a long reference sheet.
+_PLAYBOOK_SECTION_PALETTE: tuple[str, ...] = (
+    "D6E4F0",  # soft blue
+    "E2F0D9",  # soft green
+    "FCE4D6",  # soft orange
+    "E4DFEC",  # soft purple
+    "FFF2CC",  # soft yellow
+    "D9E2F3",  # soft indigo
+    "F2DCDB",  # soft red
+    "DAEEF3",  # soft teal
+    "EAD1DC",  # soft pink
+    "D8E4BC",  # soft olive
+)
+
+
+def apply_playbook_section_colors(worksheet: Worksheet, *, header_row: int) -> None:
+    """Tint each distinct Playbook ``Section`` value with its own light fill.
+
+    Applies to whichever rows actually carry a ``Section`` value: the bracketed
+    label row only for the quick-reference/Issue Playbook/Glossary blocks (their
+    body rows leave ``Section`` blank), or every row for the Glossary & Legend
+    block (which repeats ``Section`` on each line) — matching how the row data
+    is already authored rather than inferring block boundaries.
+    """
+    if DISABLE_CONDITIONAL_FORMATTING:
+        return
+    headers = _merged_headers(worksheet, header_row)
+    section_col = headers.get("Section")
+    if not section_col:
+        return
+    last_col = worksheet.max_column
+    color_by_section: dict[str, str] = {}
+    for row_idx in range(header_row + 1, worksheet.max_row + 1):
+        section_val = str(worksheet.cell(row=row_idx, column=section_col).value or "").strip()
+        if not section_val:
+            continue
+        color = color_by_section.get(section_val)
+        if color is None:
+            color = _PLAYBOOK_SECTION_PALETTE[
+                len(color_by_section) % len(_PLAYBOOK_SECTION_PALETTE)
+            ]
+            color_by_section[section_val] = color
+        fill = PatternFill("solid", fgColor=color)
+        for col_idx in range(1, last_col + 1):
+            cell = worksheet.cell(row=row_idx, column=col_idx)
+            if isinstance(cell, MergedCell):
+                continue
+            cell.fill = fill
 
 
 def _worksheet_has_cf_zebra(worksheet: Worksheet) -> bool:
@@ -554,7 +613,16 @@ def apply_generic_sheet_coloring(
     if not DISABLE_CONDITIONAL_FORMATTING:
         # On Main, apply_main_sheet_heatmaps owns these columns; tell the global pass
         # to skip them so we never stack two conflicting rules on one range.
-        skip_headers = _MAIN_HEATMAP_OWNED_HEADERS if sheet_name == "Main" else frozenset()
+        if sheet_name == "Main":
+            skip_headers = _MAIN_HEATMAP_OWNED_HEADERS
+        elif sheet_name == "Broken Link Impact":
+            # This sheet's "Priority Score" is clicks_total + inbound_count*10
+            # (unbounded), not the 0-100-scale score this global rule assumes
+            # (>=85/65-84 bands) — it gets its own data-bar-based CF instead,
+            # in apply_merged_tabs_conditional_formatting.
+            skip_headers = frozenset({"Priority Score"})
+        else:
+            skip_headers = frozenset()
         apply_global_conditional_formatting(
             worksheet,
             merged_audit_tabs=sheet_name in _MERGED_TAB_NAMES,
@@ -681,6 +749,7 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
             "SEO Score",
             "Technical Health",
             "Copy Score",
+            "Semantic AEO Score",
         ):
             col_idx = headers.get(score_header)
             if not col_idx:
@@ -700,6 +769,45 @@ def apply_content_hub_conditional_rules(worksheet: Worksheet, writer: Any) -> No
                     end_value=100,
                     end_color=HEATMAP_HIGH,
                 ),
+            )
+        # Entity Density (%) is sanity-capped at 50 (see header tooltip) — a
+        # 0-100 scale would compress everything into the low end, so use its
+        # own realistic range instead. Citation Candidate Count is a raw count
+        # (0 = no citeable blocks, worth flagging) so a data bar fits better
+        # than a colour scale.
+        entity_density_col = headers.get("Entity Density (%)")
+        if entity_density_col:
+            letter = get_column_letter(entity_density_col)
+            rng = f"{letter}{start_row}:{letter}{end_row}"
+            worksheet.conditional_formatting.add(
+                rng,
+                ColorScaleRule(
+                    start_type="num",
+                    start_value=0,
+                    start_color=HEATMAP_LOW,
+                    mid_type="num",
+                    mid_value=5,
+                    mid_color=HEATMAP_MID,
+                    end_type="num",
+                    end_value=15,
+                    end_color=HEATMAP_HIGH,
+                ),
+            )
+        citation_col = headers.get("Citation Candidate Count")
+        if citation_col:
+            letter = get_column_letter(citation_col)
+            rng = f"{letter}{start_row}:{letter}{end_row}"
+            worksheet.conditional_formatting.add(
+                rng,
+                CellIsRule(
+                    operator="equal",
+                    formula=["0"],
+                    fill=PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"),
+                ),
+            )
+            worksheet.conditional_formatting.add(
+                rng,
+                DataBarRule(start_type="min", end_type="max", color=DATA_BAR_BLUE, showValue=True),
             )
     owner_col = headers.get("Assigned Owner")
     if owner_col and end_row >= start_row and not DISABLE_CONDITIONAL_FORMATTING:
@@ -1005,14 +1113,13 @@ _MERGED_TAB_NAMES: frozenset[str] = frozenset(
         "Technical Diagnostics",
         "Content & AI Readiness",
         "Link Intelligence",
-        "Link Inventory",
         "Broken Link Impact",
         "Quick Wins",
         "Issue Register",
         "Template & Duplication Risks",
         "Priority URLs",
-        "Link Equity Map",
-        "Anchor Text Audit",
+        "FixPlan",
+        "Robots.txt Analysis",
     }
 )
 
@@ -1160,6 +1267,60 @@ def _add_text_semantic_highlights(
         )
 
 
+def _discrete_fill_by_value(
+    worksheet: Worksheet,
+    headers: dict[str, int],
+    header: str,
+    mapping: dict[str, str],
+    start_row: int,
+    end_row: int,
+) -> None:
+    """Exact-match CellIsRule per literal value — for columns with a small, fixed,
+    real value set (workflow status, owner, risk band, etc.), as opposed to
+    ``_add_text_semantic_highlights``'s substring search over free-form text."""
+    col_idx = headers.get(header)
+    if not col_idx:
+        return
+    letter = get_column_letter(col_idx)
+    cell_range = f"{letter}{start_row}:{letter}{end_row}"
+    for value, color in mapping.items():
+        worksheet.conditional_formatting.add(
+            cell_range,
+            CellIsRule(
+                operator="equal",
+                formula=[f'"{value}"'],
+                fill=PatternFill(start_color=color, end_color=color, fill_type="solid"),
+            ),
+        )
+
+
+def _substring_fill_by_keyword(
+    worksheet: Worksheet,
+    headers: dict[str, int],
+    header: str,
+    mapping: dict[str, str],
+    start_row: int,
+    end_row: int,
+) -> None:
+    """SEARCH()-based fill per keyword — for columns whose real values are joined
+    strings (e.g. "Noindex | HTTP 404") where exact match won't hit."""
+    col_idx = headers.get(header)
+    if not col_idx:
+        return
+    letter = get_column_letter(col_idx)
+    top = f"{letter}{start_row}"
+    cell_range = f"{letter}{start_row}:{letter}{end_row}"
+    for keyword, color in mapping.items():
+        worksheet.conditional_formatting.add(
+            cell_range,
+            FormulaRule(
+                formula=[f'NOT(ISERROR(SEARCH("{keyword}",{top})))'],
+                stopIfTrue=True,
+                fill=PatternFill(start_color=color, end_color=color, fill_type="solid"),
+            ),
+        )
+
+
 def apply_merged_tabs_conditional_formatting(
     worksheet: Worksheet,
     sheet_name: str,
@@ -1194,13 +1355,136 @@ def apply_merged_tabs_conditional_formatting(
             _add_data_bar_blue(worksheet, rng)
 
     if sheet_name == "Technical Diagnostics":
-        _add_text_semantic_highlights(
-            worksheet,
-            headers,
-            ("Severity Badge", "Pass Flag", "Indexability Reason"),
-            start_row,
-            end_row,
+        _add_text_semantic_highlights(worksheet, headers, ("Pass Flag",), start_row, end_row)
+        # Severity Badge — discrete exact-match (not substring) so Observation/
+        # Unmeasured get their own colour too, matching Main's heatmap treatment
+        # (previously only Critical/Warning were coloured here).
+        _discrete_fill_by_value(
+            worksheet, headers, "Severity Badge",
+            {
+                "Critical": RAG_RED,
+                "Warning": RAG_AMBER,
+                "Observation": SEVERITY_OBSERVATION_FILL,
+                "Unmeasured": RAG_NEUTRAL,
+            },
+            start_row, end_row,
         )
+        # Indexability Reason — confirmed bug: the old substring highlighter
+        # searched for "Critical"/"Error", but this field's real values
+        # (Indexable/Noindex/HTTP 4xx/5xx/Request Timeout) never contain those
+        # words, so it never actually coloured anything. Match the real values.
+        _substring_fill_by_keyword(
+            worksheet, headers, "Indexability Reason",
+            {"Noindex": RAG_RED, "HTTP 4": RAG_RED, "HTTP 5": RAG_RED, "Timeout": RAG_AMBER},
+            start_row, end_row,
+        )
+        # SEO Health Score — unblocked here (apply_global_conditional_formatting
+        # skips it globally for merged-audit-tab sheets); column position (E) is
+        # preserved to honour the Main -> Technical Diagnostics VLOOKUP contract.
+        seo_rng = _column_range(headers, "SEO Health Score", start_row, end_row)
+        if seo_rng:
+            _add_color_scale_higher_better(worksheet, seo_rng)
+
+        for hdr in ("Critical Issues Count", "Warning Issues Count"):
+            r = _column_range(headers, hdr, start_row, end_row)
+            if r:
+                _add_data_bar_blue(worksheet, r)
+        for hdr in ("Redirect Chain Length", "Discovery Rank", "Crawl Depth"):
+            r = _column_range(headers, hdr, start_row, end_row)
+            if r:
+                _add_color_scale_lower_better(worksheet, r)
+        for hdr in (
+            "Lab LCP (Mobile) (s)", "Lab TBT (Mobile) (ms)", "Lab FCP (Mobile) (s)",
+            "Lab CLS (Mobile)", "Lab TTFB (Mobile) (ms)", "Lab LCP (Desktop) (s)",
+            "Lab TBT (Desktop) (ms)", "Mobile LCP (s)", "Mobile CLS", "Mobile TTFB (s)",
+            "Page Size (KB)", "DOM Size (nodes)", "JS Execution (ms)",
+            "Network Request Count", "Origin CrUX LCP (s)", "Origin CrUX INP (ms)",
+        ):
+            r = _column_range(headers, hdr, start_row, end_row)
+            if r:
+                _add_color_scale_lower_better(worksheet, r)
+        for hdr in (
+            "Desktop PSI Score", "Mobile PSI Score",
+            "Lighthouse Accessibility (Mobile)", "Lighthouse Best Practices (Mobile)",
+            "Lighthouse SEO Score (Mobile)", "Lighthouse Performance (Desktop)",
+        ):
+            r = _column_range(headers, hdr, start_row, end_row)
+            if r:
+                _add_color_scale_higher_better(worksheet, r)
+        for hdr in ("Redirect Loop Flag",):
+            _bool_fill_if(
+                worksheet, headers, hdr, when=True, color=RAG_RED,
+                start_row=start_row, end_row=end_row,
+            )
+        _bool_fill_if(
+            worksheet, headers, "Reachable from Homepage", when=False, color=RAG_RED,
+            start_row=start_row, end_row=end_row,
+        )
+        for hdr in ("Security: HSTS", "Security: CSP", "Hreflang Code Valid"):
+            _bool_fill_if(
+                worksheet, headers, hdr, when=True, color=RAG_GREEN,
+                start_row=start_row, end_row=end_row,
+            )
+        # Raw security header text (absent = missing hardening, not just "empty").
+        for hdr in ("Strict-Transport-Security", "Content-Security-Policy", "X-Content-Type-Options"):
+            col_idx = headers.get(hdr)
+            if not col_idx:
+                continue
+            letter = get_column_letter(col_idx)
+            worksheet.conditional_formatting.add(
+                f"{letter}{start_row}:{letter}{end_row}",
+                FormulaRule(
+                    formula=[f"LEN({letter}{start_row})=0"],
+                    fill=PatternFill(start_color=RAG_AMBER_SOFT, end_color=RAG_AMBER_SOFT, fill_type="solid"),
+                ),
+            )
+        _discrete_fill_by_value(
+            worksheet, headers, "Canonical Type",
+            {"self": RAG_GREEN, "cross-canonical": RAG_RED, "missing": RAG_RED},
+            start_row, end_row,
+        )
+        _discrete_fill_by_value(
+            worksheet, headers, "Extraction State",
+            {"complete": RAG_GREEN, "partial": RAG_AMBER, "skipped": RAG_RED},
+            start_row, end_row,
+        )
+        _substring_fill_by_keyword(
+            worksheet, headers, "GSC Coverage Category",
+            {"Error": RAG_RED, "Excluded": RAG_RED, "Indexed": RAG_GREEN, "Valid": RAG_GREEN},
+            start_row, end_row,
+        )
+        _substring_fill_by_keyword(
+            worksheet, headers, "GSC Index Status",
+            {"Error": RAG_RED, "Excluded": RAG_RED, "Indexed": RAG_GREEN},
+            start_row, end_row,
+        )
+        for hdr in ("Meta Robots Raw", "X-Robots-Tag"):
+            _substring_fill_by_keyword(
+                worksheet, headers, hdr, {"noindex": RAG_RED}, start_row, end_row,
+            )
+        # "Missing Reciprocal" contains both keywords — check the bad case first
+        # with stopIfTrue so it wins over the generic "Reciprocal" match below.
+        recip_col = headers.get("Hreflang Reciprocal Status")
+        if recip_col:
+            letter = get_column_letter(recip_col)
+            recip_top = f"{letter}{start_row}"
+            recip_rng = f"{letter}{start_row}:{letter}{end_row}"
+            worksheet.conditional_formatting.add(
+                recip_rng,
+                FormulaRule(
+                    formula=[f'NOT(ISERROR(SEARCH("Missing",{recip_top})))'],
+                    stopIfTrue=True,
+                    fill=PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"),
+                ),
+            )
+            worksheet.conditional_formatting.add(
+                recip_rng,
+                FormulaRule(
+                    formula=[f'NOT(ISERROR(SEARCH("Reciprocal",{recip_top})))'],
+                    stopIfTrue=True,
+                    fill=PatternFill(start_color=RAG_GREEN, end_color=RAG_GREEN, fill_type="solid"),
+                ),
+            )
     elif sheet_name == "Content & AI Readiness":
         _add_text_semantic_highlights(
             worksheet,
@@ -1209,6 +1493,19 @@ def apply_merged_tabs_conditional_formatting(
             start_row,
             end_row,
         )
+        # Folded in from the former standalone "Anchor Text Audit" sheet.
+        dominance_col = headers.get("Generic Anchor Dominance")
+        if dominance_col:
+            dominance_letter = get_column_letter(dominance_col)
+            dominance_range = f"{dominance_letter}{start_row}:{dominance_letter}{end_row}"
+            worksheet.conditional_formatting.add(
+                dominance_range,
+                CellIsRule(
+                    operator="equal",
+                    formula=["TRUE"],
+                    fill=PatternFill(start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid"),
+                ),
+            )
     elif sheet_name == "Link Intelligence":
         _add_text_semantic_highlights(
             worksheet,
@@ -1217,7 +1514,7 @@ def apply_merged_tabs_conditional_formatting(
             start_row,
             end_row,
         )
-    elif sheet_name == "Link Inventory":
+        # Folded in from the former standalone "Link Inventory" sheet.
         _add_text_semantic_highlights(
             worksheet,
             headers,
@@ -1225,6 +1522,36 @@ def apply_merged_tabs_conditional_formatting(
             start_row,
             end_row,
         )
+        # Folded in from the former standalone "Link Equity Map" sheet.
+        tier_col = headers.get("Equity Tier")
+        if tier_col:
+            tier_letter = get_column_letter(tier_col)
+            tier_range = f"{tier_letter}{start_row}:{tier_letter}{end_row}"
+            worksheet.conditional_formatting.add(
+                tier_range,
+                CellIsRule(
+                    operator="equal",
+                    formula=['"Orphan"'],
+                    fill=PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"),
+                    font=Font(bold=True, color=RAG_RED_FONT),
+                ),
+            )
+            worksheet.conditional_formatting.add(
+                tier_range,
+                CellIsRule(
+                    operator="equal",
+                    formula=['"Low"'],
+                    fill=PatternFill(start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid"),
+                ),
+            )
+            worksheet.conditional_formatting.add(
+                tier_range,
+                CellIsRule(
+                    operator="equal",
+                    formula=['"High"'],
+                    fill=PatternFill(start_color=RAG_GREEN, end_color=RAG_GREEN, fill_type="solid"),
+                ),
+            )
     elif sheet_name == "Issue Register":
         days_col = headers.get("Days Open")
         if days_col:
@@ -1266,49 +1593,6 @@ def apply_merged_tabs_conditional_formatting(
             start_row,
             end_row,
         )
-    elif sheet_name == "Link Equity Map":
-        tier_col = headers.get("Equity Tier")
-        if tier_col:
-            tier_letter = get_column_letter(tier_col)
-            tier_range = f"{tier_letter}{start_row}:{tier_letter}{end_row}"
-            worksheet.conditional_formatting.add(
-                tier_range,
-                CellIsRule(
-                    operator="equal",
-                    formula=['"Orphan"'],
-                    fill=PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"),
-                    font=Font(bold=True, color=RAG_RED_FONT),
-                ),
-            )
-            worksheet.conditional_formatting.add(
-                tier_range,
-                CellIsRule(
-                    operator="equal",
-                    formula=['"Low"'],
-                    fill=PatternFill(start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid"),
-                ),
-            )
-            worksheet.conditional_formatting.add(
-                tier_range,
-                CellIsRule(
-                    operator="equal",
-                    formula=['"High"'],
-                    fill=PatternFill(start_color=RAG_GREEN, end_color=RAG_GREEN, fill_type="solid"),
-                ),
-            )
-    elif sheet_name == "Anchor Text Audit":
-        dominance_col = headers.get("Generic Anchor Dominance")
-        if dominance_col:
-            dominance_letter = get_column_letter(dominance_col)
-            dominance_range = f"{dominance_letter}{start_row}:{dominance_letter}{end_row}"
-            worksheet.conditional_formatting.add(
-                dominance_range,
-                CellIsRule(
-                    operator="equal",
-                    formula=["TRUE"],
-                    fill=PatternFill(start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid"),
-                ),
-            )
     elif sheet_name == "Quick Wins":
         # "Business Risk Score" now gets its data bar from the generic
         # _DATA_BAR_HEADERS pass above (shared with Priority URLs) — only
@@ -1343,6 +1627,69 @@ def apply_merged_tabs_conditional_formatting(
             start_row,
             end_row,
         )
+        # "Issue" has no fixed value set of its own (arbitrary rule names), so
+        # colour it by cross-referencing this row's own Severity cell instead —
+        # gives the same at-a-glance urgency signal without duplicating the
+        # substring-match approach (issue names don't contain "Critical"/"Warning").
+        issue_col = headers.get("Issue")
+        severity_col = headers.get("Severity")
+        if issue_col and severity_col:
+            issue_letter = get_column_letter(issue_col)
+            severity_letter = get_column_letter(severity_col)
+            issue_range = f"{issue_letter}{start_row}:{issue_letter}{end_row}"
+            severity_top = f"{severity_letter}{start_row}"
+            worksheet.conditional_formatting.add(
+                issue_range,
+                FormulaRule(
+                    formula=[f'{severity_top}="Critical"'],
+                    stopIfTrue=True,
+                    fill=PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"),
+                ),
+            )
+            worksheet.conditional_formatting.add(
+                issue_range,
+                FormulaRule(
+                    formula=[f'{severity_top}="Warning"'],
+                    stopIfTrue=True,
+                    fill=PatternFill(start_color=RAG_AMBER, end_color=RAG_AMBER, fill_type="solid"),
+                ),
+            )
+        owner_col = headers.get("Owner")
+        if owner_col:
+            owner_letter = get_column_letter(owner_col)
+            owner_range = f"{owner_letter}{start_row}:{owner_letter}{end_row}"
+            for value, color in {
+                "Dev": "D9E2F3",
+                "Copy Writer": "E2F0D9",
+                "Server/Host": "FCE4D6",
+            }.items():
+                worksheet.conditional_formatting.add(
+                    owner_range,
+                    CellIsRule(
+                        operator="equal",
+                        formula=[f'"{value}"'],
+                        fill=PatternFill(start_color=color, end_color=color, fill_type="solid"),
+                    ),
+                )
+        revenue_risk_col = headers.get("Revenue Risk")
+        if revenue_risk_col:
+            revenue_risk_letter = get_column_letter(revenue_risk_col)
+            revenue_risk_range = (
+                f"{revenue_risk_letter}{start_row}:{revenue_risk_letter}{end_row}"
+            )
+            for value, color in {
+                "High Risk": RAG_RED,
+                "Medium Risk": RAG_AMBER,
+                "Monitor": RAG_GREEN,
+            }.items():
+                worksheet.conditional_formatting.add(
+                    revenue_risk_range,
+                    CellIsRule(
+                        operator="equal",
+                        formula=[f'"{value}"'],
+                        fill=PatternFill(start_color=color, end_color=color, fill_type="solid"),
+                    ),
+                )
     elif sheet_name == "Broken Link Impact":
         status_col = headers.get("Status Code")
         if status_col:
@@ -1357,6 +1704,135 @@ def apply_merged_tabs_conditional_formatting(
                     font=Font(bold=True, color=RAG_RED_FONT),
                 ),
             )
+        # "Inbound Link Count" already gets a data bar from the generic
+        # _DATA_BAR_HEADERS pass above; "Source Page Clicks Total" has no
+        # generic entry (name isn't shared with any other sheet) so it needs
+        # its own here.
+        rng = _column_range(headers, "Source Page Clicks Total", start_row, end_row)
+        if rng:
+            _add_data_bar_blue(worksheet, rng)
+    elif sheet_name == "FixPlan":
+        # "Severity" values (Critical/Warning/Observation) match the shared
+        # substring highlighter; every other FixPlan column below uses its own
+        # exact, real values (To Do/Yes/High Risk/etc.), which don't contain
+        # "Critical"/"Warning" text, so they need dedicated CellIsRules.
+        _add_text_semantic_highlights(worksheet, headers, ("Severity",), start_row, end_row)
+
+        for hdr in ("Affected Count", "Affected Link Instances", "Est. Sprint Points"):
+            rng = _column_range(headers, hdr, start_row, end_row)
+            if rng:
+                _add_data_bar_blue(worksheet, rng)
+
+        for hdr in ("Discovery Rank", "Est. Hours"):
+            rng = _column_range(headers, hdr, start_row, end_row)
+            if rng:
+                _add_color_scale_lower_better(worksheet, rng)
+
+        _discrete_fill_by_value(
+            worksheet, headers, "Status",
+            {"To Do": RAG_RED, "In Review": RAG_AMBER, "Done": RAG_GREEN},
+            start_row, end_row,
+        )
+        _discrete_fill_by_value(
+            worksheet, headers, "Action Needed",
+            {"Yes": RAG_AMBER, "No": RAG_GREEN},
+            start_row, end_row,
+        )
+        _discrete_fill_by_value(
+            worksheet, headers, "Revenue Risk",
+            {"High Risk": RAG_RED, "Medium Risk": RAG_AMBER, "Monitor": RAG_GREEN},
+            start_row, end_row,
+        )
+        _discrete_fill_by_value(
+            worksheet, headers, "Aging/Priority",
+            {
+                "Immediate (Current Sprint)": RAG_RED,
+                "Next Sprint": RAG_AMBER,
+                "Backlog": RAG_GREEN,
+            },
+            start_row, end_row,
+        )
+        _discrete_fill_by_value(
+            worksheet, headers, "Effort",
+            {"S": RAG_GREEN, "M": RAG_AMBER, "L": RAG_RED},
+            start_row, end_row,
+        )
+        _discrete_fill_by_value(
+            worksheet, headers, "Owner",
+            {"Dev": "D9E2F3", "Copy Writer": "E2F0D9", "Server/Host": "FCE4D6"},
+            start_row, end_row,
+        )
+        _discrete_fill_by_value(
+            worksheet, headers, "Category",
+            {"AEO": "D9E2F3", "SEO": "E2F0D9"},
+            start_row, end_row,
+        )
+    elif sheet_name == "Robots.txt Analysis":
+        # "Status" carries different vocabularies per section (Accessible/
+        # Unavailable/Fetched-body-unreadable in Section 1; user-agent/
+        # disallow/allow/crawl-delay/sitemap directives in Section 2; Disallow/
+        # None in Section 3; In sitemap but Disallow/Sitemap not declared/None
+        # in Section 4) — substring keyword matching covers all of them without
+        # needing per-section CF branches.
+        _substring_fill_by_keyword(
+            worksheet, headers, "Status",
+            {
+                "Unavailable": RAG_RED,
+                "unreadable": RAG_AMBER,
+                "Disallow": RAG_RED,
+                "not declared": RAG_AMBER,
+            },
+            start_row, end_row,
+        )
+    elif sheet_name == "Priority URLs":
+        _discrete_fill_by_value(
+            worksheet, headers, "Action Needed",
+            {"Yes": RAG_AMBER, "No": RAG_GREEN},
+            start_row, end_row,
+        )
+        _discrete_fill_by_value(
+            worksheet, headers, "Severity Badge",
+            {
+                "Critical": RAG_RED,
+                "Warning": RAG_AMBER,
+                "Observation": SEVERITY_OBSERVATION_FILL,
+                "Unmeasured": RAG_NEUTRAL,
+            },
+            start_row, end_row,
+        )
+        _discrete_fill_by_value(
+            worksheet, headers, "Owner",
+            {"Dev": "D9E2F3", "Copy Writer": "E2F0D9", "Server/Host": "FCE4D6"},
+            start_row, end_row,
+        )
+        _discrete_fill_by_value(
+            worksheet, headers, "Status",
+            {
+                "Open": RAG_AMBER,
+                "In Progress": RAG_AMBER,
+                "Resolved": RAG_GREEN,
+                "Won't Fix": RAG_NEUTRAL,
+            },
+            start_row, end_row,
+        )
+        _discrete_fill_by_value(
+            worksheet, headers, "Revenue Intent",
+            {"High": RAG_RED, "Standard": RAG_NEUTRAL},
+            start_row, end_row,
+        )
+        _substring_fill_by_keyword(
+            worksheet, headers, "Indexability Reason",
+            {"Noindex": RAG_RED, "HTTP 4": RAG_RED, "HTTP 5": RAG_RED, "Timeout": RAG_AMBER},
+            start_row, end_row,
+        )
+        for hdr in ("Critical Issues Count", "Warning Issues Count", "Broken Internal Links Count"):
+            rng = _column_range(headers, hdr, start_row, end_row)
+            if rng:
+                _add_color_scale_lower_better(worksheet, rng)
+        for hdr in ("GSC Impressions", "GSC CTR"):
+            rng = _column_range(headers, hdr, start_row, end_row)
+            if rng:
+                _add_data_bar_blue(worksheet, rng)
 
 
 def apply_main_sheet_heatmaps(
@@ -1583,6 +2059,270 @@ def apply_main_sheet_heatmaps(
         )
 
 
+# Headers apply_main_sheet_heatmaps() (or the generic static-fill pass in
+# apply_generic_sheet_coloring, keyed by the exact same names) already owns —
+# skipped here to avoid stacking a second conflicting rule on the same range.
+_MAIN_GROUP_CF_ALREADY_OWNED: frozenset[str] = frozenset(
+    {
+        "Status Code", "SEO Health Score", "AEO Readiness Score", "Word Count",
+        "Word Count (Body)", "Severity Badge", "Mobile PSI Score", "Desktop PSI Score",
+        "Lighthouse Performance (Mobile)", "Lighthouse Accessibility (Mobile)",
+        "Lighthouse Best Practices (Mobile)", "Lighthouse SEO Score (Mobile)",
+        "Lab LCP (Mobile) (s)", "E-E-A-T Signal Score", "Schema Error Count",
+        "Click Depth", "Page Size (KB)", "Is Thin Content", "Is Near Duplicate",
+        "Is Draft or Test Page", "Content Age (days)", "Meta Desc Length",
+        "Load Time (s)", "Load Time", "TTFB (ms)",
+        "Broken Internal Links Count", "Image Filename Quality Issues",
+        "Generic Anchor Text Count", "Word Count Band",
+        "Technical Health", "Copy Score", "SEO Score",
+    }
+)
+
+
+def _bool_fill_if(
+    worksheet: Worksheet,
+    headers: dict[str, int],
+    header: str,
+    *,
+    when: bool,
+    color: str,
+    start_row: int,
+    end_row: int,
+) -> None:
+    """Fill a boolean column's cells when its value equals ``when``."""
+    col_idx = headers.get(header)
+    if not col_idx:
+        return
+    letter = get_column_letter(col_idx)
+    rng = f"{letter}{start_row}:{letter}{end_row}"
+    worksheet.conditional_formatting.add(
+        rng,
+        CellIsRule(
+            operator="equal",
+            formula=["TRUE" if when else "FALSE"],
+            fill=PatternFill(start_color=color, end_color=color, fill_type="solid"),
+        ),
+    )
+
+
+def apply_main_group_conditional_formatting(
+    worksheet: Worksheet, *, header_row: int = 1
+) -> None:
+    """Group-based CF rollout for Main's ~150 columns beyond the always-visible
+    triage block (which apply_main_sheet_heatmaps already owns).
+
+    One rule pattern per column-type, organised by MAIN_COLUMN_GROUP_DEFINITIONS:
+    0-100 scores -> fixed colour scale; unbounded numeric metrics (seconds/ms/
+    counts) -> data-relative colour scale or data bar; booleans -> red/green;
+    known enums -> discrete FormulaRule sets matching real values (not
+    substring keyword matching, which is how Technical Diagnostics' old
+    Indexability Reason CF went wrong for its actual values).
+    """
+    if DISABLE_CONDITIONAL_FORMATTING:
+        return
+    if worksheet.max_row <= header_row:
+        return
+    start_row = header_row + 1
+    end_row = worksheet.max_row
+    if end_row < start_row:
+        return
+
+    headers = header_index(worksheet, header_row)
+
+    def rng(header: str) -> str | None:
+        if header in _MAIN_GROUP_CF_ALREADY_OWNED:
+            return None
+        return _column_range(headers, header, start_row, end_row)
+
+    def higher_100(header: str) -> None:
+        r = rng(header)
+        if r:
+            _add_color_scale_higher_better(worksheet, r)
+
+    def lower_relative(header: str) -> None:
+        r = rng(header)
+        if r:
+            _add_color_scale_lower_better(worksheet, r)
+
+    def data_bar(header: str) -> None:
+        r = rng(header)
+        if r:
+            _add_data_bar_blue(worksheet, r)
+
+    def good_if_true(header: str) -> None:
+        if header not in _MAIN_GROUP_CF_ALREADY_OWNED:
+            _bool_fill_if(
+                worksheet, headers, header, when=True, color=RAG_GREEN,
+                start_row=start_row, end_row=end_row,
+            )
+
+    def bad_if_true(header: str) -> None:
+        if header not in _MAIN_GROUP_CF_ALREADY_OWNED:
+            _bool_fill_if(
+                worksheet, headers, header, when=True, color=RAG_RED,
+                start_row=start_row, end_row=end_row,
+            )
+
+    # --- Metadata Group ---
+    title_len_col = headers.get("Title Length")
+    if title_len_col:
+        letter = get_column_letter(title_len_col)
+        title_rng = f"{letter}{start_row}:{letter}{end_row}"
+        title_cell = f"{letter}{start_row}"
+        worksheet.conditional_formatting.add(
+            title_rng,
+            FormulaRule(
+                formula=[f"OR({title_cell}<50,{title_cell}>60)"],
+                stopIfTrue=True,
+                fill=PatternFill(start_color=RAG_AMBER_SOFT, end_color=RAG_AMBER_SOFT, fill_type="solid"),
+            ),
+        )
+        worksheet.conditional_formatting.add(
+            title_rng,
+            FormulaRule(
+                formula=[f"AND({title_cell}>=50,{title_cell}<=60)"],
+                stopIfTrue=True,
+                fill=PatternFill(start_color=RAG_GREEN, end_color=RAG_GREEN, fill_type="solid"),
+            ),
+        )
+
+    # --- Heading Structure Group ---
+    h1_col = headers.get("H1 Content")
+    if h1_col:
+        letter = get_column_letter(h1_col)
+        worksheet.conditional_formatting.add(
+            f"{letter}{start_row}:{letter}{end_row}",
+            FormulaRule(
+                formula=[f"LEN({letter}{start_row})=0"],
+                fill=PatternFill(start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"),
+            ),
+        )
+    for h in ("H2 Content", "H3 Content", "H4 Content", "H5 Content", "H6 Content"):
+        col_idx = headers.get(h)
+        if not col_idx:
+            continue
+        letter = get_column_letter(col_idx)
+        worksheet.conditional_formatting.add(
+            f"{letter}{start_row}:{letter}{end_row}",
+            FormulaRule(
+                formula=[f"LEN({letter}{start_row})=0"],
+                fill=PatternFill(start_color=RAG_AMBER_SOFT, end_color=RAG_AMBER_SOFT, fill_type="solid"),
+            ),
+        )
+    for h in ("H1 Length", "H2 Length", "H3 Length", "H4 Length", "H5 Length", "H6 Length"):
+        data_bar(h)
+
+    # --- Performance & CWV Group ---
+    for h in (
+        "Lighthouse Performance (Desktop)", "Lighthouse Accessibility (Desktop)",
+        "Lighthouse Best Practices (Desktop)", "Lighthouse SEO Score (Desktop)",
+        "Regional Authority Score",
+    ):
+        higher_100(h)
+    for h in (
+        "CWV LCP (s)", "CWV INP (ms)", "CWV FCP (ms)", "CWV TTFB (ms)",
+        "Origin CrUX LCP (s)", "Origin CrUX CLS", "Origin CrUX INP (ms)",
+        "Mobile LCP (s)", "Mobile CLS", "Mobile TTFB (s)",
+        "Lab CLS (Mobile)", "Lab TBT (Mobile) (ms)", "Lab INP (Mobile) (ms)",
+        "Lab FCP (Mobile) (s)", "Lab Speed Index (Mobile) (s)", "Lab TTI (Mobile) (s)",
+        "Lab TTFB (Mobile) (ms)", "Lab LCP (Desktop) (s)", "Lab CLS (Desktop)",
+        "Lab TBT (Desktop) (ms)", "Lab INP (Desktop) (ms)", "Lab FCP (Desktop) (s)",
+        "Lab Speed Index (Desktop) (s)", "Lab TTI (Desktop) (s)", "Lab TTFB (Desktop) (ms)",
+        "DOM Size (nodes)", "JS Execution (ms)", "Network Request Count",
+    ):
+        lower_relative(h)
+    for h in ("Has Text Compression", "Uses Modern Image Formats", "Reachable from Homepage"):
+        good_if_true(h)
+    for h in ("Has Long Cache TTL Issues", "Has Render Blocking Resources"):
+        bad_if_true(h)
+
+    # --- Google Search Console Group ---
+    _substring_fill_by_keyword(
+        worksheet, headers, "GSC Index Status",
+        {"Excluded": RAG_RED, "Error": RAG_RED, "Indexed": RAG_GREEN},
+        start_row, end_row,
+    )
+    for h in ("GSC Clicks", "GSC Impressions", "GSC CTR"):
+        data_bar(h)
+    lower_relative("GSC Avg Position")
+    lower_relative("Days Since Last Crawl")
+
+    # --- Crawl & Discovery Group ---
+    bad_if_true("Orphan Pages")
+    data_bar("Internal PageRank")
+    for h in ("Found via Sitemap", "Found via Crawl"):
+        good_if_true(h)
+
+    # --- Raw State Group ---
+    _discrete_fill_by_value(
+        worksheet, headers, "Extraction State",
+        {"complete": RAG_GREEN, "partial": RAG_AMBER, "skipped": RAG_RED},
+        start_row, end_row,
+    )
+
+    # --- Schema & Structured Data ---
+    for h in ("Schema Present", "Schema Valid", "Has Valid JSON-LD"):
+        good_if_true(h)
+    data_bar("Schema Warning Count")
+    _substring_fill_by_keyword(
+        worksheet, headers, "Schema Types With Errors",
+        {"error": RAG_RED},
+        start_row, end_row,
+    )
+
+    # --- E-E-A-T & Trust Signals ---
+    for h in (
+        "Has Byline Element", "Has Time Element", "Has Privacy Policy Link",
+        "Has Terms Link", "Has Social Links", "Has Phone Number",
+        "Has Email Address", "Has Authority External Links", "Links to About Page",
+    ):
+        good_if_true(h)
+    data_bar("Social Profile Link Count")
+
+    # --- Content Quality ---
+    lower_relative("Content Similarity Score")
+    for h in ("Thin Content Flag", "Probable Duplicate Flag"):
+        bad_if_true(h)
+
+    # --- Social Cards ---
+    for h in ("OG Image OK", "OG Image Dimensions OK", "Open Graph Complete"):
+        good_if_true(h)
+    bad_if_true("OG URL Mismatch")
+    higher_100("OG Completeness Score")
+
+    # --- Redirects ---
+    for h in ("Redirect Chain Length", "Redirect Chain Hops"):
+        lower_relative(h)
+    for h in ("Has 302 in Chain", "Has Mixed Redirect Types", "Redirect Loop Flag"):
+        bad_if_true(h)
+
+    # --- Canonical Chain ---
+    _discrete_fill_by_value(
+        worksheet, headers, "Canonical Type",
+        {"self": RAG_GREEN, "cross-canonical": RAG_RED, "missing": RAG_RED},
+        start_row, end_row,
+    )
+    lower_relative("Canonical Chain Depth")
+    for h in ("Canonical Loop Detected", "Canonical Points to Redirect", "Canonical Points to Non-200"):
+        bad_if_true(h)
+
+    # --- Robots.txt ---
+    for _agent, column in (
+        ("Googlebot", "Robots.txt: Googlebot"),
+        ("Bingbot", "Robots.txt: Bingbot"),
+        ("GPTBot", "Robots.txt: GPTBot"),
+        ("ClaudeBot", "Robots.txt: ClaudeBot"),
+        ("PerplexityBot", "Robots.txt: PerplexityBot"),
+        ("CCBot", "Robots.txt: CCBot"),
+    ):
+        _discrete_fill_by_value(
+            worksheet, headers, column,
+            {"Allow": RAG_GREEN, "Disallow": RAG_RED},
+            start_row, end_row,
+        )
+    good_if_true("Robots.txt Accessible")
+
+
 def apply_dashboard_metric_conditional_rules(worksheet: Worksheet) -> None:
     """Apply at-a-glance color scales to primary dashboard metric values."""
     if DISABLE_CONDITIONAL_FORMATTING:
@@ -1640,6 +2380,7 @@ _CONTENT_PLANNER_COL_WIDTHS: dict[str, float] = {
     "Tertiary": 24.0,
     "Page link": 52.0,
     "Copy Doc": 30.0,
+    "Priority for MVP": 18.0,
     "Copywriter Sign off": 20.0,
     "Copy First Check": 18.0,
     "2nd Revisions": 16.0,
@@ -1654,6 +2395,7 @@ _CONTENT_PLANNER_COL_WIDTHS: dict[str, float] = {
     "Mobile": 14.0,
     "SEO": 14.0,
     "Performance": 16.0,
+    "Plugin Audit": 18.0,
 }
 
 # Teal accent used for the hierarchy (Primary/Secondary/Tertiary) header cells.
@@ -1666,19 +2408,24 @@ _PLANNER_COPYDOC_HDR_FONT: str = "7A5C00"
 _PLANNER_SIGNOFF_HDR: str = "E8EAF6"
 _PLANNER_SIGNOFF_HDR_FONT: str = "1A237E"
 _CONTENT_PLANNER_SIGNOFF_STATUS: str = "Not signed off"
+# Column indices (1-based) for orchestration.content_planner.CONTENT_PLANNER_SIGNOFF_COLUMNS
+# (CONTENT_PLANNER_COLUMNS[5:] — "Priority for MVP" through "Plugin Audit", 16
+# columns: F through U). Kept as separate constants (not derived from the column
+# tuple, since reporter/ must not import orchestration/) — update both in lockstep
+# with any future column insertion/removal in that slice.
 _CONTENT_PLANNER_SIGNOFF_FIRST_COL: int = 6
-_CONTENT_PLANNER_SIGNOFF_LAST_COL: int = 19
+_CONTENT_PLANNER_SIGNOFF_LAST_COL: int = 21
 
 
 def _apply_content_planner_header_accents(
-    worksheet: Worksheet, headers: dict[str, int]
+    worksheet: Worksheet, headers: dict[str, int], *, header_row: int
 ) -> None:
     """Reapply section header colours after mock table styling."""
     for hier_name in ("Primary", "Secondary", "Tertiary"):
         col_idx = headers.get(hier_name)
         if not col_idx:
             continue
-        hdr = worksheet.cell(row=1, column=col_idx)
+        hdr = worksheet.cell(row=header_row, column=col_idx)
         hdr.fill = PatternFill(
             start_color=_PLANNER_TEAL, end_color=_PLANNER_TEAL, fill_type="solid"
         )
@@ -1686,7 +2433,7 @@ def _apply_content_planner_header_accents(
 
     copy_doc_col = headers.get("Copy Doc")
     if copy_doc_col:
-        hdr = worksheet.cell(row=1, column=copy_doc_col)
+        hdr = worksheet.cell(row=header_row, column=copy_doc_col)
         hdr.fill = PatternFill(
             start_color=_PLANNER_COPYDOC_HDR,
             end_color=_PLANNER_COPYDOC_HDR,
@@ -1695,7 +2442,7 @@ def _apply_content_planner_header_accents(
         hdr.font = Font(color=_PLANNER_COPYDOC_HDR_FONT, bold=True)
 
     for col_idx in range(_CONTENT_PLANNER_SIGNOFF_FIRST_COL, _CONTENT_PLANNER_SIGNOFF_LAST_COL + 1):
-        hdr = worksheet.cell(row=1, column=col_idx)
+        hdr = worksheet.cell(row=header_row, column=col_idx)
         hdr.fill = PatternFill(
             start_color=_PLANNER_SIGNOFF_HDR,
             end_color=_PLANNER_SIGNOFF_HDR,
@@ -1704,18 +2451,27 @@ def _apply_content_planner_header_accents(
         hdr.font = Font(color=_PLANNER_SIGNOFF_HDR_FONT, bold=True)
 
 
-def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
+def apply_content_planner_signoff_rules(
+    worksheet: Worksheet, *, header_row: int = 2
+) -> None:
     """Column widths, row heights, hyperlinks, and RAG sign-off formatting.
 
     Column layout: A=Primary, B=Secondary, C=Tertiary, D=Page link, E=Copy Doc,
-    F-S = 14 sign-off/QA columns (Copywriter Sign off … Performance).
-    Freeze panes at ``E2`` lock columns A–D while scrolling the workflow grid.
+    F-T = 16 sign-off/QA columns (Priority for MVP, Copywriter Sign off …
+    Performance, Plugin Audit). ``header_row`` defaults to 2 because Content
+    Planner is not return-strip-exempt — export always inserts a row-1 banner
+    before this function runs, pushing real headers to row 2 (previously this
+    function read row 1 unconditionally, silently no-op'ing on the banner text
+    instead of the real headers).
+    Freeze panes at ``E{header_row+1}`` lock columns A–D while scrolling the
+    workflow grid.
     """
-    if worksheet.max_row <= 1:
+    if worksheet.max_row <= header_row:
         return
 
-    headers = header_index(worksheet)
+    headers = header_index(worksheet, header_row)
     last_row = worksheet.max_row
+    data_start = header_row + 1
     signoff_col_indices = list(
         range(_CONTENT_PLANNER_SIGNOFF_FIRST_COL, _CONTENT_PLANNER_SIGNOFF_LAST_COL + 1)
     )
@@ -1727,20 +2483,20 @@ def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
             worksheet.column_dimensions[get_column_letter(col_idx)].width = width
 
     # ── Header row: height + center alignment ────────────────────────────────
-    worksheet.row_dimensions[1].height = 42
+    worksheet.row_dimensions[header_row].height = 42
     for col_idx in range(1, worksheet.max_column + 1):
-        cell = worksheet.cell(row=1, column=col_idx)
+        cell = worksheet.cell(row=header_row, column=col_idx)
         cell.alignment = Alignment(
             horizontal="center", vertical="center", wrap_text=True
         )
-    _apply_content_planner_header_accents(worksheet, headers)
+    _apply_content_planner_header_accents(worksheet, headers, header_row=header_row)
 
     # ── Hierarchy columns: bold populated labels ─────────────────────────────
     for hier_name in ("Primary", "Secondary", "Tertiary"):
         col_idx = headers.get(hier_name)
         if not col_idx:
             continue
-        for row_idx in range(2, last_row + 1):
+        for row_idx in range(data_start, last_row + 1):
             cell = worksheet.cell(row=row_idx, column=col_idx)
             cell.alignment = Alignment(horizontal="left", vertical="center")
             if cell.value:
@@ -1750,7 +2506,7 @@ def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
     page_link_col = headers.get("Page link")
     if page_link_col:
         link_font = Font(color=STD_BLUE, underline="single")
-        for row_idx in range(2, last_row + 1):
+        for row_idx in range(data_start, last_row + 1):
             cell = worksheet.cell(row=row_idx, column=page_link_col)
             url_val = str(cell.value or "").strip()
             if url_val.startswith(("http://", "https://")):
@@ -1764,7 +2520,7 @@ def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
     copy_doc_col = headers.get("Copy Doc")
     if copy_doc_col:
         placeholder_font = Font(color="808080", italic=True)
-        for row_idx in range(2, last_row + 1):
+        for row_idx in range(data_start, last_row + 1):
             cell = worksheet.cell(row=row_idx, column=copy_doc_col)
             if cell.value is None or str(cell.value).strip() == "":
                 cell.value = "Paste doc link"
@@ -1772,7 +2528,7 @@ def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
             cell.alignment = Alignment(horizontal="left", vertical="center")
 
     # ── Sign-off data cells: default status + centre alignment ───────────────
-    for row_idx in range(2, last_row + 1):
+    for row_idx in range(data_start, last_row + 1):
         worksheet.row_dimensions[row_idx].height = 22
         for col_idx in signoff_col_indices:
             cell = worksheet.cell(row=row_idx, column=col_idx)
@@ -1780,7 +2536,7 @@ def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
                 cell.value = _CONTENT_PLANNER_SIGNOFF_STATUS
             cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    # ── DataValidation for sign-off columns F–S ───────────────────────────────
+    # ── DataValidation for sign-off columns ───────────────────────────────
     if not DISABLE_DATA_VALIDATION:
         dv = DataValidation(
             type="list",
@@ -1793,20 +2549,21 @@ def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
         worksheet.add_data_validation(dv)
         for col_idx in signoff_col_indices:
             letter = get_column_letter(col_idx)
-            dv.add(f"{letter}2:{letter}{last_row}")
+            dv.add(f"{letter}{data_start}:{letter}{last_row}")
 
-    # ── Zebra banding: A2:E{last_row} (identity/copy columns only) ───────────
-    # The sign-off columns (F:S, below) already carry their own RAG fills, so a
-    # second zebra layer there would visually fight that colouring. Columns A-E
-    # (Primary/Secondary/Tertiary/Page link/Copy Doc) have no row-differentiation
-    # otherwise, unlike every other large data sheet in the workbook, which makes
-    # it easy to lose your place scrolling a 255-row workflow list.
+    # ── Zebra banding: identity/copy columns only ────────────────────────────
+    # The sign-off columns (below) already carry their own RAG fills, so a
+    # second zebra layer there would visually fight that colouring. Columns
+    # before the sign-off block (Primary/Secondary/Tertiary/Page link/Copy Doc)
+    # have no row-differentiation otherwise, unlike every other large data
+    # sheet in the workbook, which makes it easy to lose your place scrolling
+    # a long workflow list.
     if not DISABLE_CONDITIONAL_FORMATTING:
         identity_last_col = get_column_letter(_CONTENT_PLANNER_SIGNOFF_FIRST_COL - 1)
-        data_rows = last_row - 1
+        data_rows = last_row - header_row
         zebra_fill_color = ZEBRA_FAINT if data_rows > LARGE_SHEET_ROW_THRESHOLD else ZEBRA_BAND
         worksheet.conditional_formatting.add(
-            f"A2:{identity_last_col}{last_row}",
+            f"A{data_start}:{identity_last_col}{last_row}",
             FormulaRule(
                 formula=["MOD(ROW(),2)=0"],
                 stopIfTrue=False,
@@ -1814,10 +2571,10 @@ def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
             ),
         )
 
-    # ── Conditional formatting: RAG for F2:S{last_row} ───────────────────────
+    # ── Conditional formatting: RAG for the sign-off column block ────────────
     if not DISABLE_CONDITIONAL_FORMATTING:
         cf_range = (
-            f"{get_column_letter(_CONTENT_PLANNER_SIGNOFF_FIRST_COL)}2:"
+            f"{get_column_letter(_CONTENT_PLANNER_SIGNOFF_FIRST_COL)}{data_start}:"
             f"{get_column_letter(_CONTENT_PLANNER_SIGNOFF_LAST_COL)}{last_row}"
         )
         signed_off_fill = PatternFill(
@@ -1830,10 +2587,11 @@ def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
             start_color=RAG_RED, end_color=RAG_RED, fill_type="solid"
         )
         first_signoff_letter = get_column_letter(_CONTENT_PLANNER_SIGNOFF_FIRST_COL)
+        first_signoff_top = f"{first_signoff_letter}{data_start}"
         worksheet.conditional_formatting.add(
             cf_range,
             FormulaRule(
-                formula=[f'LOWER({first_signoff_letter}2)="signed off"'],
+                formula=[f'LOWER({first_signoff_top})="signed off"'],
                 fill=signed_off_fill,
                 font=Font(color=RAG_GREEN_FONT),
                 stopIfTrue=True,
@@ -1842,7 +2600,7 @@ def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
         worksheet.conditional_formatting.add(
             cf_range,
             FormulaRule(
-                formula=[f'LOWER({first_signoff_letter}2)="in progress"'],
+                formula=[f'LOWER({first_signoff_top})="in progress"'],
                 fill=in_progress_fill,
                 font=Font(color=RAG_AMBER_FONT),
                 stopIfTrue=True,
@@ -1851,7 +2609,7 @@ def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
         worksheet.conditional_formatting.add(
             cf_range,
             FormulaRule(
-                formula=[f'LOWER({first_signoff_letter}2)="not signed off"'],
+                formula=[f'LOWER({first_signoff_top})="not signed off"'],
                 fill=not_signed_off_fill,
                 font=Font(color=RAG_RED_FONT),
                 stopIfTrue=True,
@@ -1860,9 +2618,9 @@ def apply_content_planner_signoff_rules(worksheet: Worksheet) -> None:
 
     # ── Autofilter + freeze (columns A–D pinned) ────────────────────────────
     worksheet.auto_filter.ref = (
-        f"A1:{get_column_letter(worksheet.max_column)}{last_row}"
+        f"A{header_row}:{get_column_letter(worksheet.max_column)}{last_row}"
     )
-    set_freeze_panes_safe(worksheet, "E2")
+    set_freeze_panes_safe(worksheet, f"E{data_start}")
 
 
 __all__ = [
@@ -1875,8 +2633,10 @@ __all__ = [
     "apply_psi_conditional_rules",
     "apply_merged_tabs_conditional_formatting",
     "apply_main_sheet_heatmaps",
+    "apply_main_group_conditional_formatting",
     "apply_dashboard_metric_conditional_rules",
     "apply_content_planner_signoff_rules",
+    "apply_playbook_section_colors",
     "MERGED_TAB_NAMES",
 ]
 

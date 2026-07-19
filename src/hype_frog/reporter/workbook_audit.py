@@ -44,7 +44,6 @@ REQUIRED_FULL_SUITE_SHEETS: frozenset[str] = frozenset(
         "Table of Contents",
         "Executive Briefing",
         CONTENT_OPTIMISATION_HUB_SHEET,
-        "Content Hub Metrics",
         "Main",
         "FixPlan",
         "SitemapQA",

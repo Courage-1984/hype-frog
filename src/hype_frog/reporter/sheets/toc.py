@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from openpyxl.cell.cell import MergedCell
+from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.views import Selection
 
@@ -18,7 +19,9 @@ from hype_frog.reporter.sheets.config import (
     EXECUTIVE_BRIEFING_SHEET,
     ROBOTS_ANALYSIS_SHEET,
     SHEET_ZOOM_OVERRIDES,
+    ZEBRA_BAND,
 )
+from hype_frog.reporter.sheets.sheet_rows import sheet_data_header_row
 from hype_frog.reporter.sheets.workbook_layout import (
     ADVANCED_WORKBOOK_TAB_ORDER,
     PREFERRED_WORKBOOK_TAB_ORDER,
@@ -160,18 +163,20 @@ def apply_workbook_toc_and_links(
     for ref in ("A2", "B2", "C2"):
         toc_ws[ref].fill = PatternFill("solid", fgColor=std_navy)
         toc_ws[ref].font = Font(color=std_white, bold=True)
-    toc_ws.column_dimensions["A"].width = 40
+    toc_ws.column_dimensions["A"].width = 45
     toc_ws.column_dimensions["B"].width = 12
-    # 72 (was 100): the description column already wraps, so a narrower column keeps
-    # the whole TOC inside a laptop viewport without horizontal scroll and lets long
-    # blurbs flow onto a second line instead of stretching off-screen.
-    _toc_desc_width = 72
+    # 100: friendly_toc_description() entries are curated to fit within this width
+    # (longest is ~94 chars) so every description renders on one line — no wrapping,
+    # no inflated row heights.
+    _toc_desc_width = 100
     toc_ws.column_dimensions["C"].width = _toc_desc_width
     toc_ws.freeze_panes = "A3"
     _rebuild_toc_body(toc_ws, wb)
+    section_label_rows: set[int] = set()
     for row_idx in range(3, toc_ws.max_row + 1):
         cell = toc_ws.cell(row=row_idx, column=3)
         if isinstance(cell, MergedCell):
+            section_label_rows.add(row_idx)
             continue
         cell.alignment = Alignment(wrap_text=True, vertical="top", horizontal="left")
         text = str(cell.value or "")
@@ -179,21 +184,51 @@ def apply_workbook_toc_and_links(
         if wrap_lines > 1:
             toc_ws.row_dimensions[row_idx].height = min(60, 15 * wrap_lines)
 
-    link_map = {
-        "Issue Register": "Reference Area",
-        "FixPlan": "Detail Reference Tab",
-        "Executive Briefing": "Target Tab",
-        AIOSEO_RECOMMENDATIONS_SHEET: "Reference Tab",
-    }
-    for sheet_name, col_header in link_map.items():
+    # Zebra banding on sheet-link rows only — skip the bold navy section-label rows
+    # (merged A:C) so their own styling isn't double-painted. Each contiguous run of
+    # link rows between section labels gets its own CF range; MOD(ROW(),2) still
+    # alternates naturally across runs since it keys off the absolute row number.
+    # Guarded against re-adding on repeated builds (e.g. --regen-report re-invokes
+    # this function): _rebuild_toc_body rewrites row *values* but does not clear
+    # previously-attached conditional-formatting rules from an earlier build.
+    _has_zebra_rule = any(
+        any("MOD(ROW(),2)=0" in (rule.formula or []) for rule in rules)
+        for rules in toc_ws.conditional_formatting._cf_rules.values()
+    )
+    if not _has_zebra_rule:
+        run_start: int | None = None
+        for row_idx in range(3, toc_ws.max_row + 2):
+            is_label_or_end = row_idx > toc_ws.max_row or row_idx in section_label_rows
+            if not is_label_or_end and run_start is None:
+                run_start = row_idx
+            elif is_label_or_end and run_start is not None:
+                toc_ws.conditional_formatting.add(
+                    f"A{run_start}:C{row_idx - 1}",
+                    FormulaRule(
+                        formula=["MOD(ROW(),2)=0"],
+                        stopIfTrue=False,
+                        fill=PatternFill("solid", fgColor=ZEBRA_BAND),
+                    ),
+                )
+                run_start = None
+
+    link_map: list[tuple[str, str]] = [
+        ("Issue Register", "Reference Area"),
+        ("FixPlan", "Detail Reference Tab"),
+        ("FixPlan", "Jump to Details"),
+        ("Executive Briefing", "Target Tab"),
+        (AIOSEO_RECOMMENDATIONS_SHEET, "Reference Tab"),
+    ]
+    for sheet_name, col_header in link_map:
         if sheet_name not in wb.sheetnames:
             continue
         ws = wb[sheet_name]
-        headers = [c.value for c in ws[1]]
+        header_row = sheet_data_header_row(sheet_name)
+        headers = [c.value for c in ws[header_row]]
         if col_header not in headers:
             continue
         col_idx = headers.index(col_header) + 1
-        for row_idx in range(2, ws.max_row + 1):
+        for row_idx in range(header_row + 1, ws.max_row + 1):
             cell = ws.cell(row=row_idx, column=col_idx)
             target = str(cell.value or "").strip()
             if target and target in wb.sheetnames:
@@ -256,7 +291,6 @@ def apply_workbook_toc_and_links(
             "Issue Register",
             "Content & AI Readiness",
             "Link Intelligence",
-            "Link Inventory",
             "Template & Duplication Risks",
             "Playbook",
             "Audit Run Details",

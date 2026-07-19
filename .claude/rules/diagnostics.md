@@ -5,12 +5,12 @@ paths:
 
 # Diagnostics CLI gates
 
-Source of truth: `.cursor/rules/diagnostics.mdc`.
+Shipped package features (importable from `main.py`) — not test helpers.
 
-| Module | CLI | Claude command |
-|--------|-----|----------------|
-| `quick_test.py` | `--quick-test` | `.claude/commands/quick-test.md` |
-| `full_smoke_test.py` | `--full-smoke-test` | `.claude/commands/smoke-test.md` |
-| `integration_validator.py` | `--validate` | `.claude/commands/validate.md` |
+| Module | CLI | Slash command |
+|--------|-----|---------------|
+| `quick_test.py` | `--quick-test` / `--quick-test-fast` | `/quick-test` |
+| `full_smoke_test.py` | `--full-smoke-test` | `/smoke-test` |
+| `integration_validator.py` | `--validate` | `/validate` |
 
-Shipped package features — not test helpers. Update commands + rule together when gate semantics change.
+Update commands + this rule together when gate semantics change.

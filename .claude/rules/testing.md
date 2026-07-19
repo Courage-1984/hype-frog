@@ -5,18 +5,18 @@ paths:
 
 # Testing invariants
 
-Source of truth: `.cursor/rules/auto_documentation.mdc` and `tests/CLAUDE.md`.
-
 ## Layout
-Mirror `src/hype_frog/` paths under `tests/`.
+Mirror `src/hype_frog/` under `tests/` (`tests/reporter/`, `tests/pipeline/`, …).
 
-## No live network in unit tests
-Mock `aiohttp` and Playwright. `@pytest.mark.integration` for live-network tests (none exist yet).
+## Network
+No live network in unit tests — mock aiohttp/Playwright. Live calls only under `tests/integration/` with `@pytest.mark.integration` (excluded from default runs).
 
 ## Extraction State
-Assert `complete` | `partial` | `skipped` in crawl/fetch tests.
+Assert `complete` | `partial` | `skipped` explicitly in crawl/fetch tests.
 
 ## Run
 ```powershell
 uv run pytest tests/<layer>/ -q --tb=short
 ```
+
+Prefer skill `.claude/skills/verification/quick-verify/` when choosing a gate after edits.

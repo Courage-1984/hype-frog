@@ -645,7 +645,7 @@ ISSUE_CONTENT: dict[str, dict[str, str]] = {
         "what_it_is": "One or more internal links on this page resolve to a missing or error page.",
         "why_it_matters": "Broken internal links waste crawl budget, dilute link equity, and create dead ends that frustrate users.",
         "how_to_fix": "Update each broken link to the correct live URL, or remove the link if the target no longer exists.",
-        "how_to_verify": "Check Broken Internal Links Count on Main returns to 0, and cross-check the Link Inventory tab for remaining 4xx/5xx targets from this page.",
+        "how_to_verify": "Check Broken Internal Links Count on Main returns to 0, and cross-check the Link Intelligence tab's Detail rows for remaining 4xx/5xx targets from this page.",
     },
     "Redirect Loop": {
         "what_it_is": "The URL's redirect chain loops back on itself instead of reaching a final 200 destination.",
@@ -847,7 +847,7 @@ ISSUE_CONTENT: dict[str, dict[str, str]] = {
         "what_it_is": "The page requires more than 3 clicks from the homepage to reach (click depth).",
         "why_it_matters": "Deep pages receive less crawl frequency and weaker internal link equity, which suppresses their ranking potential.",
         "how_to_fix": "Add internal links from higher-authority, shallower pages (nav, related-content blocks, hub pages) to reduce click depth.",
-        "how_to_verify": "Check Click Depth on the Link Equity Map/Main tab drops to 3 or fewer after new links are added and re-crawled.",
+        "how_to_verify": "Check Click Depth on the Link Intelligence/Main tab drops to 3 or fewer after new links are added and re-crawled.",
     },
     "Low Image Alt Coverage": {
         "what_it_is": "Fewer than 80% of images on the page have alt text.",
@@ -982,7 +982,7 @@ ISSUE_CONTENT: dict[str, dict[str, str]] = {
         "what_it_is": "A page with a high Business Risk Score (≥30) has fewer than the expected number of internal inbound links.",
         "why_it_matters": "Important pages that are weakly linked internally receive less crawl priority and less passed-through link equity than their business value warrants.",
         "how_to_fix": "Add internal links from relevant high-traffic or high-authority pages (nav, related content, contextual body links) pointing to this URL.",
-        "how_to_verify": "Check Inbound Internal Link Count on the Link Equity Map tab rises after new links are added and re-crawled.",
+        "how_to_verify": "Check Inbound Internal Link Count on the Link Intelligence tab rises after new links are added and re-crawled.",
     },
     "Low AEO Readiness Score": {
         "what_it_is": "The page's weighted Answer Engine Optimisation score is below the 70-point extraction-confidence band.",
@@ -1119,7 +1119,7 @@ ISSUE_CONTENT: dict[str, dict[str, str]] = {
         "what_it_is": "The majority of inbound internal anchor text pointing to this URL is generic (e.g. 'click here', 'read more').",
         "why_it_matters": "Dominant generic anchors mean this page's topical relevance isn't reinforced by its internal link profile, weakening its ranking signal for target keywords.",
         "how_to_fix": "Update internal links across the site pointing to this URL to use descriptive, keyword-relevant anchor text.",
-        "how_to_verify": "Check the Anchor Text Audit tab shows reduced generic-anchor share for this destination URL.",
+        "how_to_verify": "Check the Content & AI Readiness tab shows reduced generic-anchor share for this destination URL.",
     },
     "No Question Headings": {
         "what_it_is": "None of the page's headings are phrased as user questions.",

@@ -6,7 +6,6 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.worksheet import Worksheet
 
 from hype_frog.reporter.sheets.config import (
-    CONTENT_HUB_METRICS_SHEET,
     CONTENT_OPTIMISATION_HUB_SHEET,
     DISABLE_DATA_VALIDATION,
     DISABLE_TOOLTIPS,
@@ -113,6 +112,31 @@ _CONTENT_AI_READINESS_HELP: dict[str, str] = {
             "export (no workbook formula)."
         ),
     ),
+    # Folded in from the former standalone "Content Hub Metrics" sheet.
+    "Search Intent Source": format_help_layer(
+        description="How Search Intent was determined for this URL.",
+        calculation=(
+            "LLM when a hosted or local OpenAI-compatible model classified it; Heuristic "
+            "when a URL/title/meta keyword rule matched instead (no LLM configured or the "
+            "LLM call returned Unknown); Unknown when neither classified the page."
+        ),
+    ),
+    "Instant Priority": format_help_layer(
+        description="CRITICAL flags a high-traffic page with a specific AEO or performance risk.",
+        calculation=(
+            "CRITICAL when GSC clicks exceed the traffic threshold AND (AEO score is low OR "
+            "field LCP is slow); Standard otherwise."
+        ),
+    ),
+    # Folded in from the former standalone "Anchor Text Audit" sheet.
+    "Inbound Link Count": format_help_layer(
+        description="Raw count of internal anchor instances pointing at this URL.",
+        calculation=(
+            "Same raw, non-deduplicated counting method as Main!Inbound Internal Link Count — "
+            "see that column's tooltip for why this differs from Link Inventory's per-"
+            "(source, target, anchor) row count."
+        ),
+    ),
 }
 
 _TECHNICAL_DIAGNOSTICS_HELP: dict[str, str] = {
@@ -151,6 +175,118 @@ _TECHNICAL_DIAGNOSTICS_HELP: dict[str, str] = {
             "Diagnostics rows are merged (string pass-through, not an Excel formula)."
         ),
     ),
+    "Diagnostic Category": format_help_layer(
+        description="Which diagnostic areas this row touches (Technical, Indexability, Redirect, Security, Performance, Search Console).",
+        calculation="Joined tag list synthesised from presence checks across this row's fields at export time.",
+    ),
+    "Critical Issues Count": format_help_layer(
+        description="Number of Critical-severity issues matched on this URL.",
+        calculation="Count from score_url_health's matched-issue list.",
+    ),
+    "Warning Issues Count": format_help_layer(
+        description="Number of Warning-severity issues matched on this URL.",
+        calculation="Count from score_url_health's matched-issue list.",
+    ),
+    "Pass Flag": format_help_layer(
+        description="Pass when Severity Badge is Pass, else Non-Pass — a quick binary triage filter.",
+        calculation='"Pass" if Severity Badge == "Pass" else "Non-Pass".',
+    ),
+    "Extraction State": format_help_layer(
+        description="How much of this row could be measured: complete, partial, or skipped.",
+        calculation="Set by the crawl/extraction pipeline based on fetch and parse outcomes.",
+    ),
+    "Extraction Source": format_help_layer(
+        description="Which fetch path produced this row: raw HTTP or a rendered browser session.",
+        calculation="Set by the crawler based on which fetch mode ultimately succeeded for this URL.",
+    ),
+    "Indexability Reason": format_help_layer(
+        description="Why this URL is or isn't indexable (canonical, robots, status signals).",
+        calculation="Rule- and signal-driven text from the indexability pipeline.",
+    ),
+    "Redirect Chain Length": format_help_layer(
+        description="Number of hops in this URL's redirect chain (0 if no redirect).",
+        calculation="Count of hops traced by the redirect-following logic during the crawl.",
+    ),
+    "Redirect Loop Flag": format_help_layer(
+        description="True when the redirect chain loops back on itself instead of resolving.",
+        calculation="Detected when the redirect tracer revisits a URL already seen in the chain.",
+    ),
+    "Strict-Transport-Security": format_help_layer(
+        description="Raw HSTS response header value; blank means the header was not sent.",
+        calculation="Pass-through from the HTTP response headers captured during the crawl.",
+    ),
+    "Content-Security-Policy": format_help_layer(
+        description="Raw CSP response header value; blank means the header was not sent.",
+        calculation="Pass-through from the HTTP response headers captured during the crawl.",
+    ),
+    "X-Content-Type-Options": format_help_layer(
+        description="Raw X-Content-Type-Options response header value; blank means it was not sent.",
+        calculation="Pass-through from the HTTP response headers captured during the crawl.",
+    ),
+    "Mobile LCP (s)": format_help_layer(
+        description="Field/CrUX Largest Contentful Paint for mobile, in seconds (lower is better).",
+        calculation="Pass-through from CrUX/PSI field data for this URL.",
+    ),
+    "Mobile CLS": format_help_layer(
+        description="Field/CrUX Cumulative Layout Shift for mobile (lower is better).",
+        calculation="Pass-through from CrUX/PSI field data for this URL.",
+    ),
+    "Mobile TTFB (s)": format_help_layer(
+        description="Field/CrUX Time to First Byte for mobile, in seconds (lower is better).",
+        calculation="Pass-through from CrUX/PSI field data for this URL.",
+    ),
+    "GSC Last Crawl": format_help_layer(
+        description="Date Google last crawled this URL, per Search Console URL Inspection.",
+        calculation="Pass-through from GSC URL Inspection data when available.",
+    ),
+    "GSC Coverage Category": format_help_layer(
+        description="Search Console's indexing coverage bucket for this URL (e.g. Indexed, Excluded, Error).",
+        calculation="Pass-through from GSC coverage data when available.",
+    ),
+    "Discovered On URL": format_help_layer(
+        description="The page this URL was first discovered on during the crawl.",
+        calculation="Recorded at BFS discovery time from the referring page's link.",
+    ),
+    "Discovery Rank": format_help_layer(
+        description="Crawl discovery order (lower = found earlier).",
+        calculation="Sequential counter assigned as URLs are discovered during the BFS crawl.",
+    ),
+    "Reachable from Homepage": format_help_layer(
+        description="Whether this URL is reachable from the homepage via internal links.",
+        calculation="Derived from the internal link graph's reachability analysis.",
+    ),
+    "Crawl Depth": format_help_layer(
+        description="Number of clicks from the homepage to reach this URL.",
+        calculation="Shortest-path depth in the internal link graph from the homepage.",
+    ),
+    "Security: HSTS": format_help_layer(
+        description="Whether this URL sends a Strict-Transport-Security header.",
+        calculation="Boolean presence check on the HTTP response headers.",
+    ),
+    "Security: CSP": format_help_layer(
+        description="Whether this URL sends a Content-Security-Policy header.",
+        calculation="Boolean presence check on the HTTP response headers.",
+    ),
+    "Hreflang Signals": format_help_layer(
+        description="Summary of hreflang annotations found on this URL, if any.",
+        calculation="Parsed from <link rel=hreflang> tags/headers during extraction.",
+    ),
+    "Hreflang Declared Languages": format_help_layer(
+        description="Language/region codes this URL declares hreflang alternates for.",
+        calculation="Parsed from hreflang annotations during extraction.",
+    ),
+    "Hreflang Alternate URLs": format_help_layer(
+        description="The alternate-language URLs this page's hreflang tags point to.",
+        calculation="Parsed from hreflang annotations during extraction.",
+    ),
+    "Hreflang Reciprocal Status": format_help_layer(
+        description="Whether this URL's hreflang alternates link back reciprocally.",
+        calculation="Cross-checked against each alternate URL's own hreflang annotations.",
+    ),
+    "Hreflang Code Valid": format_help_layer(
+        description="Whether this URL's hreflang language/region codes are valid ISO codes.",
+        calculation="Validated against known ISO 639-1/3166-1 code lists.",
+    ),
 }
 
 _LINK_INTELLIGENCE_HELP: dict[str, str] = {
@@ -173,6 +309,30 @@ _LINK_INTELLIGENCE_HELP: dict[str, str] = {
             "Summary rows: boolean ``Orphan Pages`` from the graph (in-degree 0 on crawled "
             "nodes). Graph rows: boolean ``Orphan Candidate`` from CrawlGraph export. "
             "Detail rows force FALSE because anchors are not graph nodes."
+        ),
+    ),
+    # Folded in from the former standalone "Link Inventory" sheet — populated on
+    # Detail rows only.
+    "Generic Anchor": format_help_layer(
+        description='Whether the anchor text is non-descriptive (e.g. "click here", "read more").',
+        calculation="Boolean flag from anchor-text analysis on the outbound link.",
+    ),
+    "Rel Attribute": format_help_layer(
+        description="The link's rel value (e.g. nofollow, sponsored, ugc) or blank.",
+        calculation="Captured verbatim from the anchor element during extraction.",
+    ),
+    "Link Type": format_help_layer(
+        description="Internal vs external classification for the link edge.",
+        calculation="Derived from comparing the target host with the crawl domain.",
+    ),
+    # Folded in from the former standalone "Link Equity Map" sheet — populated on
+    # Summary rows only.
+    "Inbound Link Count": format_help_layer(
+        description="Raw count of internal anchor instances pointing at this URL.",
+        calculation=(
+            "Same raw, non-deduplicated counting method as Main!Inbound Internal Link Count — "
+            "see that column's tooltip for why this differs from this sheet's own Detail rows' "
+            "per-(source, target, anchor) row count."
         ),
     ),
 }
@@ -204,6 +364,109 @@ _FIXPLAN_HELP: dict[str, str] = {
         description="Whether this row still requires work (Yes) or is clear (No).",
         calculation="Yes/No flag set during FixPlan assembly from the resolution state.",
     ),
+    "Issue Type": format_help_layer(
+        description="The rule/issue this row groups fixes for — one row per issue type, not per URL.",
+        calculation="Rule name from the active IssueRule registry that matched one or more crawled URLs.",
+    ),
+    "Severity": format_help_layer(
+        description="Critical, Warning, or Observation — how urgently this issue needs fixing.",
+        calculation="Severity assigned to the matching rule in the IssueRule registry.",
+    ),
+    "Affected Count": format_help_layer(
+        description="Number of crawled URLs this issue was found on.",
+        calculation="Count of rows matching this rule at export time.",
+    ),
+    "URL": format_help_layer(
+        description="A sample affected URL for this issue — see \"Affected URLs\" for the full list.",
+        calculation="First matching row's URL, in discovery order.",
+    ),
+    "Affected URLs": format_help_layer(
+        description=(
+            "Every URL this issue affects, one per line. Column is deliberately not wrapped "
+            "(text clips) so row height stays fixed — widen the column or open the cell to "
+            "read the full list."
+        ),
+        calculation="All matching URLs newline-joined; truncated only at Excel's per-cell character limit.",
+    ),
+    "What It Is": format_help_layer(
+        description="Plain-language explanation of the issue for non-technical stakeholders.",
+        calculation="Playbook entry for this issue name, falling back to the root-cause text.",
+    ),
+    "Recommended Fix": format_help_layer(
+        description="The concrete remediation step for this issue.",
+        calculation="Resolved from the issue's root-cause/fix mapping in the rules layer.",
+    ),
+    "Resolution Type": format_help_layer(
+        description=(
+            "How the fix is typically delivered: Server Config, Site Config, Global Template "
+            "(one change fixes every affected URL), or Manual Content (per-page edits)."
+        ),
+        calculation="Classified from the rule's scope and issue-name keywords, or URL fan-out (>10 URLs).",
+    ),
+    "Likely Root Cause": format_help_layer(
+        description="The underlying technical/content cause behind this issue.",
+        calculation="Resolved from the issue's root-cause mapping in the rules layer.",
+    ),
+    "Owner": format_help_layer(
+        description="Suggested team to action this fix: Dev, Copy Writer, or Server/Host.",
+        calculation="Mapped from issue name and severity in the rules layer.",
+    ),
+    "Effort": format_help_layer(
+        description="Rough delivery effort band: S (small), M (medium), or L (large).",
+        calculation="Classified by issue class (config fix, performance fix, content fix, etc.).",
+    ),
+    "Est. Hours": format_help_layer(
+        description="Estimated hours to deliver this fix.",
+        calculation="Mapped from the Effort band and affected-URL count.",
+    ),
+    "Status": format_help_layer(
+        description="Workflow state: To Do, In Review, or Done. Editable — update as work progresses.",
+        calculation="Seeded from severity at export (Critical/Warning → To Do, Observation → In Review).",
+    ),
+    "Hub Status (Content Hub)": format_help_layer(
+        description="This issue's matching URL's status on the Content Optimisation Hub, if tracked there.",
+        calculation="Live lookup (INDEX/MATCH) against the Content Optimisation Hub's Status column.",
+    ),
+    "Revenue Risk": format_help_layer(
+        description="Business-impact framing: High Risk, Medium Risk, or Monitor.",
+        calculation="Derived from severity and Priority Score at export time.",
+    ),
+    "Category": format_help_layer(
+        description="Whether this issue is a traditional SEO fix or an AEO (Answer Engine) fix.",
+        calculation="Set from a fixed list of AEO-specific issue names; everything else is SEO.",
+    ),
+    "Discovery Rank": format_help_layer(
+        description="Crawl discovery order of the first affected URL (lower = found earlier).",
+        calculation="Discovery Rank of the first matching row, in crawl BFS order.",
+    ),
+    "Detail Reference Tab": format_help_layer(
+        description="The workbook tab with full per-URL detail for this issue — click to jump there.",
+        calculation="Resolved from the issue category (Technical, Indexability, Links, or AEO).",
+    ),
+    "Jump to Details": format_help_layer(
+        description="Shortcut link to this issue's detail tab (same target as Detail Reference Tab).",
+        calculation="Hyperlinked to the resolved detail tab's first cell.",
+    ),
+    "Jump to Playbook": format_help_layer(
+        description="Jumps to this issue's entry in the Playbook tab for full guidance.",
+        calculation="HYPERLINK + MATCH formula against Playbook's Item column.",
+    ),
+    "Verified By": format_help_layer(
+        description="Manual field — who confirmed the fix was applied and verified.",
+        calculation="Blank at export; filled in by hand during workflow.",
+    ),
+    "Date Resolved": format_help_layer(
+        description="Manual field — when this issue was marked resolved.",
+        calculation="Blank at export; filled in by hand during workflow.",
+    ),
+    "Sprint": format_help_layer(
+        description="Manual field — assign a sprint/iteration label for planning.",
+        calculation="Blank at export; filled in by hand during workflow.",
+    ),
+    "Open in Main": format_help_layer(
+        description="Jumps to this URL's row on the Main tab for full crawl detail.",
+        calculation="HYPERLINK + MATCH formula against Main's URL column.",
+    ),
 }
 
 _QUICK_WINS_HELP: dict[str, str] = {
@@ -233,6 +496,46 @@ _QUICK_WINS_HELP: dict[str, str] = {
     "Revenue Risk": format_help_layer(
         description="Qualitative revenue exposure flag for the affected page.",
         calculation="Derived from page intent and traffic during Quick Wins assembly.",
+    ),
+    "Issue": format_help_layer(
+        description="The rule that matched this URL — one row per URL+issue combination.",
+        calculation="Rule name from the active IssueRule registry, coloured by this row's Severity.",
+    ),
+    "Severity": format_help_layer(
+        description="Critical, Warning, or Observation — how urgently this fix is needed.",
+        calculation="Severity assigned to the matching rule in the IssueRule registry.",
+    ),
+    "Owner": format_help_layer(
+        description="Suggested team to action this fix: Dev, Copy Writer, or Server/Host.",
+        calculation="Pulled from this issue's FixPlan row.",
+    ),
+    "What It Is": format_help_layer(
+        description="Plain-language explanation of the issue for non-technical stakeholders.",
+        calculation="Playbook entry for this issue name.",
+    ),
+    "Why It Matters": format_help_layer(
+        description="Why this issue matters — the SEO/AEO or business rationale.",
+        calculation="Playbook entry for this issue name.",
+    ),
+    "Recommended Fix": format_help_layer(
+        description="The concrete remediation step for this issue.",
+        calculation="Pulled from this issue's FixPlan row.",
+    ),
+    "How To Verify": format_help_layer(
+        description="How to confirm the fix worked once applied.",
+        calculation="Playbook entry for this issue name.",
+    ),
+    "Jump to FixPlan": format_help_layer(
+        description="Jumps to this issue's row on the FixPlan tab.",
+        calculation="HYPERLINK + MATCH formula against FixPlan's Issue Type column.",
+    ),
+    "Jump to Playbook": format_help_layer(
+        description="Jumps to this issue's entry on the Playbook tab for full guidance.",
+        calculation="HYPERLINK + MATCH formula against Playbook's Item column.",
+    ),
+    "Open in Main": format_help_layer(
+        description="Jumps to this URL's row on the Main tab for full crawl detail.",
+        calculation="HYPERLINK + MATCH formula against Main's URL column.",
     ),
 }
 
@@ -274,27 +577,37 @@ _PRIORITY_URLS_HELP: dict[str, str] = {
         description="Editable — track triage here. The tool seeds \"Open\" and never overwrites your edits on re-export of this workbook copy.",
         calculation="Manual field; not recalculated.",
     ),
-    "Sprint": format_help_layer(
-        description="Editable — assign a sprint/iteration label. Blank by default.",
-        calculation="Manual field; not recalculated.",
+    "Action Needed": format_help_layer(
+        description="Yes when this URL's Business Risk Score crosses the action threshold.",
+        calculation="Yes when Business Risk Score >= 30, else No.",
     ),
-}
-
-_CONTENT_HUB_METRICS_HELP: dict[str, str] = {
-    "Search Intent Source": format_help_layer(
-        description="How Search Intent was determined for this URL.",
-        calculation=(
-            "LLM when a hosted or local OpenAI-compatible model classified it; Heuristic "
-            "when a URL/title/meta keyword rule matched instead (no LLM configured or the "
-            "LLM call returned Unknown); Unknown when neither classified the page."
-        ),
+    "SEO Health Score": format_help_layer(
+        description="Overall 0–100 health score for this URL; blank when Extraction State is not scorable.",
+        calculation="Pass-through from the crawl's scoring pipeline.",
     ),
-    "Instant Priority": format_help_layer(
-        description="CRITICAL flags a high-traffic page with a specific AEO or performance risk.",
-        calculation=(
-            "CRITICAL when GSC clicks exceed the traffic threshold AND (AEO score is low OR "
-            "field LCP is slow); Standard otherwise."
-        ),
+    "Critical Issues Count": format_help_layer(
+        description="Number of Critical-severity issues matched on this URL.",
+        calculation="Count from score_url_health's matched-issue list.",
+    ),
+    "Warning Issues Count": format_help_layer(
+        description="Number of Warning-severity issues matched on this URL.",
+        calculation="Count from score_url_health's matched-issue list.",
+    ),
+    "GSC Impressions": format_help_layer(
+        description="Search Console impressions for this URL over the reporting window.",
+        calculation="Pass-through from GSC performance data; blank when GSC is unavailable.",
+    ),
+    "GSC CTR": format_help_layer(
+        description="Search Console click-through rate for this URL.",
+        calculation="Pass-through from GSC performance data, rounded to 4 decimal places.",
+    ),
+    "Indexability Reason": format_help_layer(
+        description="Why this URL is or isn't indexable (canonical, robots, status signals).",
+        calculation="Rule- and signal-driven text from the indexability pipeline.",
+    ),
+    "Broken Internal Links Count": format_help_layer(
+        description="Number of broken internal links found pointing at or from this URL.",
+        calculation="Pass-through from link analysis.",
     ),
 }
 
@@ -321,20 +634,21 @@ _BROKEN_LINK_IMPACT_HELP: dict[str, str] = {
         description="Suggested remediation for the broken destination.",
         calculation="Heuristic from status code and link context (fix, redirect, or remove).",
     ),
-}
-
-_LINK_INVENTORY_HELP: dict[str, str] = {
-    "Generic Anchor": format_help_layer(
-        description='Whether the anchor text is non-descriptive (e.g. "click here", "read more").',
-        calculation="Boolean flag from anchor-text analysis on the outbound link.",
+    "Broken URL": format_help_layer(
+        description="The broken destination URL itself — not the page(s) linking to it.",
+        calculation="Aggregation key: one row per unique broken internal target URL.",
     ),
-    "Rel Attribute": format_help_layer(
-        description="The link's rel value (e.g. nofollow, sponsored, ugc) or blank.",
-        calculation="Captured verbatim from the anchor element during extraction.",
+    "Status Code": format_help_layer(
+        description="The HTTP status the broken destination itself returned (404, timeout, etc.).",
+        calculation="Status code observed on the first internal link seen pointing at this target.",
     ),
-    "Link Type": format_help_layer(
-        description="Internal vs external classification for the link edge.",
-        calculation="Derived from comparing the target host with the crawl domain.",
+    "Source Pages (first 5)": format_help_layer(
+        description="Up to 5 pages that link to this broken destination.",
+        calculation="First 5 unique source URLs from the link inventory, pipe-separated.",
+    ),
+    "Anchor Texts Used": format_help_layer(
+        description="Up to 5 distinct anchor texts used to link to this broken destination.",
+        calculation="First 5 unique anchor texts from the link inventory, pipe-separated.",
     ),
 }
 
@@ -344,33 +658,47 @@ _MAIN_HELP: dict[str, str] = {
         calculation=(
             "Every anchor-tag occurrence across the crawl is counted with no deduplication — "
             "identical desktop/mobile/footer nav markup to the same target all add up here. "
-            "This is a different, larger number by design than Link Inventory's per-"
-            "(source, target, anchor) count, which collapses duplicate link instances into "
+            "This is a different, larger number by design than Link Intelligence's Detail rows' "
+            "per-(source, target, anchor) count, which collapses duplicate link instances into "
             "one row. Neither is 'wrong'; they answer different questions (raw link-instance "
             "volume vs. unique link relationships)."
         ),
     ),
-}
-
-_LINK_EQUITY_MAP_HELP: dict[str, str] = {
-    "Inbound Link Count": format_help_layer(
-        description="Raw count of internal anchor instances pointing at this URL.",
-        calculation=(
-            "Same raw, non-deduplicated counting method as Main!Inbound Internal Link Count — "
-            "see that column's tooltip for why this differs from Link Inventory's per-"
-            "(source, target, anchor) row count."
-        ),
+    "Extraction State": format_help_layer(
+        description="How much of this row could be measured: complete, partial, or skipped.",
+        calculation="Set by the crawl/extraction pipeline based on fetch and parse outcomes.",
     ),
-}
-
-_ANCHOR_TEXT_AUDIT_HELP: dict[str, str] = {
-    "Inbound Link Count": format_help_layer(
-        description="Raw count of internal anchor instances pointing at this URL.",
-        calculation=(
-            "Same raw, non-deduplicated counting method as Main!Inbound Internal Link Count — "
-            "see that column's tooltip for why this differs from Link Inventory's per-"
-            "(source, target, anchor) row count."
-        ),
+    "Title Length": format_help_layer(
+        description="Character count of the page title. Target band: 50-60 characters.",
+        calculation="len() of the extracted <title> text.",
+    ),
+    "Robots.txt: Googlebot": format_help_layer(
+        description="Whether Googlebot may crawl this URL per robots.txt (Allow/Disallow/Not specified).",
+        calculation="urllib.robotparser.can_fetch(\"Googlebot\", url) against this domain's robots.txt.",
+    ),
+    "Robots.txt: Bingbot": format_help_layer(
+        description="Whether Bingbot may crawl this URL per robots.txt (Allow/Disallow/Not specified).",
+        calculation="urllib.robotparser.can_fetch(\"Bingbot\", url) against this domain's robots.txt.",
+    ),
+    "Robots.txt: GPTBot": format_help_layer(
+        description="Whether OpenAI's GPTBot may crawl this URL per robots.txt (Allow/Disallow/Not specified).",
+        calculation="urllib.robotparser.can_fetch(\"GPTBot\", url) against this domain's robots.txt.",
+    ),
+    "Robots.txt: ClaudeBot": format_help_layer(
+        description="Whether Anthropic's ClaudeBot may crawl this URL per robots.txt (Allow/Disallow/Not specified).",
+        calculation="urllib.robotparser.can_fetch(\"ClaudeBot\", url) against this domain's robots.txt.",
+    ),
+    "Robots.txt: PerplexityBot": format_help_layer(
+        description="Whether PerplexityBot may crawl this URL per robots.txt (Allow/Disallow/Not specified).",
+        calculation="urllib.robotparser.can_fetch(\"PerplexityBot\", url) against this domain's robots.txt.",
+    ),
+    "Robots.txt: CCBot": format_help_layer(
+        description="Whether Common Crawl's CCBot may crawl this URL per robots.txt (Allow/Disallow/Not specified).",
+        calculation="urllib.robotparser.can_fetch(\"CCBot\", url) against this domain's robots.txt.",
+    ),
+    "Crawl-Delay Applies": format_help_layer(
+        description="Whether robots.txt sets a Crawl-delay directive for Googlebot on this domain.",
+        calculation="Parsed from this domain's robots.txt Crawl-delay directive.",
     ),
 }
 
@@ -437,21 +765,178 @@ _CONTENT_HUB_SEMANTIC_HELP: dict[str, str] = {
     ),
 }
 
+_PLAYBOOK_HELP: dict[str, str] = {
+    "Section": format_help_layer(
+        description=(
+            "Groups rows into a topic block — editorial standard, issue playbook entry, "
+            "or glossary/legend item. Bracketed values (e.g. \"[Meta Data Standards]\") "
+            "mark a block's header row; each block is tinted its own colour."
+        ),
+        calculation="Fixed reference copy plus per-issue rows from the active rule set.",
+    ),
+    "Item": format_help_layer(
+        description="The specific standard, issue name, or glossary term this row documents.",
+        calculation="Blank on section-header rows; populated on every content row beneath them.",
+    ),
+    "Guideline": format_help_layer(
+        description="The concrete rule, threshold, or fix guidance for this item.",
+        calculation=(
+            "Static editorial copy for standards rows; What/Fix/Verify guidance for "
+            "Issue Playbook rows; threshold value for glossary rows."
+        ),
+    ),
+    "Why It Matters": format_help_layer(
+        description="Why this standard or fix matters — the SEO/AEO or business rationale.",
+        calculation=(
+            "Static editorial copy for standards rows; issue rationale plus severity/owner/"
+            "time-to-fix context for Issue Playbook rows; plain-language meaning for glossary rows."
+        ),
+    ),
+}
+
+_CONTENT_PLANNER_HELP: dict[str, str] = {
+    "Primary": format_help_layer(
+        description="Top-level nav/site-structure label for this URL (path depth <= 1).",
+        calculation="Last URL path segment when the path has 0 or 1 segments.",
+    ),
+    "Secondary": format_help_layer(
+        description="Second-level nav/site-structure label for this URL (path depth == 2).",
+        calculation="Last URL path segment when the path has exactly 2 segments.",
+    ),
+    "Tertiary": format_help_layer(
+        description="Third-level-or-deeper nav/site-structure label for this URL (path depth >= 3).",
+        calculation="Last URL path segment when the path has 3 or more segments.",
+    ),
+    "Page link": format_help_layer(
+        description="The crawled page itself — click to open it.",
+        calculation="Raw crawled URL.",
+    ),
+    "Copy Doc": format_help_layer(
+        description="Editable — paste a link to this page's copy document.",
+        calculation="Manual field; seeded with a placeholder hint.",
+    ),
+    "Priority for MVP": format_help_layer(
+        description="Editable — flag whether this page is required for MVP launch.",
+        calculation="Manual field; not recalculated.",
+    ),
+    "Copywriter Sign off": format_help_layer(
+        description="Editable workflow status: Not signed off / In progress / Signed off.",
+        calculation="Manual field; coloured red/amber/green by status.",
+    ),
+    "Copy First Check": format_help_layer(
+        description="Editable workflow status for the first editorial pass on this page's copy.",
+        calculation="Manual field; coloured red/amber/green by status.",
+    ),
+    "2nd Revisions": format_help_layer(
+        description="Editable workflow status for the second round of copy revisions.",
+        calculation="Manual field; coloured red/amber/green by status.",
+    ),
+    "Client copy sign off": format_help_layer(
+        description="Editable workflow status for client sign-off on the copy.",
+        calculation="Manual field; coloured red/amber/green by status.",
+    ),
+    "Web design off": format_help_layer(
+        description="Editable workflow status for web design sign-off on this page.",
+        calculation="Manual field; coloured red/amber/green by status.",
+    ),
+    "UXI sign off": format_help_layer(
+        description="Editable workflow status for UX/interaction design sign-off.",
+        calculation="Manual field; coloured red/amber/green by status.",
+    ),
+    "Visual Design sign off": format_help_layer(
+        description="Editable workflow status for visual design sign-off.",
+        calculation="Manual field; coloured red/amber/green by status.",
+    ),
+    "Client final sign off": format_help_layer(
+        description="Editable workflow status for the client's final sign-off on this page.",
+        calculation="Manual field; coloured red/amber/green by status.",
+    ),
+    "Optimisations": format_help_layer(
+        description="Editable workflow status for post-launch on-page optimisation work.",
+        calculation="Manual field; coloured red/amber/green by status.",
+    ),
+    "Desktop": format_help_layer(
+        description="Editable workflow status for desktop-layout QA on this page.",
+        calculation="Manual field; coloured red/amber/green by status.",
+    ),
+    "Tablet": format_help_layer(
+        description="Editable workflow status for tablet-layout QA on this page.",
+        calculation="Manual field; coloured red/amber/green by status.",
+    ),
+    "Mobile": format_help_layer(
+        description="Editable workflow status for mobile-layout QA on this page.",
+        calculation="Manual field; coloured red/amber/green by status.",
+    ),
+    "SEO": format_help_layer(
+        description="Editable workflow status for on-page SEO QA on this page.",
+        calculation="Manual field; coloured red/amber/green by status.",
+    ),
+    "Performance": format_help_layer(
+        description="Editable workflow status for performance QA on this page.",
+        calculation="Manual field; coloured red/amber/green by status.",
+    ),
+    "Plugin Audit": format_help_layer(
+        description="Editable — track whether this page's plugin/shortcode compatibility has been checked.",
+        calculation="Manual field; coloured red/amber/green by status.",
+    ),
+}
+
+_ROBOTS_ANALYSIS_HELP: dict[str, str] = {
+    "Section": format_help_layer(
+        description=(
+            "Which part of the analysis this row belongs to: 1 (raw robots.txt file per "
+            "domain), 2 (parsed user-agent/directive rules), 3 (crawled URLs blocked for a "
+            "monitored bot), or 4 (sitemap/robots.txt mismatches)."
+        ),
+        calculation="Fixed section label assigned when the row is built.",
+    ),
+    "User Agent": format_help_layer(
+        description=(
+            "The bot this row concerns — a domain (Section 1), a directive's target agent "
+            "(Section 2), or a monitored bot that was blocked (Section 3)."
+        ),
+        calculation="Parsed from the User-agent: line, or the monitored-bot list for Section 3.",
+    ),
+    "URL": format_help_layer(
+        description="The robots.txt file location (Section 1) or the affected crawled URL (Section 3/4).",
+        calculation="Domain + /robots.txt, or the crawled row's URL.",
+    ),
+    "Status": format_help_layer(
+        description=(
+            "Meaning depends on Section: Accessible/Unavailable/Fetched-body-unreadable "
+            "(1), the directive name — user-agent/disallow/allow/crawl-delay/sitemap (2), "
+            "Disallow/None (3), or the specific mismatch found/None (4)."
+        ),
+        calculation="Set per-row according to that row's Section.",
+    ),
+    "Detail": format_help_layer(
+        description=(
+            "The supporting text for this row: the raw robots.txt body (Section 1, up to "
+            "32,000 characters — clipped/wrapped, not paginated), the directive's value "
+            "(Section 2), or a short explanation (Section 3/4)."
+        ),
+        calculation="Pass-through from the fetched robots.txt or the row's own template text.",
+    ),
+    "Explanation": format_help_layer(
+        description="Plain-language rationale for this row — which check matched and why.",
+        calculation="Generated per-row from the specific rule/agent/directive that produced it.",
+    ),
+}
+
 _SHEET_CURATED_HEADER_HELP: dict[str, dict[str, str]] = {
     "Content & AI Readiness": _CONTENT_AI_READINESS_HELP,
+    "Playbook": _PLAYBOOK_HELP,
+    "Content Planner": _CONTENT_PLANNER_HELP,
+    "Robots.txt Analysis": _ROBOTS_ANALYSIS_HELP,
     "Technical Diagnostics": _TECHNICAL_DIAGNOSTICS_HELP,
     "Link Intelligence": _LINK_INTELLIGENCE_HELP,
     CONTENT_OPTIMISATION_HUB_SHEET: _CONTENT_HUB_SEMANTIC_HELP,
-    CONTENT_HUB_METRICS_SHEET: _CONTENT_HUB_METRICS_HELP,
     "Priority URLs": _PRIORITY_URLS_HELP,
     "FixPlan": _FIXPLAN_HELP,
     "Quick Wins": _QUICK_WINS_HELP,
     "Broken Link Impact": _BROKEN_LINK_IMPACT_HELP,
-    "Link Inventory": _LINK_INVENTORY_HELP,
     "SitemapQA": _SITEMAPQA_HELP,
     "Main": _MAIN_HELP,
-    "Link Equity Map": _LINK_EQUITY_MAP_HELP,
-    "Anchor Text Audit": _ANCHOR_TEXT_AUDIT_HELP,
 }
 
 SCHEMA_METADATA_HEADER_TOOLTIP_BODIES: dict[str, str] = {

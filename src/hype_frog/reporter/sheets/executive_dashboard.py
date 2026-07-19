@@ -67,47 +67,52 @@ _EXEC_CARD_TOOLTIPS: dict[str, str] = {
     "Performance (PSI)": "Average mobile PageSpeed Insights performance score (0–100).",
 }
 
-_KEY_INSIGHTS_ROW = 11
+_KEY_INSIGHTS_ROW = 13
 
-# Visual grid (revised so charts never overlap): rows 1–8 header + KPI cards,
-# rows 9–10 a second KPI card row (technical/GSC metrics), row 11 key insights,
-# then six chart bands spaced ~19 rows apart (each chart is ~8.4 cm ≈ 16–17 rows
-# tall), the triage/navigation matrix, and finally the chart source tables well
-# below everything.
-_CHART_BAND_ROW_HEIGHT_PT = 24.0
-_LEFT_CHART_COL = "A"
-_RIGHT_CHART_COL = "G"
-_CHART_BAND_ROWS = 2
-
+# 2.5 UX overhaul — column split, not a row-stacked layout: columns A-H hold
+# stats (KPI cards, key insights, owner/nav triage) and are frozen; columns I
+# onward hold the 6 chart sections side by side, reached by scrolling right
+# (not down). Everything in A-H is compact enough to need no vertical scroll.
+_KPI_CARDS_PER_ROW = 4
+_STATS_ZONE_LAST_COL = 8  # "H" — freeze boundary
+_ROW_KPI1 = 7
 _ROW_KPI2 = 9
-
-_ROW_SEC_HEALTH = 12
-_ROW_CH_HEALTH = 13
-
-_ROW_SEC_ISSUES = 31
-_ROW_CH_ISSUES = 32
-
-_ROW_SEC_ACTIONS = 50
-_ROW_CH_ACTIONS = 51
-
-_ROW_SEC_TOP_ISSUES = 69
-_ROW_CH_TOP_ISSUES = 70
-
-_ROW_SEC_STATUS = 89
-_ROW_CH_STATUS = 90
-
-_ROW_SEC_TRADAEO = 108
-_ROW_CH_TRADAEO = 109
-
-_BRIEFING_TRIAGE_START_ROW = 129
+_ROW_KPI3 = 11
+_BRIEFING_TRIAGE_START_ROW = 14
 
 _SOURCE_DATA_HINT_ROW = 153
 
-# Chart size presets (cm): full-width and half-sheet (A–F / G–L).
+# Chart zone: one shared row band (all 6 sections start at the same row) with
+# each section occupying its own column width, one after another starting at
+# column I — see _chart_section_start_cols().
+_CHART_ZONE_START_COL = 9  # "I"
+_ROW_SEC_CHARTS = 15
+_ROW_CH_CHARTS = 16
+_CHART_BAND_ROW_HEIGHT_PT = 24.0
+_CHART_BAND_ROWS = 2
+
+# Column width (in sheet column-count units) reserved per chart section,
+# left-to-right: Health, Issues (severity+owner doughnut), Actions (priority+
+# content readiness), Top Issues, Status, Traditional-vs-AEO. Wide enough for
+# each section's chart(s) at the configured column width (see
+# _apply_executive_column_grid) without overlapping the next section.
+_CHART_SECTION_COLUMN_SPANS: tuple[int, ...] = (10, 12, 12, 10, 6, 6)
+
+# Chart size presets (cm): full-width and half-section.
 _SIZE_HEALTH_FULL = (18.0, 8.4)
 _SIZE_HALF_CHART = (9.2, 8.4)
 _SIZE_DOUGHNUT = (9.0, 8.4)
 _SIZE_TOP_ISSUES = (18.0, 8.4)
+
+
+def _chart_section_start_cols() -> list[int]:
+    """1-based column index where each of the 6 chart sections starts."""
+    starts: list[int] = []
+    col = _CHART_ZONE_START_COL
+    for span in _CHART_SECTION_COLUMN_SPANS:
+        starts.append(col)
+        col += span
+    return starts
 
 _LOW_VALUE_URL_PATH_TOKENS: tuple[str, ...] = (
     "cart",
@@ -566,9 +571,15 @@ def _reserve_chart_band(
 
 
 def _apply_executive_column_grid(exec_ws: Worksheet) -> None:
-    """Even column widths so left (A–F) and right (G–L) halves use full sheet width."""
-    for col_idx in range(1, 13):
+    """Column widths for the 2.5 UX overhaul's two zones: A-H (frozen stats,
+    even width so the KPI card grid/owner table line up) and I onward (chart
+    zone, sized to roughly match _CHART_SECTION_COLUMN_SPANS' cm assumptions —
+    see _apply_chart_size call sites for each section's actual chart width)."""
+    for col_idx in range(1, _STATS_ZONE_LAST_COL + 1):
         exec_ws.column_dimensions[get_column_letter(col_idx)].width = 12.0
+    last_chart_col = _CHART_ZONE_START_COL + sum(_CHART_SECTION_COLUMN_SPANS)
+    for col_idx in range(_CHART_ZONE_START_COL, last_chart_col + 1):
+        exec_ws.column_dimensions[get_column_letter(col_idx)].width = 10.0
 
 
 def _write_source_data_hint(exec_ws: Worksheet) -> None:
@@ -594,11 +605,12 @@ def _write_section_header(
     row: int,
     title: str,
     *,
-    merge_to_col: int = 12,
+    start_col: int = 1,
+    merge_to_col: int = 8,
 ) -> None:
-    merge = f"A{row}:{get_column_letter(merge_to_col)}{row}"
+    merge = f"{get_column_letter(start_col)}{row}:{get_column_letter(merge_to_col)}{row}"
     exec_ws.merge_cells(merge)
-    cell = exec_ws.cell(row=row, column=1, value=title)
+    cell = exec_ws.cell(row=row, column=start_col, value=title)
     cell.fill = _SECTION_FILL
     cell.font = Font(bold=True, color=STD_NAVY, size=11)
     cell.alignment = Alignment(horizontal="left", vertical="center")
@@ -609,7 +621,7 @@ def _write_key_insights(
     exec_ws: Worksheet,
     insights: list[str],
 ) -> None:
-    exec_ws.merge_cells(f"A{_KEY_INSIGHTS_ROW}:L{_KEY_INSIGHTS_ROW}")
+    exec_ws.merge_cells(f"A{_KEY_INSIGHTS_ROW}:H{_KEY_INSIGHTS_ROW}")
     body = exec_ws.cell(
         row=_KEY_INSIGHTS_ROW,
         column=1,
@@ -1195,14 +1207,14 @@ def _write_briefing_header(
 ) -> None:
     """Rows 1–5: branded title block and audit run metadata."""
     audit_esc = AUDIT_RUN_DETAILS_SHEET.replace("'", "''")
-    exec_ws.merge_cells("A1:L1")
+    exec_ws.merge_cells("A1:H1")
     title = exec_ws["A1"]
     title.value = DASHBOARD_BRAND_A1
     title.font = Font(bold=True, size=18, color=STD_NAVY)
     title.alignment = Alignment(horizontal="left", vertical="center")
     exec_ws.row_dimensions[1].height = 45
 
-    exec_ws.merge_cells("A2:L2")
+    exec_ws.merge_cells("A2:H2")
     subtitle = exec_ws["A2"]
     subtitle.value = _build_projection_narrative(summary_metrics)
     subtitle.alignment = Alignment(wrap_text=True, vertical="top")
@@ -1222,7 +1234,7 @@ def _write_briefing_header(
         f'=IFERROR(INDEX(\'{audit_esc}\'!$B:$B,'
         f'MATCH("Run Timestamp",\'{audit_esc}\'!$A:$A,0)),"")'
     )
-    exec_ws.merge_cells("A3:L3")
+    exec_ws.merge_cells("A3:H3")
     exec_ws["A3"] = (
         f'=IFERROR(INDEX(\'{audit_esc}\'!$B:$B,'
         f'MATCH("Total URLs",\'{audit_esc}\'!$A:$A,0)),"") & " URLs crawled"'
@@ -1239,8 +1251,15 @@ def _write_kpi_card_row(
     cards: list[tuple[str, str]],
     *,
     row: int,
+    cards_per_row: int = _KPI_CARDS_PER_ROW,
 ) -> None:
-    positions = [(1, row), (3, row), (5, row), (7, row), (9, row), (11, row)]
+    """Lay ``cards`` out 2 columns wide each, starting at column A.
+
+    ``cards_per_row`` * 2 must stay within the frozen A–H stats band (2.5 UX
+    overhaul) — 4 cards/row fits exactly (columns A–H); the previous 6/row
+    contract spanned A–L, outside the new freeze boundary.
+    """
+    positions = [(1 + 2 * i, row) for i in range(cards_per_row)]
     exec_ws.row_dimensions[row].height = 22
     exec_ws.row_dimensions[row + 1].height = 30
     for (col, card_row), (label, value) in zip(positions, cards, strict=False):
@@ -1254,27 +1273,26 @@ def _write_kpi_card_row(
         exec_ws.merge_cells(label_merge)
         exec_ws.merge_cells(value_merge)
         label_cell = exec_ws.cell(row=card_row, column=col, value=label)
-        label_cell.font = Font(bold=True, size=12, color=STD_NAVY)
+        label_cell.font = Font(bold=True, size=11, color=STD_NAVY)
         label_cell.fill = _KPI_FILL
-        label_cell.alignment = Alignment(horizontal="center")
+        label_cell.alignment = Alignment(horizontal="center", wrap_text=True)
         tip = _EXEC_CARD_TOOLTIPS.get(label)
         if tip:
             label_cell.comment = Comment(tip, "hype-frog")
         value_cell = exec_ws.cell(row=card_row + 1, column=col, value=value)
-        value_cell.font = Font(bold=True, size=18)
+        value_cell.font = Font(bold=True, size=16)
         value_cell.fill = _KPI_FILL
         value_cell.alignment = Alignment(horizontal="center")
 
 
-def _write_kpi_cards(
-    exec_ws: Worksheet,
+def _kpi_cards_row1(
     *,
     summary_metrics: SummaryMetricsPayload,
     dashboard_metrics: DashboardComputationResult,
     traffic_lift: int,
     psi: float | None,
-) -> None:
-    cards: list[tuple[str, str]] = [
+) -> list[tuple[str, str]]:
+    return [
         ("SEO Health (now)", f"{summary_metrics.health_score_pct:.0f}%"),
         (
             "SEO Health (illustrative projected)",
@@ -1288,17 +1306,15 @@ def _write_kpi_cards(
             f"{psi:.0f}" if psi is not None else "N/A",
         ),
     ]
-    _write_kpi_card_row(exec_ws, cards, row=7)
 
 
-def _write_kpi_cards_row2(
-    exec_ws: Worksheet,
+def _kpi_cards_row2(
     *,
     dashboard_metrics: DashboardComputationResult,
     extra_rows: list[dict[str, Any]],
-) -> None:
+) -> list[tuple[str, str]]:
     clicks_total, impressions_total, avg_position = _gsc_totals(extra_rows)
-    cards: list[tuple[str, str]] = [
+    return [
         ("Avg TTFB (ms)", f"{dashboard_metrics.avg_ttfb_ms:.0f}"),
         ("Schema-Present URLs", str(dashboard_metrics.schema_urls)),
         ("Broken Link Instances", str(dashboard_metrics.broken_link_instances_total)),
@@ -1306,7 +1322,23 @@ def _write_kpi_cards_row2(
         ("GSC Impressions (total)", str(impressions_total)),
         ("GSC Avg Position", f"{avg_position:.1f}" if avg_position > 0 else "N/A"),
     ]
-    _write_kpi_card_row(exec_ws, cards, row=_ROW_KPI2)
+
+
+def _write_kpi_card_grid(
+    exec_ws: Worksheet,
+    cards: list[tuple[str, str]],
+    *,
+    first_row: int,
+    cards_per_row: int = _KPI_CARDS_PER_ROW,
+) -> int:
+    """Write ``cards`` in a grid confined to columns A–H, ``cards_per_row`` at a
+    time, each occupying 2 rows (label + value). Returns the next free row."""
+    row = first_row
+    for start in range(0, len(cards), cards_per_row):
+        chunk = cards[start : start + cards_per_row]
+        _write_kpi_card_row(exec_ws, chunk, row=row, cards_per_row=cards_per_row)
+        row += 2
+    return row
 
 
 def write_executive_briefing(
@@ -1353,43 +1385,56 @@ def write_executive_briefing(
     psi = _avg_lighthouse_performance_mobile(extra_rows)
     traffic_lift = _traffic_lift_total(hub_metrics_rows)
     _write_briefing_header(exec_ws, summary_metrics=summary_metrics)
-    _write_kpi_cards(
-        exec_ws,
+    all_kpi_cards = _kpi_cards_row1(
         summary_metrics=summary_metrics,
         dashboard_metrics=dashboard_metrics,
         traffic_lift=traffic_lift,
         psi=psi,
-    )
-    _write_kpi_cards_row2(
-        exec_ws,
+    ) + _kpi_cards_row2(
         dashboard_metrics=dashboard_metrics,
         extra_rows=extra_rows,
     )
+    _write_kpi_card_grid(exec_ws, all_kpi_cards, first_row=_ROW_KPI1)
     _apply_executive_column_grid(exec_ws)
     _write_key_insights(
         exec_ws,
         _build_key_insights(summary_metrics, dashboard_metrics),
     )
 
-    _write_section_header(exec_ws, _ROW_SEC_HEALTH, "Health & illustrative projection")
-    _reserve_chart_band(exec_ws, _ROW_CH_HEALTH, _CHART_BAND_ROWS)
+    # 2.5 UX overhaul: all 6 chart sections start at the same row band
+    # (_ROW_SEC_CHARTS / _ROW_CH_CHARTS) and are placed side by side going
+    # right from column I — scrolling right (not down) reveals each one, so
+    # they never fight the frozen A-H stats band above for vertical space.
+    section_cols = _chart_section_start_cols()
+    _reserve_chart_band(exec_ws, _ROW_CH_CHARTS, _CHART_BAND_ROWS)
+
+    health_col, issues_col, actions_col, top_issues_col, status_col, tradaeo_col = section_cols
+
+    _write_section_header(
+        exec_ws,
+        _ROW_SEC_CHARTS,
+        "Health & illustrative projection",
+        start_col=health_col,
+        merge_to_col=health_col + _CHART_SECTION_COLUMN_SPANS[0] - 1,
+    )
     _add_health_comparison_chart(
         exec_ws,
         layout,
-        f"{_LEFT_CHART_COL}{_ROW_CH_HEALTH}",
+        f"{get_column_letter(health_col)}{_ROW_CH_CHARTS}",
     )
 
     _write_section_header(
         exec_ws,
-        _ROW_SEC_ISSUES,
+        _ROW_SEC_CHARTS,
         "Issue distribution — unique URLs vs issue instances (see source row 60+)",
+        start_col=issues_col,
+        merge_to_col=issues_col + _CHART_SECTION_COLUMN_SPANS[1] - 1,
     )
     owner_header = layout.owner_start + 1
-    _reserve_chart_band(exec_ws, _ROW_CH_ISSUES, _CHART_BAND_ROWS)
     _add_severity_comparison_chart(
         exec_ws,
         layout,
-        f"{_LEFT_CHART_COL}{_ROW_CH_ISSUES}",
+        f"{get_column_letter(issues_col)}{_ROW_CH_CHARTS}",
     )
     _add_doughnut_chart(
         exec_ws,
@@ -1401,62 +1446,66 @@ def write_executive_briefing(
         title="Owner workload — share of unique URLs (not total issue volume)",
         header_row=owner_header,
         data_rows=layout.owner_rows,
-        anchor=f"{_RIGHT_CHART_COL}{_ROW_CH_ISSUES}",
+        anchor=f"{get_column_letter(issues_col + 6)}{_ROW_CH_CHARTS}",
         colors=_OWNER_SLICE_COLORS,
         value_col=_value_col(),
     )
 
     _write_section_header(
         exec_ws,
-        _ROW_SEC_ACTIONS,
+        _ROW_SEC_CHARTS,
         "Priority pages & content readiness",
+        start_col=actions_col,
+        merge_to_col=actions_col + _CHART_SECTION_COLUMN_SPANS[2] - 1,
     )
-    _reserve_chart_band(exec_ws, _ROW_CH_ACTIONS, _CHART_BAND_ROWS)
     _add_priority_bar_chart(
         exec_ws,
         layout,
-        f"{_LEFT_CHART_COL}{_ROW_CH_ACTIONS}",
+        f"{get_column_letter(actions_col)}{_ROW_CH_CHARTS}",
     )
     _add_content_readiness_bar_chart(
         exec_ws,
         layout,
-        f"{_RIGHT_CHART_COL}{_ROW_CH_ACTIONS}",
+        f"{get_column_letter(actions_col + 6)}{_ROW_CH_CHARTS}",
     )
 
     _write_section_header(
         exec_ws,
-        _ROW_SEC_TOP_ISSUES,
+        _ROW_SEC_CHARTS,
         "Top issues to fix first (by affected URLs)",
+        start_col=top_issues_col,
+        merge_to_col=top_issues_col + _CHART_SECTION_COLUMN_SPANS[3] - 1,
     )
-    _reserve_chart_band(exec_ws, _ROW_CH_TOP_ISSUES, _CHART_BAND_ROWS)
     _add_top_issues_chart(
         exec_ws,
         layout,
-        f"{_LEFT_CHART_COL}{_ROW_CH_TOP_ISSUES}",
+        f"{get_column_letter(top_issues_col)}{_ROW_CH_CHARTS}",
     )
 
     _write_section_header(
         exec_ws,
-        _ROW_SEC_STATUS,
+        _ROW_SEC_CHARTS,
         "Status code & technical health",
+        start_col=status_col,
+        merge_to_col=status_col + _CHART_SECTION_COLUMN_SPANS[4] - 1,
     )
-    _reserve_chart_band(exec_ws, _ROW_CH_STATUS, _CHART_BAND_ROWS)
     _add_status_code_chart(
         exec_ws,
         layout,
-        f"{_LEFT_CHART_COL}{_ROW_CH_STATUS}",
+        f"{get_column_letter(status_col)}{_ROW_CH_CHARTS}",
     )
 
     _write_section_header(
         exec_ws,
-        _ROW_SEC_TRADAEO,
+        _ROW_SEC_CHARTS,
         "Traditional SEO vs AEO Readiness",
+        start_col=tradaeo_col,
+        merge_to_col=tradaeo_col + _CHART_SECTION_COLUMN_SPANS[5] - 1,
     )
-    _reserve_chart_band(exec_ws, _ROW_CH_TRADAEO, _CHART_BAND_ROWS)
     _add_traditional_vs_aeo_chart(
         exec_ws,
         layout,
-        f"{_LEFT_CHART_COL}{_ROW_CH_TRADAEO}",
+        f"{get_column_letter(tradaeo_col)}{_ROW_CH_CHARTS}",
     )
 
     apply_executive_briefing_triage(

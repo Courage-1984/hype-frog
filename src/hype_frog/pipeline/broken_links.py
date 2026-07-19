@@ -2,8 +2,10 @@
 
 All executive surfaces (Dashboard KPI, narratives, FixPlan ``Affected Link Instances``,
 Link Intelligence summary formulas, and per-URL ``Broken Internal Links Count``)
-must align with anchor-level rows on the Link Inventory sheet: one count per
-internal ``<a>`` whose target returned HTTP 4xx/5xx when checked.
+must align with anchor-level Detail rows on the Link Intelligence sheet: one count
+per internal ``<a>`` whose target returned HTTP 4xx/5xx when checked. (Detail rows
+are the former standalone "Link Inventory" sheet's rows, folded into Link
+Intelligence's own Detail block after the merge — same sheet, same dedup key.)
 """
 
 from __future__ import annotations
@@ -11,15 +13,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-_LINK_INVENTORY_DATA_END_ROW = 100_000
+_LINK_INTELLIGENCE_DATA_END_ROW = 100_000
 
 
-def _link_inventory_range(header: str, *, start_row: int = 2) -> str:
-    from hype_frog.reporter.sheets.layout import link_inventory_column_letter
+def _link_intelligence_range(header: str, *, start_row: int = 2) -> str:
+    from hype_frog.reporter.sheets.layout import link_intelligence_column_letter
 
-    col = link_inventory_column_letter(header)
-    end = _LINK_INVENTORY_DATA_END_ROW
-    return f"'Link Inventory'!${col}${start_row}:${col}${end}"
+    col = link_intelligence_column_letter(header)
+    end = _LINK_INTELLIGENCE_DATA_END_ROW
+    return f"'Link Intelligence'!${col}${start_row}:${col}${end}"
 
 
 def is_internal_link_type(link_type: object) -> bool:
@@ -90,11 +92,13 @@ def count_broken_internal_from_link_details(
 
 
 def link_inventory_broken_internal_total_formula() -> str:
-    """Excel formula: total broken internal link instances on Link Inventory."""
-    link_type = _link_inventory_range("Link Type")
-    status = _link_inventory_range("Status Code")
+    """Excel formula: total broken internal link instances on Link Intelligence's Detail rows."""
+    record_type = _link_intelligence_range("Record Type")
+    link_type = _link_intelligence_range("Link Type")
+    status = _link_intelligence_range("Status Code")
     return (
-        f'=SUMPRODUCT(({link_type}="Internal")*'
+        f'=SUMPRODUCT(({record_type}="Detail")*'
+        f'({link_type}="Internal")*'
         f"({status}>=400)*"
         f"({status}<600))"
     )
@@ -102,11 +106,13 @@ def link_inventory_broken_internal_total_formula() -> str:
 
 def link_inventory_broken_per_source_formula(source_cell_ref: str) -> str:
     """Excel formula: broken internal instances for one source URL (Link Intelligence)."""
-    source = _link_inventory_range("Source URL")
-    link_type = _link_inventory_range("Link Type")
-    status = _link_inventory_range("Status Code")
+    source = _link_intelligence_range("URL")
+    record_type = _link_intelligence_range("Record Type")
+    link_type = _link_intelligence_range("Link Type")
+    status = _link_intelligence_range("Status Code")
     return (
         f"=SUMPRODUCT(({source}={source_cell_ref})*"
+        f'({record_type}="Detail")*'
         f'({link_type}="Internal")*'
         f"({status}>=400)*"
         f"({status}<600))"

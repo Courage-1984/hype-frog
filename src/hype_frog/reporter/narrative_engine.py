@@ -127,7 +127,7 @@ def _psi_variance_mobile_minus_desktop(extra_rows: list[ExtraRowPayload]) -> flo
 
 
 def _broken_internal_stats(link_rows: list[dict[str, Any]]) -> tuple[int, str]:
-    """Return (instance_count, top_broken_target_url) from Link Inventory rows."""
+    """Return (instance_count, top_broken_target_url) from Link Intelligence Detail rows."""
     targets: list[str] = []
     for row in link_rows:
         if not is_internal_link_type(row.get("Link Type")):

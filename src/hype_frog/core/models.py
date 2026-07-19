@@ -340,6 +340,7 @@ MAIN_ROW_DEFAULTS: dict[str, Any] = {
     "Robots.txt: GPTBot": None,
     "Robots.txt: ClaudeBot": None,
     "Robots.txt: PerplexityBot": None,
+    "Robots.txt: CCBot": None,
     "Crawl-Delay Applies": False,
 }
 
@@ -486,6 +487,7 @@ EXTRA_ROW_DEFAULTS: dict[str, Any] = {
     "Robots.txt: GPTBot": None,
     "Robots.txt: ClaudeBot": None,
     "Robots.txt: PerplexityBot": None,
+    "Robots.txt: CCBot": None,
     "Crawl-Delay Applies": False,
     "AI Crawlers Allowed (GPTBot/ClaudeBot/PerplexityBot)": None,
     "llms.txt Present": None,

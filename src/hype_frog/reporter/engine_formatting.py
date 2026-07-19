@@ -166,7 +166,7 @@ def ensure_auto_filter(worksheet: Worksheet) -> None:
             worksheet.auto_filter.ref = None
         return
 
-    if title not in {"Main", "Link Inventory"} and (
+    if title not in {"Main"} and (
         worksheet.max_row < 10 or worksheet.max_column < 5
     ):
         worksheet.auto_filter.ref = None
@@ -190,7 +190,7 @@ def _clear_orphaned_selection(worksheet: Worksheet) -> None:
 def ensure_freeze_header(worksheet: Worksheet) -> None:
     if worksheet.title in {CONTENT_OPTIMISATION_HUB_SHEET, CONTENT_PLANNER_SHEET}:
         return
-    if worksheet.title not in {"Main", "Dashboard", "Link Inventory"} and (
+    if worksheet.title not in {"Main", "Dashboard"} and (
         worksheet.max_row < 10 or worksheet.max_column < 5
     ):
         worksheet.freeze_panes = None
@@ -548,7 +548,7 @@ def apply_executive_priority_formatting(
 
     When ``Instant Priority`` is present: **FormulaRule** for whole-row
     red highlight when the value is ``CRITICAL`` (Hub no longer carries
-    this column; primary use is ``Content Hub Metrics``).
+    this column; primary use is ``Content & AI Readiness``).
 
     Missing headers skip the corresponding rule.
     """

@@ -257,7 +257,9 @@ def test_executive_dashboard_writes_charts_with_visible_source_rows(
     assert any("Content & AEO readiness" in title for title in titles)
     assert any("Top issues by URL impact" in title for title in titles)
     assert "High-intent pages by business risk" in titles
-    assert "Key insights:" in str(exec_ws.cell(row=11, column=1).value or "")
+    # Row 13 (2.5 UX overhaul): KPI grid grew to 3 rows of 4 cards (fits A-H),
+    # pushing key insights from row 11 to row 13.
+    assert "Key insights:" in str(exec_ws.cell(row=13, column=1).value or "")
     assert exec_ws.cell(row=CHART_SOURCE_FIRST_ROW + 2, column=2).value is not None
     health_data_start = CHART_SOURCE_FIRST_ROW + 3
     health_labels = [
@@ -382,7 +384,9 @@ def test_adjust_sheet_format_tolerates_executive_dashboard_merges(
     adjust_sheet_format(writer, EXECUTIVE_BRIEFING_SHEET)
     writer.close()
     wb = load_workbook(out)
-    assert wb[EXECUTIVE_BRIEFING_SHEET].freeze_panes == "A12"
+    # 2.5 UX overhaul: column-only freeze — A-H (stats) frozen, charts scroll
+    # in from column I, no row component needed since A-H fits one screen.
+    assert wb[EXECUTIVE_BRIEFING_SHEET].freeze_panes == "I1"
     wb.close()
 
 
@@ -407,6 +411,8 @@ def test_executive_dashboard_survives_export_finalization(
     writer.close()
     patch_xlsx_app_xml_for_excel_compatibility(out)
     wb = load_workbook(out)
-    assert wb[EXECUTIVE_BRIEFING_SHEET].freeze_panes == "A12"
+    # 2.5 UX overhaul: column-only freeze — A-H (stats) frozen, charts scroll
+    # in from column I, no row component needed since A-H fits one screen.
+    assert wb[EXECUTIVE_BRIEFING_SHEET].freeze_panes == "I1"
     assert len(wb[EXECUTIVE_BRIEFING_SHEET]._charts) >= 4
     wb.close()
