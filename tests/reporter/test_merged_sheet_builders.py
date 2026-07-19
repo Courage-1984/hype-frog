@@ -30,6 +30,7 @@ def _sample_main_extra() -> tuple[list[dict[str, object]], list[dict[str, object
     extra_rows = [
         {
             "URL": url,
+            "Extraction State": "complete",
             "Status Code": 200,
             "Severity Badge": "Warning",
             "SEO Health Score": 72.0,

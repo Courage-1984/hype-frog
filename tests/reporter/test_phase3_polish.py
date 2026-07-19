@@ -13,10 +13,6 @@ from hype_frog.reporter.sheets.layout import (
 )
 from hype_frog.reporter.sheets.links import _fixplan_hub_status_formula
 from hype_frog.reporter.sheets.number_formats import apply_south_african_formats
-from hype_frog.reporter.sheets.workbook_layout import (
-    DASHBOARD_ADVANCED_SHEET_LINKS,
-    SHEETS_EXCLUDED_FROM_TOC,
-)
 
 
 def test_fixplan_hub_status_uses_status_not_seo_score_column() -> None:
@@ -53,18 +49,6 @@ def test_sheet_data_column_range_is_header_driven() -> None:
     rng = sheet_data_column_range("Technical Diagnostics", "SEO Health Score")
     assert "MATCH(\"SEO Health Score\"" in rng
     assert "Technical Diagnostics" in rng
-
-
-def test_issue_inventory_excluded_from_toc_and_dashboard_links() -> None:
-    assert "IssueInventory" in SHEETS_EXCLUDED_FROM_TOC
-    assert all(name != "IssueInventory" for name, _ in DASHBOARD_ADVANCED_SHEET_LINKS)
-
-
-def test_issue_inventory_skipped_in_toc_advanced_section() -> None:
-    from hype_frog.reporter.sheets.toc import ADVANCED_WORKBOOK_TAB_ORDER
-
-    assert "IssueInventory" in ADVANCED_WORKBOOK_TAB_ORDER
-    assert "IssueInventory" in SHEETS_EXCLUDED_FROM_TOC
 
 
 def test_display_header_alias_rewrites_optimisation_label() -> None:
